@@ -183,7 +183,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Legacy analytics compatibility
+  // Legacy analytics compatibility - now persists data via claims table
   async recordClaimAnalysis(data: {
     zipCode: string;
     itemCount: number;
@@ -191,36 +191,93 @@ export class DatabaseStorage implements IStorage {
     totalFMV: number;
     categories: string[];
   }): Promise<ClaimAnalysis> {
-    // Return a compatible object for backward compatibility
-    // Actual data is now stored in claims and claimLineItems tables
-    const analysis: ClaimAnalysis = {
-      id: `legacy-${Date.now()}`,
-      ...data,
-      timestamp: new Date(),
+    // Create a session for this analysis
+    const zipPrefix = data.zipCode.substring(0, 3);
+    const [session] = await db
+      .insert(sessions)
+      .values({ zipCode: data.zipCode, zipPrefix })
+      .returning();
+
+    // Calculate additional amount and variance percentage
+    const additionalAmount = data.totalFMV - data.totalInsuranceOffer;
+    const variancePct = (additionalAmount / data.totalInsuranceOffer) * 100;
+
+    // Create claim record
+    const [claim] = await db
+      .insert(claims)
+      .values({
+        sessionId: session.id,
+        status: "completed",
+        totalQuoted: data.totalInsuranceOffer,
+        totalFmv: data.totalFMV,
+        additionalAmount,
+        variancePct,
+        completedAt: new Date(),
+      })
+      .returning();
+
+    // Return legacy-compatible response
+    return {
+      id: claim.id,
+      zipCode: data.zipCode,
+      itemCount: data.itemCount,
+      totalInsuranceOffer: data.totalInsuranceOffer,
+      totalFMV: data.totalFMV,
+      categories: data.categories,
+      timestamp: claim.createdAt,
     };
-    return analysis;
   }
 
   async getRegionalStats(): Promise<RegionalStats[]> {
-    // Query from claims table for real regional statistics
+    // Join claims with sessions to get zipPrefix and calculate aggregates
     const result = await db
       .select({
-        zipPrefix: claims.sessionId, // We'll need to join with sessions
+        zipPrefix: sessions.zipPrefix,
         count: sql<number>`count(*)::int`,
         avgVariance: sql<number>`avg(${claims.variancePct})::float`,
       })
       .from(claims)
-      .where(eq(claims.status, "completed"))
-      .groupBy(claims.sessionId)
+      .innerJoin(sessions, eq(claims.sessionId, sessions.id))
+      .where(and(
+        eq(claims.status, "completed"),
+        sql`${sessions.zipPrefix} IS NOT NULL`
+      ))
+      .groupBy(sessions.zipPrefix)
+      .orderBy(desc(sql`count(*)`))
       .limit(100);
 
-    // Transform to match RegionalStats interface
-    const stats: RegionalStats[] = result.map((row) => ({
-      zipCode: row.zipPrefix ? row.zipPrefix.substring(0, 3) : "000",
-      analysisCount: row.count,
-      avgUnderpayment: row.avgVariance || 0,
-      commonCategories: [],
-    }));
+    // For each zipPrefix, get common categories from claim line items
+    const stats: RegionalStats[] = await Promise.all(
+      result.map(async (row) => {
+        // Get session IDs for this zipPrefix
+        const zipSessions = await db
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(eq(sessions.zipPrefix, row.zipPrefix as string));
+        
+        const sessionIds = zipSessions.map(s => s.id);
+
+        // Get common categories for these sessions
+        const categoryCounts = await db
+          .select({
+            category: claimLineItems.category,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(claimLineItems)
+          .innerJoin(claims, eq(claimLineItems.claimId, claims.id))
+          .where(sql`${claims.sessionId} = ANY(${sessionIds})`)
+          .groupBy(claimLineItems.category)
+          .orderBy(desc(sql`count(*)`))
+          .limit(3);
+
+        return {
+          zipCode: row.zipPrefix as string,
+          analysisCount: row.count,
+          avgUnderpayment: row.avgVariance || 0,
+          commonCategories: categoryCounts.map(c => c.category),
+        };
+      })
+    );
 
     return stats;
   }
