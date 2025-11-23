@@ -285,4 +285,60 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Accessibility: Text Size Scaling */
+  :root[data-text-size="normal"] {
+    font-size: 16px;
+  }
+
+  :root[data-text-size="large"] {
+    font-size: 18px;
+  }
+
+  :root[data-text-size="extra-large"] {
+    font-size: 20px;
+  }
+
+  /* Accessibility: High Contrast Mode */
+  :root.high-contrast {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --border: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --card-border: 0 0% 0%;
+    --primary: 211 100% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 10%;
+    --accent: 0 0% 88%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 100% 35%;
+    --destructive-foreground: 0 0% 100%;
+    --input: 0 0% 20%;
+    --ring: 211 100% 30%;
+  }
+
+  :root.high-contrast.dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --border: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --card-border: 0 0% 100%;
+    --primary: 211 100% 70%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 90%;
+    --accent: 0 0% 20%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 60%;
+    --destructive-foreground: 0 0% 0%;
+    --input: 0 0% 80%;
+    --ring: 211 100% 70%;
+  }
 }
