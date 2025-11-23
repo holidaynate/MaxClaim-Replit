@@ -3,6 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useEffect, useState } from "react";
 import type { ClaimItem } from "./ItemsStep";
 
 interface ResultsStepProps {
@@ -11,40 +14,85 @@ interface ResultsStepProps {
   onStartOver: () => void;
 }
 
-interface ItemResult extends ClaimItem {
+interface ItemResult {
+  category: string;
+  description: string;
+  quantity: number;
+  insuranceOffer: number;
   fmvPrice: number;
-  variance: number;
-  status: 'underpaid' | 'fair' | 'overpaid';
+  additionalAmount: number;
+  percentageIncrease: number;
+  status: 'underpaid' | 'fair';
 }
 
-// Mock FMV calculation - in real app this would come from backend
-// Insurance companies typically UNDERPAY by 10-25%, so FMV should be HIGHER
-function calculateFMV(items: ClaimItem[]): ItemResult[] {
-  return items.map(item => {
-    // FMV is typically 15-25% HIGHER than insurance offer (they underpay)
-    const fmvMultiplier = 1.15 + Math.random() * 0.1;
-    const fmvPrice = item.quotedPrice * fmvMultiplier;
-    const variance = ((fmvPrice - item.quotedPrice) / item.quotedPrice) * 100;
-    
-    let status: 'underpaid' | 'fair' | 'overpaid' = 'fair';
-    if (variance > 10) status = 'underpaid';
-    else if (variance < 5) status = 'fair';
-    
-    return {
-      ...item,
-      fmvPrice,
-      variance,
-      status
-    };
-  });
+interface AnalysisResponse {
+  zipCode: string;
+  items: ItemResult[];
+  summary: {
+    totalInsuranceOffer: number;
+    totalFMV: number;
+    totalAdditional: number;
+    overallIncrease: number;
+  };
 }
 
 export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStepProps) {
-  const results = calculateFMV(items);
-  const totalInsuranceOffer = results.reduce((sum, item) => sum + item.quotedPrice, 0);
-  const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
-  const additionalAmount = totalFMV - totalInsuranceOffer;
-  const increasePercent = (additionalAmount / totalInsuranceOffer) * 100;
+  const [results, setResults] = useState<AnalysisResponse | null>(null);
+
+  const analysisMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        "/api/claims/analyze",
+        {
+          zipCode,
+          items: items.map(item => ({
+            category: item.category,
+            description: item.description,
+            quantity: item.quantity,
+            quotedPrice: item.quotedPrice
+          }))
+        }
+      );
+      return await response.json() as AnalysisResponse;
+    },
+    onSuccess: (data: AnalysisResponse) => {
+      setResults(data);
+    }
+  });
+
+  useEffect(() => {
+    analysisMutation.mutate();
+  }, []);
+
+  if (analysisMutation.isPending || !results) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center space-y-4">
+          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+          <p className="text-muted-foreground">Analyzing your claim against regional fair market values...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (analysisMutation.isError) {
+    return (
+      <Card className="border-destructive">
+        <CardHeader>
+          <CardTitle className="text-destructive">Analysis Failed</CardTitle>
+          <CardDescription>
+            We encountered an error calculating your fair market values. Please try again.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => analysisMutation.mutate()}>Retry Analysis</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { summary, items: itemResults } = results;
 
   return (
     <div className="space-y-6">
@@ -54,7 +102,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
           <CardHeader className="pb-3">
             <CardDescription>Insurance Company Offer</CardDescription>
             <CardTitle className="text-2xl">
-              ${totalInsuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${summary.totalInsuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -62,7 +110,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
           <CardHeader className="pb-3">
             <CardDescription>Fair Market Value</CardDescription>
             <CardTitle className="text-2xl text-primary">
-              ${totalFMV.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${summary.totalFMV.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -71,9 +119,9 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
             <CardDescription>Additional Amount You Deserve</CardDescription>
             <CardTitle className="text-2xl text-green-600 flex items-center gap-2">
               <TrendingUp className="w-5 h-5" />
-              ${additionalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${summary.totalAdditional.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">{increasePercent.toFixed(1)}% increase</p>
+            <p className="text-sm text-muted-foreground mt-1">{summary.overallIncrease.toFixed(1)}% increase</p>
           </CardHeader>
         </Card>
       </div>
@@ -99,7 +147,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((item, index) => (
+                {itemResults.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <div>
@@ -108,13 +156,13 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${item.quotedPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ${item.insuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-primary font-medium">
                       ${item.fmvPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right text-green-600 font-medium">
-                      +${(item.fmvPrice - item.quotedPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      +${item.additionalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">
                       {item.status === 'underpaid' && (
@@ -156,7 +204,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
               <Mail className="w-4 h-4" />
               Email Report
             </Button>
-            <Button variant="outline" className="gap-2" data-testid="button-print">
+            <Button variant="outline" className="gap-2" data-testid="button-print" onClick={() => window.print()}>
               <Printer className="w-4 h-4" />
               Print
             </Button>
