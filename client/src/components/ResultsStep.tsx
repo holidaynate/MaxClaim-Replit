@@ -6,6 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useEffect, useState } from "react";
+import { exportResultsToPDF } from "@/lib/pdf-export";
+import { generateEmailReportSummary } from "@/lib/email-report";
+import { EmailReportDialog } from "@/components/EmailReportDialog";
 import type { ClaimItem } from "./ItemsStep";
 
 interface ResultsStepProps {
@@ -46,6 +49,7 @@ interface AnalysisResponse {
 
 export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStepProps) {
   const [results, setResults] = useState<AnalysisResponse | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const analysisMutation = useMutation({
     mutationFn: async () => {
@@ -370,16 +374,34 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Button variant="outline" className="gap-2" data-testid="button-download">
-              <Download className="w-4 h-4" />
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={() => exportResultsToPDF(results)}
+              data-testid="button-download"
+              aria-label="Download Fair Market Value report as PDF"
+            >
+              <Download className="w-4 h-4" aria-hidden="true" />
               Download PDF
             </Button>
-            <Button variant="outline" className="gap-2" data-testid="button-email">
-              <Mail className="w-4 h-4" />
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => setEmailDialogOpen(true)}
+              data-testid="button-email"
+              aria-label="Email Fair Market Value report"
+            >
+              <Mail className="w-4 h-4" aria-hidden="true" />
               Email Report
             </Button>
-            <Button variant="outline" className="gap-2" data-testid="button-print" onClick={() => window.print()}>
-              <Printer className="w-4 h-4" />
+            <Button 
+              variant="outline" 
+              className="gap-2" 
+              onClick={() => window.print()}
+              data-testid="button-print"
+              aria-label="Print Fair Market Value report"
+            >
+              <Printer className="w-4 h-4" aria-hidden="true" />
               Print
             </Button>
           </div>
@@ -393,6 +415,13 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
           </Button>
         </CardContent>
       </Card>
+
+      {/* Email Report Dialog */}
+      <EmailReportDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        reportSummary={generateEmailReportSummary(results)}
+      />
     </div>
   );
 }
