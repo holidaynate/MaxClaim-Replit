@@ -108,6 +108,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Session Management - Create session
+  app.post("/api/sessions", async (req, res) => {
+    try {
+      const sessionData = z.object({
+        zipCode: z.string().optional(),
+        locale: z.string().optional(),
+        textSize: z.string().optional(),
+        highContrast: z.number().optional(),
+      }).parse(req.body);
+
+      const session = await storage.createSession(sessionData);
+      res.json(session);
+    } catch (error) {
+      console.error("Error creating session:", error);
+      res.status(500).json({ error: "Failed to create session" });
+    }
+  });
+
+  // Log session event
+  app.post("/api/sessions/:sessionId/events", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const eventData = z.object({
+        eventType: z.enum([
+          "session_start",
+          "page_view",
+          "form_submit",
+          "button_click",
+          "file_upload",
+          "calculation_complete",
+          "export_pdf",
+          "export_email"
+        ]),
+        payload: z.any().optional(),
+      }).parse(req.body);
+
+      const event = await storage.logEvent({
+        sessionId,
+        ...eventData,
+      });
+      res.json(event);
+    } catch (error) {
+      console.error("Error logging event:", error);
+      res.status(500).json({ error: "Failed to log event" });
+    }
+  });
+
+  // Create claim with line items
+  app.post("/api/claims", async (req, res) => {
+    try {
+      const claimData = z.object({
+        sessionId: z.string(),
+        totalQuoted: z.number(),
+        totalFmv: z.number(),
+        additionalAmount: z.number(),
+        variancePct: z.number(),
+        status: z.enum(["in_progress", "completed", "abandoned"]).optional(),
+        lineItems: z.array(z.object({
+          category: z.string(),
+          description: z.string(),
+          quantity: z.number(),
+          quotedPrice: z.number(),
+          fmvPrice: z.number(),
+          variancePct: z.number(),
+          fromOcr: z.number().optional(),
+        })),
+      }).parse(req.body);
+
+      const { lineItems, ...claimInfo } = claimData;
+      const claim = await storage.createClaim(claimInfo);
+
+      // Add all line items
+      const addedLineItems = await Promise.all(
+        lineItems.map(item =>
+          storage.addClaimLineItem({ ...item, claimId: claim.id })
+        )
+      );
+
+      res.json({ claim, lineItems: addedLineItems });
+    } catch (error) {
+      console.error("Error creating claim:", error);
+      res.status(500).json({ error: "Failed to create claim" });
+    }
+  });
+
+  // Get all attributions/sources
+  app.get("/api/attributions", async (req, res) => {
+    try {
+      const sources = await storage.getSources();
+      res.json(sources);
+    } catch (error) {
+      console.error("Error fetching attributions:", error);
+      res.status(500).json({ error: "Failed to fetch attributions" });
+    }
+  });
+
+  // Log source usage for a session
+  app.post("/api/sessions/:sessionId/sources", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const usageData = z.object({
+        sourceId: z.string(),
+        purpose: z.string().optional(),
+      }).parse(req.body);
+
+      await storage.logSourceUsage({ sessionId, ...usageData });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error logging source usage:", error);
+      res.status(500).json({ error: "Failed to log source usage" });
+    }
+  });
+
   // Configure multer for file uploads
   const upload = multer({
     dest: 'uploads/',

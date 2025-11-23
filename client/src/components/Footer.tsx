@@ -96,15 +96,13 @@ export default function Footer() {
                 </li>
                 <li>
                   <a
-                    href="https://github.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href="/attributions"
                     className="flex items-center gap-1 hover:text-foreground hover-elevate rounded px-2 py-1"
-                    data-testid="link-licensing"
-                    aria-label="View licensing information (opens in new tab)"
+                    data-testid="link-attributions"
+                    aria-label="View attributions and credits"
                   >
                     <HelpCircle className="w-3 h-3" aria-hidden="true" />
-                    Licensing
+                    Attributions & Credits
                   </a>
                 </li>
               </ul>

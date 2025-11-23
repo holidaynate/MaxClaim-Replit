@@ -5,12 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import Home from "@/pages/home";
+import AttributionsPage from "@/pages/AttributionsPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/attributions" component={AttributionsPage} />
       <Route component={NotFound} />
     </Switch>
   );
