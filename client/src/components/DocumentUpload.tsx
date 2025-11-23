@@ -144,6 +144,21 @@ export function DocumentUpload({ onItemsExtracted }: DocumentUploadProps) {
         </p>
       </div>
 
+      {/* OCR Limitations Disclaimer */}
+      <Alert data-testid="alert-ocr-disclaimer">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription className="text-xs space-y-1">
+          <p className="font-semibold">Known Limitations of Document Upload:</p>
+          <ul className="list-disc list-inside space-y-0.5 ml-2">
+            <li>OCR text parsing is inherently ambiguous and may not capture all items</li>
+            <li>You must verify all extracted quantities and prices before submitting</li>
+            <li>Some edge cases may require manual correction or re-entry</li>
+            <li>This is a best-effort assistance tool, not a replacement for human review</li>
+          </ul>
+          <p className="font-semibold mt-2">Always review and edit extracted items carefully.</p>
+        </AlertDescription>
+      </Alert>
+
       <Card
         data-testid="upload-dropzone"
         className={`border-2 border-dashed transition-colors ${

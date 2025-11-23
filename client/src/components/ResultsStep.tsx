@@ -264,6 +264,102 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
         </Card>
       )}
 
+      {/* Disaster Relief Resources */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Assistance and Disaster Relief Resources</CardTitle>
+          <CardDescription>
+            Additional support programs for your area (ZIP code: {zipCode})
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3">
+              <a
+                href="https://www.fema.gov/assistance/individual/program"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-fema"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">FEMA Disaster Assistance Programs</p>
+                  <p className="text-xs text-muted-foreground">Federal disaster relief and recovery programs</p>
+                </div>
+              </a>
+
+              <a
+                href="https://www.211.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-211"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">Local 211 Services</p>
+                  <p className="text-xs text-muted-foreground">Food, shelter, and home repair assistance</p>
+                </div>
+              </a>
+
+              <a
+                href="https://www.texashomeownerassistance.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-texas-assistance"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">Texas Homeowner Assistance</p>
+                  <p className="text-xs text-muted-foreground">State homeowner relief programs</p>
+                </div>
+              </a>
+
+              <a
+                href="https://www.hud.gov/info/disasterresources"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-hud"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">HUD Repair Programs</p>
+                  <p className="text-xs text-muted-foreground">Housing repair grants and loans</p>
+                </div>
+              </a>
+
+              <a
+                href="https://www.bls.gov/ppi/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-bls"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">BLS Replacement Cost Index</p>
+                  <p className="text-xs text-muted-foreground">Official construction cost data and inflation rates</p>
+                </div>
+              </a>
+
+              <a
+                href="https://data.texas.gov/dataset/Insurance-Complaints-All-Data"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 p-3 rounded-md border hover-elevate"
+                data-testid="link-tdi"
+              >
+                <div className="flex-1">
+                  <p className="font-medium text-sm">TDI Insurance Complaints</p>
+                  <p className="text-xs text-muted-foreground">Public complaint records for insurers</p>
+                </div>
+              </a>
+            </div>
+            <p className="text-xs text-muted-foreground italic mt-4" data-testid="text-resources-context">
+              All resources are relevant to your provided ZIP code ({zipCode}) for custom public aid guidance.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Action Buttons */}
       <Card>
         <CardHeader>

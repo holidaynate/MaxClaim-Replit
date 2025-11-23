@@ -1,0 +1,122 @@
+now i need links and/or free/open/public API integration to any/all these resources (as well as 211 and other assistance programs) that "trigger" when user inputs zip and/or address information, or if OCR/document upload provides it. these should also be cited in the pdf form that app prints/emails to user
+
+Here are **free, public, and open data/API resources** that you can integrate with MaxClaim to automatically trigger assistance, disaster, and claims-related support when a user provides their ZIP code or address (by input or OCR). All links are suitable for backend or frontend integration and should be cited in your app’s outputs—including the user-generated PDF reports and emails.
+
+***
+
+## **A. FEMA and Disaster Recovery APIs**
+
+- **FEMA Disaster Assistance (Current Disaster Info, Registration)**
+  - Main API/docs: [FEMA Disaster Declarations Summary (OpenFEMA)](https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries)
+  - Query by ZIP, state, or county for declared disasters and deadline info.
+  - Sample:  
+    ```
+    https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state eq 'TX' and declaredCountyArea eq 'Travis'
+    ```
+
+- **FEMA Individual Assistance Programs**
+  - [FEMA Individual Assistance Program Data](https://www.fema.gov/api/open/v2/IndividualAssistanceIndividualsAndHouseholdsPrograms)
+  - Returns shelter, grants, and program availability for ZIP and disaster.
+
+- **NFIP Claims Data**
+  - [FEMA FIMA NFIP Redacted Claims](https://www.fema.gov/api/open/v2/FimaNfipClaims)
+  - Pulls all flood insurance claims history for a given ZIP/address.
+
+***
+
+## **B. 211 and Social Service APIs**
+
+- **211 Coverage (Find Local Help, Utility Aid, Food, Rent, Home Repair)**
+  - [211 National Search API](https://www.211.org/about-us/api)
+    - Zip-based or address-based search for nearby programs.
+  - [Direct 211 Open API (Aunt Bertha/FindHelp)](https://platform.findhelp.com/docs/api/quickstart)
+    - Free registration, then query for “Emergency Assistance,” “Home Repair,” “Financial Aid,” or “Disaster Relief” by ZIP.
+  - [United Way 211 National Directory](https://www.unitedway.org/our-impact/featured-programs/2-1-1)
+
+***
+
+## **C. Texas-Specific Insurance and Complaint Data**
+
+- **Texas Department of Insurance Complaint Data**
+  - [Complaint Database (TX Open Data)](https://data.texas.gov/dataset/Insurance-Complaints-All-Data)
+  - Allows lookup by ZIP, company, and complaint type.
+
+- **Texas Homeowner Assistance Fund**
+  - [Texas Department of Housing—Relief Programs](https://www.texashomeownerassistance.com/)
+  - Check pandemic/disaster grant eligibility by ZIP/address.
+
+***
+
+## **D. National/Local Housing and Repair Aid**
+
+- **HUD Emergency Home Repair Programs**
+  - [HUD Office Locator](https://resources.hud.gov/)
+  - [HUD Disaster Resources](https://www.hud.gov/info/disasterresources)
+  - Returns grant/loan programs and local agencies by ZIP.
+
+- **USDA Emergency Home Repair**
+  - [USDA Rural Development Program Guide](https://www.rd.usda.gov/programs-services/all-programs/single-family-housing-programs/single-family-housing-repair-loans-grants)
+  - Eligibility check and agency reference via county lookup.
+
+***
+
+## **E. Utility and Food Relief**
+
+- **LIHEAP Utility Aid Program**
+  - [LIHEAP Clearinghouse Locator](https://liheapch.acf.hhs.gov/searchtool/)
+  - [National Energy Assistance Referral (NEAR)](https://liheapch.acf.hhs.gov/help)
+  - Input ZIP to get local office or apply online.
+
+***
+
+## **F. Census and Demographic Regional Data**
+
+- **Census Bureau Data by ZIP**
+  - [Census Bureau Data API](https://www.census.gov/data/developers/data-sets.html)
+  - Use for community, disaster, and demographic overlay.
+
+***
+
+## **G. Public Insurance Data and Guidance**
+
+- **Consumer Complaint Ratios (NAIC)**
+  - [NAIC Consumer Insurance Search](https://content.naic.org/consumer-insurance-search)
+  - Returns ratio and complaint history by company.
+
+- **Fair Market/Replacement Cost Data**
+  - [BLS PPI API](https://www.bls.gov/developers/home.htm)
+  - Use regional cost adjustments in output.
+
+***
+
+## **H. Standard API Integration for Your App**
+
+All example API links above can be auto-triggered by:
+- **Manual entry:** Whenever a user inputs ZIP/address on a form.
+- **OCR:** When MaxClaim’s OCR detects a ZIP/address in uploaded claim sheets.
+- **Output Inclusion:** URLs, data, and explanations should be appended with citation in each page of any emailed or printed PDF using a footer or “Additional Support Resources” block.
+
+***
+
+## **Example Markdown Citation for MaxClaim PDFs**
+
+```
+**Assistance and Disaster Relief Resources for [User ZIP/Region]:**
+
+- FEMA Disaster Assistance Programs: https://www.fema.gov/assistance/individual/program
+- Local 211 Services (food, shelter, home repair): https://www.211.org
+- Texas Homeowner Assistance: https://www.texashomeownerassistance.com/
+- HUD Repair Programs: https://www.hud.gov/info/disasterresources
+- BLS Replacement Cost Index: https://www.bls.gov/ppi/
+- TDI Insurance Complaints: https://data.texas.gov/dataset/Insurance-Complaints-All-Data
+
+*All resources are triggered by your provided ZIP code ([ZIP]) or address for custom public aid guidance.*
+```
+
+***
+
+**Recommendation:**  
+Integrate the API calls server- or client-side upon ZIP input or document upload, then populate an “Additional Support” section in every report/email to the user, ensuring regulatory compliance, user empowerment, and grant readiness.
+
+Citations:
+[1] Hartford-Ins-20yr.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/120634607/b1fa296b-e099-4260-8864-3bc17f363e95/Hartford-Ins-20yr.jpeg
