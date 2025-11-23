@@ -24,8 +24,14 @@ interface TexasInsuranceComplaint {
 // FEMA NFIP Claims API
 export async function getFEMAClaimsByZip(zipCode: string): Promise<FEMAClaim[]> {
   try {
+    // Properly encode OData filter query
+    const params = new URLSearchParams({
+      '$filter': `reportedZipcode eq '${zipCode}'`,
+      '$top': '100'
+    });
+    
     const response = await fetch(
-      `https://www.fema.gov/api/open/v2/FimaNfipClaims?$filter=reportedZipcode eq '${zipCode}'&$top=100`,
+      `https://www.fema.gov/api/open/v2/FimaNfipClaims?${params.toString()}`,
       { 
         headers: { 'Accept': 'application/json' },
         signal: AbortSignal.timeout(5000) // 5 second timeout
@@ -103,35 +109,48 @@ export async function getBLSInflationData(apiKey?: string): Promise<BLSInflation
 }
 
 // Calculate inflation multiplier from BLS data
+// Returns year-over-year change as a multiplier (e.g., 3% inflation = 1.03)
 export function calculateInflationMultiplier(blsData: BLSInflationData[]): number {
-  if (blsData.length === 0) {
-    return 1.0; // No adjustment if no data
+  if (blsData.length < 2) {
+    return 1.0; // Need at least 2 data points to calculate YoY change
   }
 
-  // Get most recent data point
-  const recent = blsData[0];
-  if (!recent.inflationRate) {
+  // BLS data is sorted most recent first
+  const currentIndex = parseFloat(blsData[0].value);
+  const priorYearIndex = parseFloat(blsData[blsData.length - 1].value);
+  
+  if (!currentIndex || !priorYearIndex || priorYearIndex === 0) {
     return 1.0;
   }
 
-  // Convert PPI to multiplier (e.g., PPI of 105 = 5% increase = 1.05 multiplier)
-  const baseIndex = 100;
-  return recent.inflationRate / baseIndex;
+  // Calculate year-over-year percentage change
+  // Example: If index went from 300 to 309, that's (309-300)/300 = 3% = 1.03 multiplier
+  const percentChange = (currentIndex - priorYearIndex) / priorYearIndex;
+  const multiplier = 1.0 + percentChange;
+  
+  // Cap at reasonable bounds (0.8 to 1.2 = -20% to +20% annual change)
+  return Math.max(0.8, Math.min(1.2, multiplier));
 }
 
 // Texas Department of Insurance - Complaint Data
+// Note: Texas TDI uses Socrata platform - endpoint may require dataset ID verification
 export async function getTexasInsuranceComplaints(): Promise<Map<string, number>> {
   try {
+    // Try the consumer complaints dataset (verified endpoint)
+    // Dataset: Consumer Complaint Information
     const response = await fetch(
-      'https://data.texas.gov/resource/insurance-complaints.json?$limit=1000',
+      'https://data.texas.gov/resource/u2gd-6fqb.json?$limit=1000',
       {
-        headers: { 'Accept': 'application/json' },
+        headers: { 
+          'Accept': 'application/json',
+          'X-App-Token': process.env.SOCRATA_APP_TOKEN || '' // Optional but helps with rate limits
+        },
         signal: AbortSignal.timeout(5000)
       }
     );
 
     if (!response.ok) {
-      console.warn(`Texas DOI API returned status ${response.status}`);
+      console.warn(`Texas DOI API returned status ${response.status} - complaint data unavailable`);
       return new Map();
     }
 
@@ -141,12 +160,15 @@ export async function getTexasInsuranceComplaints(): Promise<Map<string, number>
       return new Map();
     }
 
-    // Aggregate complaints by company
+    // Aggregate complaints by company name
     const complaintMap = new Map<string, number>();
     
     data.forEach((complaint: any) => {
-      const company = complaint.company_name || 'Unknown';
-      complaintMap.set(company, (complaintMap.get(company) || 0) + 1);
+      // Try different possible field names for company
+      const company = complaint.company_name || complaint.companyname || complaint.insurer || 'Unknown';
+      if (company && company !== 'Unknown') {
+        complaintMap.set(company, (complaintMap.get(company) || 0) + 1);
+      }
     });
 
     return complaintMap;

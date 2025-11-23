@@ -225,18 +225,25 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
               )}
 
               {/* BLS Inflation Adjustment */}
-              {results.regionalContext.inflationAdjustment !== 0 && (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Construction Cost Inflation</p>
-                  <p className="text-2xl font-bold" data-testid="text-inflation">
-                    {results.regionalContext.inflationAdjustment > 0 ? '+' : ''}
-                    {results.regionalContext.inflationAdjustment}%
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Applied to your FMV calculation (BLS data)
-                  </p>
-                </div>
-              )}
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Construction Cost Inflation</p>
+                <p className="text-2xl font-bold" data-testid="text-inflation">
+                  {results.regionalContext && results.regionalContext.inflationAdjustment !== 0 ? (
+                    <>
+                      {results.regionalContext.inflationAdjustment > 0 ? '+' : ''}
+                      {results.regionalContext.inflationAdjustment}%
+                    </>
+                  ) : (
+                    'N/A'
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {results.regionalContext && results.regionalContext.inflationAdjustment !== 0 
+                    ? 'Year-over-year adjustment applied (BLS data)'
+                    : 'BLS data unavailable - using static pricing'
+                  }
+                </p>
+              </div>
             </div>
 
             {/* Top Insurance Complaints */}
