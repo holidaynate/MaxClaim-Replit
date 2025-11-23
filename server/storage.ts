@@ -12,6 +12,7 @@ import {
   type Source,
   type SourceVersion,
   type InsertSessionSourceUsage,
+  users,
   sessions,
   sessionEvents,
   claims,

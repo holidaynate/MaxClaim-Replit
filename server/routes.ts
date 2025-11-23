@@ -115,7 +115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         zipCode: z.string().optional(),
         locale: z.string().optional(),
         textSize: z.string().optional(),
-        highContrast: z.number().optional(),
+        highContrast: z.boolean().optional(),
       }).parse(req.body);
 
       const session = await storage.createSession(sessionData);
