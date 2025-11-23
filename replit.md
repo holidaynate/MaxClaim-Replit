@@ -31,10 +31,19 @@ Preferred communication style: Simple, everyday language suitable for non-techni
    - Changed terminology from "quoted price" to "insurance offer"
    - Results display focuses on INCREASE to claim amount (green highlights)
 
-4. **End-to-End Testing**
+4. **External API Integration** (NEW - November 23, 2025)
+   - **FEMA NFIP Claims API**: Historical flood insurance claims by ZIP code
+   - **BLS Construction PPI**: Year-over-year inflation adjustments
+   - **Texas DOI Complaints**: Public complaint data for insurers
+   - All APIs have graceful fallbacks to static pricing if unavailable
+   - URL encoding fixes for OData queries
+   - Proper YoY inflation calculation (2-5% typical, not 70%+ error)
+
+5. **End-to-End Testing**
    - Verified complete user flow from welcome to results
    - Confirmed API integration works correctly
    - Validated FMV calculations show higher amounts than insurance offers
+   - Tested external API fallback behavior
 
 ## Core Features
 
@@ -59,6 +68,8 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 - Other (custom items)
 
 ### Regional Pricing Intelligence
+
+**Static Regional Multipliers:**
 - ZIP code prefix-based multipliers (first 3 digits)
 - Accounts for cost-of-living differences across US regions
 - Examples:
@@ -66,6 +77,12 @@ Preferred communication style: Simple, everyday language suitable for non-techni
   - NYC area (100-101): 25-30% above national average
   - California (900-901): 20-25% above national average
   - Georgia (770-771): 5-10% above national average
+
+**External Data Sources (Real-time):**
+- **FEMA NFIP Claims**: Historical flood insurance claim counts and average payouts by ZIP
+- **BLS Construction PPI**: Year-over-year construction cost inflation (typically 2-5%)
+- **Texas DOI**: Public complaint counts by insurance company
+- All external data sources have automatic fallback to static pricing if APIs fail
 
 ## System Architecture
 
