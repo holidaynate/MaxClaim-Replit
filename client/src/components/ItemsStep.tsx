@@ -53,10 +53,11 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
     const newItems = extractedItems.map(item => ({
       category: item.category || "Other",
       description: item.description,
-      quantity: item.quantity,
-      quotedPrice: item.quotedPrice
+      quantity: item.quantity || 1,
+      quotedPrice: item.quotedPrice || 0
     }));
     
+    // Append extracted items to existing items (don't replace)
     onChange([...items, ...newItems]);
   };
 

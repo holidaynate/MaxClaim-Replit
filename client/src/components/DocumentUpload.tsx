@@ -93,12 +93,22 @@ export function DocumentUpload({ onItemsExtracted }: DocumentUploadProps) {
 
       if (data.parsedItems && data.parsedItems.length > 0) {
         setUploadStatus('success');
-        setStatusMessage(`Successfully extracted ${data.parsedItems.length} item(s) from document!`);
+        const highConfCount = data.parsedItems.filter((i: any) => i.confidence === 'high').length;
+        const mediumConfCount = data.parsedItems.filter((i: any) => i.confidence === 'medium').length;
+        
+        let confidenceNote = '';
+        if (highConfCount === data.parsedItems.length) {
+          confidenceNote = ' All items extracted with high confidence.';
+        } else if (mediumConfCount > 0) {
+          confidenceNote = ' Please review the extracted items carefully.';
+        }
+        
+        setStatusMessage(`Successfully extracted ${data.parsedItems.length} item(s) from document!${confidenceNote}`);
         onItemsExtracted(data.parsedItems);
         
         toast({
           title: 'Document processed',
-          description: `Found ${data.parsedItems.length} claim item(s) in your document.`,
+          description: `Found ${data.parsedItems.length} claim item(s). Please review and edit as needed.`,
         });
       } else {
         setUploadStatus('error');

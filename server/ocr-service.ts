@@ -142,18 +142,31 @@ interface ParsedClaimItem {
 
 export function parseInsuranceDocument(text: string): ParsedClaimItem[] {
   const items: ParsedClaimItem[] = [];
+  const processedRanges: Array<{start: number, end: number}> = [];
   
-  // Common patterns in insurance documents
-  const patterns = {
-    // Line items with prices: "Roofing repair - $1,250.00"
-    lineItemWithPrice: /([A-Za-z\s]+)[\s\-:]+\$?([\d,]+\.?\d*)/gi,
-    
-    // Separate quantity and price: "25 squares roofing @ $450"
-    quantityAndPrice: /(\d+)\s+([A-Za-z\s]+)[\s@]+\$?([\d,]+\.?\d*)/gi,
-    
-    // Table format: "Roofing | 25 | $11,250"
-    tableFormat: /([A-Za-z\s]+)\s*[\|]\s*(\d+)\s*[\|]\s*\$?([\d,]+\.?\d*)/gi
-  };
+  function isOverlapping(start: number, end: number): boolean {
+    return processedRanges.some(range => 
+      // Check all overlap cases: partial overlap, full containment, or full enclosure
+      (start >= range.start && start <= range.end) ||
+      (end >= range.start && end <= range.end) ||
+      (start <= range.start && end >= range.end) ||
+      (start >= range.start && end <= range.end)
+    );
+  }
+  
+  function isSummaryLine(text: string): boolean {
+    const summaryKeywords = /\b(subtotal|tax|balance|grand total|sum|amount due|payment)\b/i;
+    return summaryKeywords.test(text);
+  }
+  
+  function hasTotalKeyword(text: string): boolean {
+    // Check if line explicitly says this IS a total (not per-unit)
+    return /\btotal\s*price\b|\btotal\s*cost\b|\btotal\s*\$|\btotal\s*amount\b/i.test(text);
+  }
+  
+  function markProcessed(start: number, end: number) {
+    processedRanges.push({ start, end });
+  }
 
   // Category keywords mapping
   const categoryKeywords: Record<string, string[]> = {
@@ -183,65 +196,113 @@ export function parseInsuranceDocument(text: string): ParsedClaimItem[] {
     return parseFloat(priceStr.replace(/[,$]/g, ''));
   }
 
-  // Try pattern 1: Line items with prices
+  // PRIORITY 1: Quantity with EXPLICIT unit-price pattern
+  // Only multiply when there's a clear per-unit indicator: @, "each", "per"
+  // BUT NOT when "total" keyword is present (e.g., "@ total $450" means $450 is the total)
+  const qtyUnitPricePattern = /(\d+(?:\.\d+)?)\s+(?:sq(?:uare)?s?|gallons?|units?|feet|ft|yards?|yd)?\s*([A-Za-z\s]+?)[\s@]+[@]?\s*\$?([\d,]+\.?\d*)\s*(?:each|per|@)?/gi;
   let match;
-  while ((match = patterns.lineItemWithPrice.exec(text)) !== null) {
-    const description = match[1].trim();
-    const price = parsePrice(match[2]);
+  while ((match = qtyUnitPricePattern.exec(text)) !== null) {
+    // Check if this line has a clear unit-price marker (@, each, per)
+    const hasUnitPriceMarker = /@|each|per/i.test(match[0]);
+    // Check if line says this is a "total" (not per-unit)
+    const explicitTotal = hasTotalKeyword(match[0]);
     
-    if (price > 0 && description.length > 3) {
-      items.push({
-        category: detectCategory(description),
-        description: description,
-        quantity: 1,
-        quotedPrice: price,
-        confidence: 'medium'
-      });
+    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0]) && hasUnitPriceMarker && !explicitTotal) {
+      const quantity = parseFloat(match[1]);
+      const description = match[2].trim();
+      const pricePerUnit = parsePrice(match[3]);
+      
+      if (quantity > 0 && pricePerUnit > 0 && description.length > 2 && !isSummaryLine(description)) {
+        // ONLY multiply when we have a unit-price marker AND no "total" keyword
+        const totalPrice = quantity * pricePerUnit;
+        
+        items.push({
+          category: detectCategory(description),
+          description: description,
+          quantity: quantity,
+          quotedPrice: totalPrice,
+          confidence: 'high'
+        });
+        markProcessed(match.index, match.index + match[0].length);
+      }
+    }
+  }
+  
+  // PRIORITY 1B: Quantity and total price (NO unit-price marker)
+  // Matches: "25 sq ft drywall 450.00" where 450 is already the total
+  const qtyTotalPattern = /(\d+(?:\.\d+)?)\s+(?:sq(?:uare)?s?|gallons?|units?|feet|ft|yards?|yd)?\s*([A-Za-z\s]+?)\s+\$?([\d,]+\.?\d*)/gi;
+  while ((match = qtyTotalPattern.exec(text)) !== null) {
+    // Skip if this has a unit-price marker (already processed above)
+    const hasUnitPriceMarker = /@|each|per/i.test(match[0]);
+    
+    if (!hasUnitPriceMarker && !isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
+      const quantity = parseFloat(match[1]);
+      const description = match[2].trim();
+      const totalPrice = parsePrice(match[3]);
+      
+      if (quantity > 0 && totalPrice > 0 && description.length > 2 && !isSummaryLine(description)) {
+        // Price is already the total (no multiplication)
+        items.push({
+          category: detectCategory(description),
+          description: description,
+          quantity: quantity,
+          quotedPrice: totalPrice,
+          confidence: 'high'
+        });
+        markProcessed(match.index, match.index + match[0].length);
+      }
     }
   }
 
-  // Try pattern 2: Quantity and price
-  patterns.quantityAndPrice.lastIndex = 0; // Reset regex
-  while ((match = patterns.quantityAndPrice.exec(text)) !== null) {
-    const quantity = parseInt(match[1]);
-    const description = match[2].trim();
-    const pricePerUnit = parsePrice(match[3]);
-    
-    if (quantity > 0 && pricePerUnit > 0) {
-      items.push({
-        category: detectCategory(description),
-        description: description,
-        quantity: quantity,
-        quotedPrice: pricePerUnit,
-        confidence: 'high'
-      });
+  // PRIORITY 2: Table format "Description | Qty | Price"
+  // Assumes price column is TOTAL (not per-unit), which is standard for insurance documents
+  const tablePattern = /([A-Za-z\s]{3,})\s*[\|]\s*(\d+(?:\.\d+)?)\s*[\|]\s*\$?([\d,]+\.?\d*)/gi;
+  tablePattern.lastIndex = 0;
+  while ((match = tablePattern.exec(text)) !== null) {
+    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
+      const description = match[1].trim();
+      const quantity = parseFloat(match[2]);
+      const totalPrice = parsePrice(match[3]);
+      
+      if (quantity > 0 && totalPrice > 0 && description.length > 2 && !isSummaryLine(description)) {
+        items.push({
+          category: detectCategory(description),
+          description: description,
+          quantity: quantity,
+          quotedPrice: totalPrice,
+          confidence: 'high'
+        });
+        markProcessed(match.index, match.index + match[0].length);
+      }
     }
   }
 
-  // Try pattern 3: Table format
-  patterns.tableFormat.lastIndex = 0; // Reset regex
-  while ((match = patterns.tableFormat.exec(text)) !== null) {
-    const description = match[1].trim();
-    const quantity = parseInt(match[2]);
-    const price = parsePrice(match[3]);
-    
-    if (quantity > 0 && price > 0) {
-      items.push({
-        category: detectCategory(description),
-        description: description,
-        quantity: quantity,
-        quotedPrice: price,
-        confidence: 'high'
-      });
+  // PRIORITY 3: Simple line items with prices (least specific, only if no quantity found)
+  // Matches: "Roofing repair - $1,250.00" or "Paint: $500"
+  const lineItemPattern = /([A-Za-z\s]{5,})[\s\-:]+\$?([\d,]+\.?\d*)/gi;
+  lineItemPattern.lastIndex = 0;
+  while ((match = lineItemPattern.exec(text)) !== null) {
+    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
+      const description = match[1].trim();
+      const totalPrice = parsePrice(match[2]);
+      
+      // Only add if this looks like a reasonable price (>= $50 to avoid false positives)
+      // and exclude summary lines
+      if (totalPrice >= 50 && description.length > 3 && description.length < 100 && !isSummaryLine(description)) {
+        items.push({
+          category: detectCategory(description),
+          description: description,
+          quantity: 1,
+          quotedPrice: totalPrice,
+          confidence: 'medium'
+        });
+        markProcessed(match.index, match.index + match[0].length);
+      }
     }
   }
 
-  // Remove duplicates based on description similarity
-  const uniqueItems = items.filter((item, index, self) =>
-    index === self.findIndex(t => 
-      t.description.toLowerCase() === item.description.toLowerCase()
-    )
-  );
-
-  return uniqueItems;
+  // Return all parsed items without deduplication
+  // Users can manually remove duplicates if needed
+  // Preserves legitimate duplicate line items from different sections
+  return items;
 }

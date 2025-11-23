@@ -45,12 +45,25 @@ Preferred communication style: Simple, everyday language suitable for non-techni
    - Validated FMV calculations show higher amounts than insurance offers
    - Tested external API fallback behavior
 
+6. **Document Upload & OCR Feature** (NEW - November 23, 2025)
+   - **Dual OCR Engine**: OCR.space API (primary, 500 free requests/day) + Tesseract.js (local fallback)
+   - **File Upload**: Drag-and-drop or file select (JPG, PNG, PDF up to 10MB)
+   - **Smart Text Extraction**: PDF text layer detection first, then OCR for scanned documents
+   - **Intelligent Parsing**: Pattern matching to extract item categories, descriptions, quantities, and prices
+   - **Category Detection**: Keyword-based matching to auto-assign proper categories
+   - **Auto-Population**: Extracted items automatically added to claim form
+   - **User Control**: Users can review, edit, or add more items after OCR processing
+   - **Error Handling**: Graceful fallbacks with user-friendly messages if OCR fails
+
 ## Core Features
 
 ### Multi-Step Claim Analysis Wizard
 1. **Welcome Screen** - Explains service and privacy commitment
 2. **Location Step** - ZIP code entry for regional pricing
-3. **Items Step** - Add multiple claim items with categories, descriptions, quantities, insurance offers
+3. **Items Step** - Upload insurance document (optional) OR manually add claim items
+   - Document upload with OCR automatically extracts items
+   - Manual entry for categories, descriptions, quantities, insurance offers
+   - Users can combine both methods (upload + manual additions)
 4. **Review Step** - Verify all entered data before calculation
 5. **Results Step** - Display FMV analysis showing additional amount deserved
 
@@ -97,19 +110,51 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 
 ### Backend Stack
 - **Runtime**: Node.js + Express + TypeScript
-- **API**: RESTful endpoint at `POST /api/claims/analyze`
+- **API Endpoints**:
+  - `POST /api/claims/analyze` - FMV calculation and analysis
+  - `POST /api/ocr/upload` - Document upload and OCR processing
+- **OCR Service**: Multi-engine text extraction (`server/ocr-service.ts`)
+  - OCR.space API (free tier, 500 requests/day)
+  - Tesseract.js (local, unlimited, fallback)
+  - PDF text extraction (for searchable PDFs)
+- **Text Parsing**: Pattern matching for claim items (regex-based extraction)
+- **File Upload**: Multer middleware (10MB limit, JPG/PNG/PDF only)
 - **Pricing Engine**: In-memory database with regional multipliers (`server/pricing-data.ts`)
 - **Storage**: In-memory analytics (currently MemStorage, ready for DB migration)
 - **Validation**: Zod schemas shared between client/server
 
 ### Data Flow
+
+**Document Upload Flow:**
+```
+User Uploads Document (PDF/Image)
+  → POST /api/ocr/upload (with FormData)
+  → OCR Service (server/ocr-service.ts)
+    1. If PDF: Try text extraction first
+    2. Try OCR.space API (fast, cloud-based)
+    3. Fallback to Tesseract.js (local, unlimited)
+  → Text Parsing Engine
+    - Extract line items with prices
+    - Detect categories via keyword matching
+    - Parse quantities and descriptions
+  → JSON Response (parsed items)
+  → Auto-populate Items form
+  → User can review, edit, or add more items
+```
+
+**FMV Calculation Flow:**
 ```
 User Input (ZIP + Items) 
   → Frontend Form Validation (Zod) 
   → POST /api/claims/analyze
+  → Fetch External API Data (parallel)
+    - FEMA claims data
+    - BLS inflation index
+    - Texas DOI complaints
   → Backend Calculation (pricing-data.ts)
     - Apply category base price
     - Apply regional multiplier
+    - Apply inflation adjustment
     - Calculate additional amount deserved
   → JSON Response
   → Display Results with Green Highlighting
