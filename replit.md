@@ -49,10 +49,16 @@ Preferred communication style: Simple, everyday language suitable for non-techni
    - **Dual OCR Engine**: OCR.space API (primary, 500 free requests/day) + Tesseract.js (local fallback)
    - **File Upload**: Drag-and-drop or file select (JPG, PNG, PDF up to 10MB)
    - **Smart Text Extraction**: PDF text layer detection first, then OCR for scanned documents
-   - **Intelligent Parsing**: Pattern matching to extract item categories, descriptions, quantities, and prices
+   - **Conservative Parsing Strategy** (November 23, 2025 - v2):
+     - Line-by-line deterministic processing (no complex regex branching)
+     - Assumes all prices are TOTALS by default (no automatic multiplication)
+     - Three pattern priority: (1) Table format, (2) Quantity + description + price, (3) Description + price
+     - Summary line filtering: Skips lines STARTING with "Total", "Subtotal", "Tax", etc.
+     - Confidence tagging: Each item tagged with reason (e.g., "Structured table format", "Assumed price is total")
    - **Category Detection**: Keyword-based matching to auto-assign proper categories
    - **Auto-Population**: Extracted items automatically added to claim form
-   - **User Control**: Users can review, edit, or add more items after OCR processing
+   - **User Control**: Users MUST review and edit OCR-extracted items before submitting
+   - **Known Limitations**: OCR text parsing is inherently ambiguous; users should verify all quantities and prices
    - **Error Handling**: Graceful fallbacks with user-friendly messages if OCR fails
 
 ## Core Features

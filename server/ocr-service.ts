@@ -138,34 +138,24 @@ interface ParsedClaimItem {
   quantity: number;
   quotedPrice: number;
   confidence: 'high' | 'medium' | 'low';
+  confidenceReason?: string;
 }
 
 export function parseInsuranceDocument(text: string): ParsedClaimItem[] {
   const items: ParsedClaimItem[] = [];
-  const processedRanges: Array<{start: number, end: number}> = [];
   
-  function isOverlapping(start: number, end: number): boolean {
-    return processedRanges.some(range => 
-      // Check all overlap cases: partial overlap, full containment, or full enclosure
-      (start >= range.start && start <= range.end) ||
-      (end >= range.start && end <= range.end) ||
-      (start <= range.start && end >= range.end) ||
-      (start >= range.start && end <= range.end)
-    );
-  }
+  // Normalize text: clean up whitespace and line breaks
+  const normalizedText = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\t/g, ' ')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
   
-  function isSummaryLine(text: string): boolean {
-    const summaryKeywords = /\b(subtotal|tax|balance|grand total|sum|amount due|payment)\b/i;
-    return summaryKeywords.test(text);
-  }
-  
-  function hasTotalKeyword(text: string): boolean {
-    // Check if line explicitly says this IS a total (not per-unit)
-    return /\btotal\s*price\b|\btotal\s*cost\b|\btotal\s*\$|\btotal\s*amount\b/i.test(text);
-  }
-  
-  function markProcessed(start: number, end: number) {
-    processedRanges.push({ start, end });
+  function isSummaryLine(line: string): boolean {
+    // Only match summary keywords at the START of the line (not embedded in descriptions)
+    // Matches: "Total", "TOTAL", "Subtotal", "Tax", "Total Due", etc.
+    return /^(total|subtotal|tax|balance|grand\s*total|sum|amount\s*due|payment)/i.test(line.trim());
   }
 
   // Category keywords mapping
@@ -196,113 +186,71 @@ export function parseInsuranceDocument(text: string): ParsedClaimItem[] {
     return parseFloat(priceStr.replace(/[,$]/g, ''));
   }
 
-  // PRIORITY 1: Quantity with EXPLICIT unit-price pattern
-  // Only multiply when there's a clear per-unit indicator: @, "each", "per"
-  // BUT NOT when "total" keyword is present (e.g., "@ total $450" means $450 is the total)
-  const qtyUnitPricePattern = /(\d+(?:\.\d+)?)\s+(?:sq(?:uare)?s?|gallons?|units?|feet|ft|yards?|yd)?\s*([A-Za-z\s]+?)[\s@]+[@]?\s*\$?([\d,]+\.?\d*)\s*(?:each|per|@)?/gi;
-  let match;
-  while ((match = qtyUnitPricePattern.exec(text)) !== null) {
-    // Check if this line has a clear unit-price marker (@, each, per)
-    const hasUnitPriceMarker = /@|each|per/i.test(match[0]);
-    // Check if line says this is a "total" (not per-unit)
-    const explicitTotal = hasTotalKeyword(match[0]);
-    
-    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0]) && hasUnitPriceMarker && !explicitTotal) {
-      const quantity = parseFloat(match[1]);
-      const description = match[2].trim();
-      const pricePerUnit = parsePrice(match[3]);
-      
-      if (quantity > 0 && pricePerUnit > 0 && description.length > 2 && !isSummaryLine(description)) {
-        // ONLY multiply when we have a unit-price marker AND no "total" keyword
-        const totalPrice = quantity * pricePerUnit;
-        
-        items.push({
-          category: detectCategory(description),
-          description: description,
-          quantity: quantity,
-          quotedPrice: totalPrice,
-          confidence: 'high'
-        });
-        markProcessed(match.index, match.index + match[0].length);
-      }
+  // Conservative parsing: Process each line, assuming prices are TOTALS by default
+  for (const line of normalizedText) {
+    if (isSummaryLine(line)) {
+      continue; // Skip summary rows entirely
     }
-  }
-  
-  // PRIORITY 1B: Quantity and total price (NO unit-price marker)
-  // Matches: "25 sq ft drywall 450.00" where 450 is already the total
-  const qtyTotalPattern = /(\d+(?:\.\d+)?)\s+(?:sq(?:uare)?s?|gallons?|units?|feet|ft|yards?|yd)?\s*([A-Za-z\s]+?)\s+\$?([\d,]+\.?\d*)/gi;
-  while ((match = qtyTotalPattern.exec(text)) !== null) {
-    // Skip if this has a unit-price marker (already processed above)
-    const hasUnitPriceMarker = /@|each|per/i.test(match[0]);
-    
-    if (!hasUnitPriceMarker && !isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
-      const quantity = parseFloat(match[1]);
-      const description = match[2].trim();
-      const totalPrice = parsePrice(match[3]);
-      
-      if (quantity > 0 && totalPrice > 0 && description.length > 2 && !isSummaryLine(description)) {
-        // Price is already the total (no multiplication)
-        items.push({
-          category: detectCategory(description),
-          description: description,
-          quantity: quantity,
-          quotedPrice: totalPrice,
-          confidence: 'high'
-        });
-        markProcessed(match.index, match.index + match[0].length);
-      }
-    }
-  }
 
-  // PRIORITY 2: Table format "Description | Qty | Price"
-  // Assumes price column is TOTAL (not per-unit), which is standard for insurance documents
-  const tablePattern = /([A-Za-z\s]{3,})\s*[\|]\s*(\d+(?:\.\d+)?)\s*[\|]\s*\$?([\d,]+\.?\d*)/gi;
-  tablePattern.lastIndex = 0;
-  while ((match = tablePattern.exec(text)) !== null) {
-    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
-      const description = match[1].trim();
-      const quantity = parseFloat(match[2]);
-      const totalPrice = parsePrice(match[3]);
+    // Pattern 1: Table format "Description | Qty | Price" (most structured)
+    const tableMatch = line.match(/^([A-Za-z\s]{3,})\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*\$?([\d,]+\.?\d*)$/);
+    if (tableMatch) {
+      const description = tableMatch[1].trim();
+      const quantity = parseFloat(tableMatch[2]);
+      const price = parsePrice(tableMatch[3]);
       
-      if (quantity > 0 && totalPrice > 0 && description.length > 2 && !isSummaryLine(description)) {
+      if (quantity > 0 && price >= 50) {
         items.push({
           category: detectCategory(description),
-          description: description,
-          quantity: quantity,
-          quotedPrice: totalPrice,
-          confidence: 'high'
+          description,
+          quantity,
+          quotedPrice: price,
+          confidence: 'high',
+          confidenceReason: 'Structured table format'
         });
-        markProcessed(match.index, match.index + match[0].length);
+        continue;
       }
     }
-  }
 
-  // PRIORITY 3: Simple line items with prices (least specific, only if no quantity found)
-  // Matches: "Roofing repair - $1,250.00" or "Paint: $500"
-  const lineItemPattern = /([A-Za-z\s]{5,})[\s\-:]+\$?([\d,]+\.?\d*)/gi;
-  lineItemPattern.lastIndex = 0;
-  while ((match = lineItemPattern.exec(text)) !== null) {
-    if (!isOverlapping(match.index, match.index + match[0].length) && !isSummaryLine(match[0])) {
-      const description = match[1].trim();
-      const totalPrice = parsePrice(match[2]);
+    // Pattern 2: Quantity + description + price (assume price is TOTAL)
+    const qtyMatch = line.match(/(\d+(?:\.\d+)?)\s+(?:sq(?:uare)?s?|ft|feet|gallons?|units?)?\s*([A-Za-z\s]{3,}?)\s+[\-:$]?\s*\$?([\d,]+\.?\d*)/);
+    if (qtyMatch) {
+      const quantity = parseFloat(qtyMatch[1]);
+      const description = qtyMatch[2].trim();
+      const price = parsePrice(qtyMatch[3]);
       
-      // Only add if this looks like a reasonable price (>= $50 to avoid false positives)
-      // and exclude summary lines
-      if (totalPrice >= 50 && description.length > 3 && description.length < 100 && !isSummaryLine(description)) {
+      if (quantity > 0 && price >= 50 && description.length > 2) {
         items.push({
           category: detectCategory(description),
-          description: description,
+          description,
+          quantity,
+          quotedPrice: price,
+          confidence: 'high',
+          confidenceReason: 'Assumed price is total'
+        });
+        continue;
+      }
+    }
+
+    // Pattern 3: Description + price (no quantity, assume qty=1)
+    const descMatch = line.match(/([A-Za-z\s]{5,})[\s\-:]+\$?([\d,]+\.?\d*)/);
+    if (descMatch) {
+      const description = descMatch[1].trim();
+      const price = parsePrice(descMatch[2]);
+      
+      if (price >= 50 && description.length > 3 && description.length < 100) {
+        items.push({
+          category: detectCategory(description),
+          description,
           quantity: 1,
-          quotedPrice: totalPrice,
-          confidence: 'medium'
+          quotedPrice: price,
+          confidence: 'medium',
+          confidenceReason: 'No quantity found, assumed 1'
         });
-        markProcessed(match.index, match.index + match[0].length);
+        continue;
       }
     }
   }
 
-  // Return all parsed items without deduplication
-  // Users can manually remove duplicates if needed
-  // Preserves legitimate duplicate line items from different sections
   return items;
 }
