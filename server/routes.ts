@@ -3,7 +3,11 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { analyzeClaimItem } from "./pricing-data";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
+import { performOCR, parseInsuranceDocument } from "./ocr-service";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import fs from "fs/promises";
 
 const claimAnalysisSchema = z.object({
   zipCode: z.string().min(5),
@@ -101,6 +105,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching regional stats:", error);
       res.status(500).json({ error: "Failed to fetch statistics" });
+    }
+  });
+
+  // Configure multer for file uploads
+  const upload = multer({
+    dest: 'uploads/',
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPG, PNG, and PDF are allowed.'));
+      }
+    }
+  });
+
+  // OCR endpoint - Upload and process insurance document
+  app.post("/api/ocr/upload", upload.single('document'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const { path: filePath, mimetype } = req.file;
+
+      console.log(`Processing uploaded file: ${req.file.originalname}, type: ${mimetype}`);
+
+      // Perform OCR on the uploaded file
+      const ocrResult = await performOCR(filePath, mimetype);
+
+      // Parse the extracted text to identify claim items
+      const parsedItems = parseInsuranceDocument(ocrResult.text);
+
+      // Clean up uploaded file
+      await fs.unlink(filePath).catch(err => 
+        console.warn('Failed to delete uploaded file:', err)
+      );
+
+      res.json({
+        success: true,
+        rawText: ocrResult.text,
+        source: ocrResult.source,
+        confidence: ocrResult.confidence,
+        parsedItems: parsedItems,
+        itemCount: parsedItems.length
+      });
+
+    } catch (error: any) {
+      console.error('OCR processing error:', error);
+      
+      // Clean up file on error
+      if (req.file) {
+        await fs.unlink(req.file.path).catch(() => {});
+      }
+
+      res.status(500).json({ 
+        error: 'Failed to process document',
+        details: error.message 
+      });
     }
   });
 
