@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, TrendingDown, Download, Mail, Printer } from "lucide-react";
+import { AlertCircle, CheckCircle, TrendingUp, Download, Mail, Printer } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,20 +14,21 @@ interface ResultsStepProps {
 interface ItemResult extends ClaimItem {
   fmvPrice: number;
   variance: number;
-  status: 'overpriced' | 'fair' | 'underpriced';
+  status: 'underpaid' | 'fair' | 'overpaid';
 }
 
 // Mock FMV calculation - in real app this would come from backend
+// Insurance companies typically UNDERPAY by 10-25%, so FMV should be HIGHER
 function calculateFMV(items: ClaimItem[]): ItemResult[] {
   return items.map(item => {
-    // Simple mock: FMV is 85-95% of quoted price with some variation
-    const fmvMultiplier = 0.85 + Math.random() * 0.1;
+    // FMV is typically 15-25% HIGHER than insurance offer (they underpay)
+    const fmvMultiplier = 1.15 + Math.random() * 0.1;
     const fmvPrice = item.quotedPrice * fmvMultiplier;
-    const variance = ((item.quotedPrice - fmvPrice) / fmvPrice) * 100;
+    const variance = ((fmvPrice - item.quotedPrice) / item.quotedPrice) * 100;
     
-    let status: 'overpriced' | 'fair' | 'underpriced' = 'fair';
-    if (variance > 10) status = 'overpriced';
-    else if (variance < -5) status = 'underpriced';
+    let status: 'underpaid' | 'fair' | 'overpaid' = 'fair';
+    if (variance > 10) status = 'underpaid';
+    else if (variance < 5) status = 'fair';
     
     return {
       ...item,
@@ -40,10 +41,10 @@ function calculateFMV(items: ClaimItem[]): ItemResult[] {
 
 export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStepProps) {
   const results = calculateFMV(items);
-  const totalQuoted = results.reduce((sum, item) => sum + item.quotedPrice, 0);
+  const totalInsuranceOffer = results.reduce((sum, item) => sum + item.quotedPrice, 0);
   const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
-  const totalSavings = totalQuoted - totalFMV;
-  const savingsPercent = (totalSavings / totalQuoted) * 100;
+  const additionalAmount = totalFMV - totalInsuranceOffer;
+  const increasePercent = (additionalAmount / totalInsuranceOffer) * 100;
 
   return (
     <div className="space-y-6">
@@ -51,9 +52,9 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Total Quoted Amount</CardDescription>
+            <CardDescription>Insurance Company Offer</CardDescription>
             <CardTitle className="text-2xl">
-              ${totalQuoted.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${totalInsuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -65,14 +66,14 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card>
+        <Card className="border-2 border-green-600">
           <CardHeader className="pb-3">
-            <CardDescription>Potential Savings</CardDescription>
+            <CardDescription>Additional Amount You Deserve</CardDescription>
             <CardTitle className="text-2xl text-green-600 flex items-center gap-2">
-              <TrendingDown className="w-5 h-5" />
-              ${totalSavings.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              <TrendingUp className="w-5 h-5" />
+              ${additionalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">{savingsPercent.toFixed(1)}% variance</p>
+            <p className="text-sm text-muted-foreground mt-1">{increasePercent.toFixed(1)}% increase</p>
           </CardHeader>
         </Card>
       </div>
@@ -82,7 +83,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
         <CardHeader>
           <CardTitle>Line-Item Analysis</CardTitle>
           <CardDescription>
-            Comparison of quoted prices vs. fair market values for ZIP code {zipCode}
+            Comparison of insurance offer vs. fair market values for ZIP code {zipCode}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -91,9 +92,9 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
-                  <TableHead className="text-right">Quoted</TableHead>
-                  <TableHead className="text-right">FMV</TableHead>
-                  <TableHead className="text-right">Variance</TableHead>
+                  <TableHead className="text-right">Insurance Offer</TableHead>
+                  <TableHead className="text-right">Fair Market Value</TableHead>
+                  <TableHead className="text-right">Additional</TableHead>
                   <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -112,26 +113,20 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                     <TableCell className="text-right text-primary font-medium">
                       ${item.fmvPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
+                    <TableCell className="text-right text-green-600 font-medium">
+                      +${(item.fmvPrice - item.quotedPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right">
-                      {item.status === 'overpriced' && (
+                      {item.status === 'underpaid' && (
                         <Badge variant="destructive" className="gap-1">
                           <AlertCircle className="w-3 h-3" />
-                          Overpriced
+                          Underpaid
                         </Badge>
                       )}
                       {item.status === 'fair' && (
                         <Badge variant="secondary" className="gap-1">
                           <CheckCircle className="w-3 h-3" />
-                          Fair
-                        </Badge>
-                      )}
-                      {item.status === 'underpriced' && (
-                        <Badge className="gap-1 bg-green-600">
-                          <CheckCircle className="w-3 h-3" />
-                          Good Deal
+                          Fair Offer
                         </Badge>
                       )}
                     </TableCell>

@@ -60,7 +60,7 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
           Claim Items & Services
         </CardTitle>
         <CardDescription>
-          Add all items and services from your insurance estimate. We'll compare them against fair market values.
+          Add all items and services from your insurance company's settlement offer. We'll show you what you actually deserve.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -107,7 +107,7 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor={`price-${index}`}>Quoted Price ($)</Label>
+                    <Label htmlFor={`price-${index}`}>Insurance Offer ($)</Label>
                     <Input
                       id={`price-${index}`}
                       type="number"

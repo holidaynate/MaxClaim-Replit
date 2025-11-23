@@ -26,7 +26,7 @@ export default function ZipCodeStep({ value, onChange, onNext }: ZipCodeStepProp
           Property Location
         </CardTitle>
         <CardDescription>
-          Enter your ZIP code to get accurate regional pricing data for your claim analysis.
+          Enter your ZIP code to get accurate regional fair market values for your area.
         </CardDescription>
       </CardHeader>
       <CardContent>

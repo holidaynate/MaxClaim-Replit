@@ -22,7 +22,7 @@ export default function ReviewStep({ zipCode, items, onCalculate, onBack }: Revi
           Review Your Claim
         </CardTitle>
         <CardDescription>
-          Verify all information before calculating Fair Market Value
+          Verify all information before calculating what you actually deserve
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -47,7 +47,7 @@ export default function ReviewStep({ zipCode, items, onCalculate, onBack }: Revi
                   <TableHead>Category</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Quoted</TableHead>
+                  <TableHead className="text-right">Insurance Offer</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -62,7 +62,7 @@ export default function ReviewStep({ zipCode, items, onCalculate, onBack }: Revi
                   </TableRow>
                 ))}
                 <TableRow>
-                  <TableCell colSpan={3} className="font-semibold">Total Quoted Amount</TableCell>
+                  <TableCell colSpan={3} className="font-semibold">Total Insurance Offer</TableCell>
                   <TableCell className="text-right font-semibold text-lg">
                     ${totalQuoted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
