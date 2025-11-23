@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { analyzeClaimItem } from "./pricing-data";
+import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { z } from "zod";
 
 const claimAnalysisSchema = z.object({
@@ -15,10 +16,20 @@ const claimAnalysisSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Analyze claim and calculate FMV
+  // Analyze claim and calculate FMV with external API enrichment
   app.post("/api/claims/analyze", async (req, res) => {
     try {
       const data = claimAnalysisSchema.parse(req.body);
+      
+      // Fetch BLS inflation data and regional context in parallel
+      const blsApiKey = process.env.BLS_API_KEY; // Optional - works without it but with rate limits
+      const [blsData, regionalContext] = await Promise.all([
+        getBLSInflationData(blsApiKey),
+        getRegionalContext(data.zipCode, blsApiKey)
+      ]);
+
+      // Calculate inflation multiplier from BLS data
+      const inflationMultiplier = calculateInflationMultiplier(blsData);
       
       const results = data.items.map(item => {
         const analysis = analyzeClaimItem(
@@ -26,7 +37,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           item.description,
           item.quantity,
           item.quotedPrice,
-          data.zipCode
+          data.zipCode,
+          inflationMultiplier
         );
         
         return {
@@ -63,6 +75,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalFMV: Math.round(totalFMV * 100) / 100,
           totalAdditional: Math.round(totalAdditional * 100) / 100,
           overallIncrease: Math.round(overallIncrease * 10) / 10
+        },
+        regionalContext: {
+          femaClaimCount: regionalContext.femaClaimCount,
+          avgFEMAPayment: regionalContext.avgFEMAPayment,
+          inflationAdjustment: Math.round((inflationMultiplier - 1) * 100 * 10) / 10,
+          topComplaints: regionalContext.topInsuranceComplaints.slice(0, 3)
         }
       });
     } catch (error) {

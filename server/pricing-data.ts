@@ -193,19 +193,21 @@ export const fmvPricingData: PricingData = {
 export function calculateFMV(
   category: string,
   quantity: number,
-  zipCode: string
+  zipCode: string,
+  inflationMultiplier: number = 1.0
 ): number {
   const categoryData = fmvPricingData[category];
   if (!categoryData) {
     // Fallback to "Other" category
-    return calculateFMV("Other", quantity, zipCode);
+    return calculateFMV("Other", quantity, zipCode, inflationMultiplier);
   }
 
   const zipPrefix = zipCode.substring(0, 3);
   const multipliers = categoryData.regionalMultipliers;
   const regionalMultiplier = multipliers[zipPrefix] || multipliers["DEFAULT"];
 
-  return categoryData.basePrice * quantity * regionalMultiplier;
+  // Apply both regional and inflation adjustments
+  return categoryData.basePrice * quantity * regionalMultiplier * inflationMultiplier;
 }
 
 export function analyzeClaimItem(
@@ -213,14 +215,15 @@ export function analyzeClaimItem(
   description: string,
   quantity: number,
   insuranceOffer: number,
-  zipCode: string
+  zipCode: string,
+  inflationMultiplier: number = 1.0
 ): {
   fmvPrice: number;
   additionalAmount: number;
   percentageIncrease: number;
   status: 'underpaid' | 'fair';
 } {
-  const fmvPrice = calculateFMV(category, quantity, zipCode);
+  const fmvPrice = calculateFMV(category, quantity, zipCode, inflationMultiplier);
   const additionalAmount = fmvPrice - insuranceOffer;
   const percentageIncrease = (additionalAmount / insuranceOffer) * 100;
 
