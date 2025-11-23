@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DocumentUpload } from "./DocumentUpload";
 
 export interface ClaimItem {
   category: string;
@@ -48,12 +49,26 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
     onChange(newItems);
   };
 
+  const handleExtractedItems = (extractedItems: any[]) => {
+    const newItems = extractedItems.map(item => ({
+      category: item.category || "Other",
+      description: item.description,
+      quantity: item.quantity,
+      quotedPrice: item.quotedPrice
+    }));
+    
+    onChange([...items, ...newItems]);
+  };
+
   const isValid = items.length > 0 && items.every(item => 
     item.category && item.description && item.quantity > 0 && item.quotedPrice > 0
   );
 
   return (
-    <Card>
+    <div className="space-y-6">
+      <DocumentUpload onItemsExtracted={handleExtractedItems} />
+      
+      <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Package className="w-5 h-5 text-primary" />
@@ -160,5 +175,6 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 }
