@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 ## System Architecture
 
 ### UI/UX Decisions
-The design philosophy emphasizes professional trust and user empowerment with a clean, data-focused interface. **Single-screen design** with trust badges at the top (No Credit Card Required, 90%+ Success Rate, Licensed & Insured, No Risk to You) provides immediate credibility. Simplified flow indicators use arrows instead of complex step boxes, and the primary CTA button ("Calculate My Recovery") appears at both top and bottom for improved conversion. The application ensures accessibility (WCAG AA compliant, keyboard navigation, mobile responsive) and prioritizes speed with fast calculations and minimal loading states. All copy is oriented towards "additional amount deserved" with green highlights for increased claim amounts.
+The design philosophy emphasizes professional trust and user empowerment with a clean, data-focused interface. **Single-screen design** with trust badges at the top (No Credit Card Required, 90%+ Success Rate, Updated with Live Data, No Risk to You) provides immediate credibility with public data source citations (FEMA NFIP, BLS PPI, Texas DOI, 23 open-source databases). Simplified flow indicators use arrows instead of complex step boxes. **Dual CTA strategy**: top button ("Verify Fair Market Value") and bottom button ("Calculate My Recovery") both trigger the same analysis action but serve different conversion points. A floating translucent "MAX-CLAIM" watermark prevents unauthorized screenshots. The application ensures accessibility (WCAG AA compliant, keyboard navigation, mobile responsive) and prioritizes speed with fast calculations and minimal loading states. All copy is oriented towards "additional amount deserved" with green highlights for increased claim amounts.
 
 ### Technical Implementations
 Max-Claim is built as a full-stack web application. The frontend uses **React 18 + TypeScript + Vite**, with **Wouter** for routing, **TanStack Query** for server state, and **React useState** for local UI. **Shadcn/ui** (Radix UI primitives) and **Tailwind CSS** handle UI components and styling, while **React Hook Form + Zod** manage form validation.
@@ -77,6 +77,10 @@ All core features completed and tested:
 3. Implemented pricing data points system for continuous improvement
 4. Added optional property address field for better property valuations
 5. Integrated weighted FMV calculations using historical user data
+6. Updated trust badges: Removed "Licensed & Insured", added "Updated with Live Data"
+7. Added public data source citations (FEMA NFIP, BLS PPI, Texas DOI, 23 open-source databases)
+8. Differentiated CTA buttons: Top = "Verify Fair Market Value", Bottom = "Calculate My Recovery"
+9. Added floating translucent "MAX-CLAIM" watermark to prevent unauthorized screenshots
 
 **Custom Domain**: max-claim.com (GoDaddy-hosted) ready to be linked via Replit Deployments settings.
 

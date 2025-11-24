@@ -14,7 +14,7 @@ import type { ClaimItem } from "./ItemsStep";
 const TRUST_BADGES = [
   { icon: Check, text: "No Credit Card Required" },
   { icon: Check, text: "90%+ Success Rate" },
-  { icon: Check, text: "Licensed & Insured" },
+  { icon: Check, text: "Updated with Live Data" },
   { icon: Check, text: "No Risk to You" },
 ];
 
@@ -162,17 +162,36 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: S
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-3xl mx-auto space-y-8 relative">
+      {/* Floating Watermark */}
+      <div 
+        className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center"
+        style={{ 
+          background: 'repeating-linear-gradient(45deg, transparent, transparent 200px, rgba(0, 0, 0, 0.015) 200px, rgba(0, 0, 0, 0.015) 400px)' 
+        }}
+        aria-hidden="true"
+        role="presentation"
+      >
+        <div className="text-9xl font-bold opacity-[0.02] select-none rotate-[-30deg] whitespace-nowrap">
+          MAX-CLAIM
+        </div>
+      </div>
+
       {/* Trust Badges */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/30 p-6 rounded-lg">
-        {TRUST_BADGES.map((badge, index) => (
-          <div key={index} className="flex items-center gap-2 text-sm" data-testid={`trust-badge-${index}`}>
-            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white flex-shrink-0">
-              <badge.icon className="w-4 h-4" />
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/30 p-6 rounded-lg">
+          {TRUST_BADGES.map((badge, index) => (
+            <div key={index} className="flex items-center gap-2 text-sm" data-testid={`trust-badge-${index}`}>
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white flex-shrink-0">
+                <badge.icon className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-medium">{badge.text}</span>
             </div>
-            <span className="text-sm font-medium">{badge.text}</span>
-          </div>
-        ))}
+          ))}
+        </div>
+        <p className="text-xs text-center text-muted-foreground">
+          Data sources: FEMA NFIP Claims, BLS Construction PPI, Texas DOI Complaints, and 23 open-source databases
+        </p>
       </div>
 
       {/* Single-Screen Form */}
@@ -264,14 +283,14 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: S
               />
             </div>
 
-            {/* Calculate Button */}
+            {/* Verify Button (Top) */}
             <Button 
               type="submit" 
               className="w-full text-lg h-12"
               disabled={analysisMutation.isPending}
-              data-testid="button-calculate-recovery"
+              data-testid="button-verify-fmv"
             >
-              {analysisMutation.isPending ? "Analyzing..." : "Calculate My Recovery"}
+              {analysisMutation.isPending ? "Analyzing..." : "Verify Fair Market Value"}
             </Button>
           </CardContent>
         </Card>
