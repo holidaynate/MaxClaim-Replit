@@ -1,15 +1,18 @@
-import { Plus, Trash2, Package } from "lucide-react";
+import { Plus, Trash2, Package, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DocumentUpload } from "./DocumentUpload";
+import { UNIT_TYPES } from "@shared/schema";
 
 export interface ClaimItem {
   category: string;
   description: string;
   quantity: number;
+  unit?: string;
   quotedPrice: number;
 }
 
@@ -36,7 +39,7 @@ const CATEGORIES = [
 
 export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStepProps) {
   const addItem = () => {
-    onChange([...items, { category: "", description: "", quantity: 1, quotedPrice: 0 }]);
+    onChange([...items, { category: "", description: "", quantity: 1, unit: "EA", quotedPrice: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -121,6 +124,42 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
                       onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
                       data-testid={`input-quantity-${index}`}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1">
+                      <Label htmlFor={`unit-${index}`}>Unit</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <div className="space-y-1 text-xs">
+                              <p><strong>LF</strong> - Linear Feet (fence, piping)</p>
+                              <p><strong>SF</strong> - Square Feet (flooring, painting)</p>
+                              <p><strong>SQ</strong> - Roofing Squares (100 SF per square)</p>
+                              <p><strong>CT</strong> - Count/Units (windows, doors)</p>
+                              <p><strong>EA</strong> - Each (individual items)</p>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <Select
+                      value={item.unit || "EA"}
+                      onValueChange={(value) => updateItem(index, 'unit', value)}
+                    >
+                      <SelectTrigger id={`unit-${index}`} data-testid={`select-unit-${index}`}>
+                        <SelectValue placeholder="Select unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(UNIT_TYPES).map(([key, value]) => (
+                          <SelectItem key={key} value={key}>
+                            {value.abbr} - {value.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor={`price-${index}`}>Insurance Offer ($)</Label>

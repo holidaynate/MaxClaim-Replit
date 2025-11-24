@@ -216,14 +216,24 @@ export function analyzeClaimItem(
   quantity: number,
   insuranceOffer: number,
   zipCode: string,
-  inflationMultiplier: number = 1.0
+  inflationMultiplier: number = 1.0,
+  pricingStats?: { min: number; max: number; avg: number; last: number; count: number } | null
 ): {
   fmvPrice: number;
   additionalAmount: number;
   percentageIncrease: number;
   status: 'underpaid' | 'fair';
 } {
-  const fmvPrice = calculateFMV(category, quantity, zipCode, inflationMultiplier);
+  let fmvPrice = calculateFMV(category, quantity, zipCode, inflationMultiplier);
+  
+  // If we have pricing stats from real user data, use it to refine the FMV
+  if (pricingStats && pricingStats.count > 0) {
+    // Weight the calculation: 70% historical data average, 30% base calculation
+    // This allows the system to learn from real data while maintaining a baseline
+    const historicalAvg = pricingStats.avg;
+    fmvPrice = (historicalAvg * 0.7) + (fmvPrice * 0.3);
+  }
+  
   const additionalAmount = fmvPrice - insuranceOffer;
   const percentageIncrease = (additionalAmount / insuranceOffer) * 100;
 

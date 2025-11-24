@@ -11,10 +11,12 @@ import fs from "fs/promises";
 
 const claimAnalysisSchema = z.object({
   zipCode: z.string().min(5),
+  propertyAddress: z.string().optional(),
   items: z.array(z.object({
     category: z.string(),
     description: z.string(),
     quantity: z.number(),
+    unit: z.enum(["LF", "SF", "SQ", "CT", "EA"]).default("EA"),
     quotedPrice: z.number(),
   }))
 });
@@ -35,41 +37,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate inflation multiplier from BLS data
       const inflationMultiplier = calculateInflationMultiplier(blsData);
       
-      const results = data.items.map(item => {
+      const zipPrefix = data.zipCode.substring(0, 3);
+      
+      const results = await Promise.all(data.items.map(async (item) => {
+        // Try to get pricing stats for this category/unit
+        const pricingStats = await storage.getPricingStats(item.category, item.unit, zipPrefix).catch(() => null);
+        
         const analysis = analyzeClaimItem(
           item.category,
           item.description,
           item.quantity,
           item.quotedPrice,
           data.zipCode,
-          inflationMultiplier
+          inflationMultiplier,
+          pricingStats
         );
         
         return {
           category: item.category,
           description: item.description,
           quantity: item.quantity,
+          unit: item.unit,
           insuranceOffer: item.quotedPrice,
           fmvPrice: analysis.fmvPrice,
           additionalAmount: analysis.additionalAmount,
           percentageIncrease: analysis.percentageIncrease,
           status: analysis.status
         };
-      });
+      }));
 
       const totalInsuranceOffer = data.items.reduce((sum, item) => sum + item.quotedPrice, 0);
       const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
       const totalAdditional = totalFMV - totalInsuranceOffer;
       const overallIncrease = (totalAdditional / totalInsuranceOffer) * 100;
 
-      // Store analytics (ZIP code and pricing data only - no PII)
-      await storage.recordClaimAnalysis({
+      // Create a session to track this analysis
+      const session = await storage.createSession({
         zipCode: data.zipCode,
-        itemCount: data.items.length,
-        totalInsuranceOffer,
-        totalFMV,
-        categories: data.items.map(i => i.category)
+        propertyAddress: data.propertyAddress,
       });
+
+      // Create claim record with line items
+      const claim = await storage.createClaim({
+        sessionId: session.id,
+        status: "completed",
+        totalQuoted: totalInsuranceOffer,
+        totalFmv: totalFMV,
+        additionalAmount: totalAdditional,
+        variancePct: overallIncrease,
+      });
+
+      // Add line items and pricing data points
+      await Promise.all(results.map(async (item) => {
+        await storage.addClaimLineItem({
+          claimId: claim.id,
+          category: item.category,
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          quotedPrice: item.insuranceOffer,
+          fmvPrice: item.fmvPrice,
+          variancePct: item.percentageIncrease,
+          fromOcr: 0,
+        });
+
+        // Track pricing data point for continuous improvement
+        await storage.addPricingDataPoint({
+          category: item.category,
+          unit: item.unit,
+          zipCode: data.zipCode,
+          propertyAddress: data.propertyAddress,
+          quotedPrice: item.insuranceOffer,
+          fmvPrice: item.fmvPrice,
+          quantity: item.quantity,
+          sessionId: session.id,
+          source: "user_upload",
+        });
+      }));
 
       res.json({
         zipCode: data.zipCode,
