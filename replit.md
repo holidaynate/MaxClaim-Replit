@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 ## System Architecture
 
 ### UI/UX Decisions
-The design philosophy emphasizes professional trust and user empowerment with a clean, data-focused interface. **Single-screen design** with trust badges at the top (No Credit Card Required, 90%+ Success Rate, Updated with Live Data, No Risk to You) provides immediate credibility with public data source citations (FEMA NFIP, BLS PPI, Texas DOI, 23 open-source databases). Simplified flow indicators use arrows instead of complex step boxes. **Triple CTA strategy** optimized for maximum conversion: (1) Hero button "Calculate My Recovery" immediately under page heading scrolls users to form and focuses ZIP input, (2) Primary submit button "Verify Fair Market Value" inside form card triggers analysis, (3) Secondary submit button "Calculate My Recovery" at bottom provides reassurance for users who scroll through entire form. A floating translucent "MAX-CLAIM" watermark (aria-hidden for accessibility) prevents unauthorized screenshots. The application ensures accessibility (WCAG AA compliant, keyboard navigation, mobile responsive) and prioritizes speed with fast calculations and minimal loading states. All copy is oriented towards "additional amount deserved" with green highlights for increased claim amounts.
+The design philosophy emphasizes professional trust and user empowerment with a clean, data-focused interface. **Single-screen design** with trust badges at the top (No Credit Card Required, 90%+ Success Rate, Updated with Live Data, No Risk to You) provides immediate credibility with public data source citations (FEMA NFIP, BLS PPI, Texas DOI, 23 open-source databases). Simplified flow indicators use arrows instead of complex step boxes. **Triple CTA strategy** optimized for maximum conversion: (1) Hero button "Calculate My Recovery" immediately under page heading scrolls users to form and focuses ZIP input, (2) Primary submit button "Verify Fair Market Value" positioned directly after document upload component (before "— OR —" separator) to encourage document upload, (3) Secondary submit button "Calculate My Recovery" at bottom after all manual input fields provides final conversion opportunity. A floating translucent "MAX-CLAIM" watermark (aria-hidden for accessibility) prevents unauthorized screenshots. The application ensures accessibility (WCAG AA compliant, keyboard navigation, mobile responsive) and prioritizes speed with fast calculations and minimal loading states. All copy is oriented towards "additional amount deserved" with green highlights for increased claim amounts.
 
 ### Technical Implementations
 Max-Claim is built as a full-stack web application. The frontend uses **React 18 + TypeScript + Vite**, with **Wouter** for routing, **TanStack Query** for server state, and **React useState** for local UI. **Shadcn/ui** (Radix UI primitives) and **Tailwind CSS** handle UI components and styling, while **React Hook Form + Zod** manage form validation.
@@ -79,8 +79,9 @@ All core features completed and tested:
 5. Integrated weighted FMV calculations using historical user data
 6. Updated trust badges: Removed "Licensed & Insured", added "Updated with Live Data"
 7. Added public data source citations (FEMA NFIP, BLS PPI, Texas DOI, 23 open-source databases)
-8. Implemented triple CTA strategy: Hero scroll button at top, primary submit in form, secondary submit at bottom
+8. Implemented triple CTA strategy: Hero scroll button at top, primary submit after upload (to encourage documents), secondary submit at bottom
 9. Added floating translucent "MAX-CLAIM" watermark with proper accessibility attributes (aria-hidden)
+10. Optimized button placement: moved middle button directly after document upload to maximize upload conversion
 
 **Custom Domain**: max-claim.com (GoDaddy-hosted) ready to be linked via Replit Deployments settings.
 

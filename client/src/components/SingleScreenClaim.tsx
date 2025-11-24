@@ -214,8 +214,19 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: S
         <Card>
           <CardContent className="pt-6 space-y-6">
             {/* Document Upload */}
-            <div className="space-y-2">
+            <div className="space-y-4">
               <DocumentUpload onItemsExtracted={handleExtractedItems} />
+              
+              {/* Verify Button (After Upload) */}
+              <Button 
+                type="submit" 
+                className="w-full text-lg h-12"
+                disabled={analysisMutation.isPending}
+                data-testid="button-verify-fmv"
+              >
+                {analysisMutation.isPending ? "Analyzing..." : "Verify Fair Market Value"}
+              </Button>
+              
               <p className="text-center text-sm text-muted-foreground">— OR —</p>
             </div>
 
@@ -282,16 +293,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: S
                 data-testid="input-insurance-offer"
               />
             </div>
-
-            {/* Verify Button (Top) */}
-            <Button 
-              type="submit" 
-              className="w-full text-lg h-12"
-              disabled={analysisMutation.isPending}
-              data-testid="button-verify-fmv"
-            >
-              {analysisMutation.isPending ? "Analyzing..." : "Verify Fair Market Value"}
-            </Button>
           </CardContent>
         </Card>
 
