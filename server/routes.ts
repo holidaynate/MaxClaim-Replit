@@ -169,6 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category: z.string(),
           description: z.string(),
           quantity: z.number(),
+          unit: z.enum(["LF", "SF", "SQ", "CT", "EA"]).default("EA"),
           quotedPrice: z.number(),
           fmvPrice: z.number(),
           variancePct: z.number(),
@@ -179,10 +180,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { lineItems, ...claimInfo } = claimData;
       const claim = await storage.createClaim(claimInfo);
 
+      // Get session to extract ZIP code and property address
+      const session = await storage.getSession(claimData.sessionId);
+
       // Add all line items
       const addedLineItems = await Promise.all(
         lineItems.map(item =>
           storage.addClaimLineItem({ ...item, claimId: claim.id })
+        )
+      );
+
+      // Track pricing data points for continuous improvement
+      await Promise.all(
+        lineItems.map(item =>
+          storage.addPricingDataPoint({
+            category: item.category,
+            unit: item.unit,
+            zipCode: session?.zipCode || undefined,
+            propertyAddress: session?.propertyAddress || undefined,
+            quotedPrice: item.quotedPrice,
+            fmvPrice: item.fmvPrice,
+            quantity: item.quantity,
+            sessionId: claimData.sessionId,
+            source: "user_upload",
+          })
         )
       );
 
@@ -218,6 +239,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error logging source usage:", error);
       res.status(500).json({ error: "Failed to log source usage" });
+    }
+  });
+
+  // Get pricing statistics for a category and unit
+  app.get("/api/pricing/stats", async (req, res) => {
+    try {
+      const { category, unit, zipPrefix } = z.object({
+        category: z.string(),
+        unit: z.enum(["LF", "SF", "SQ", "CT", "EA"]),
+        zipPrefix: z.string().optional(),
+      }).parse(req.query);
+
+      const stats = await storage.getPricingStats(category, unit, zipPrefix);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching pricing stats:", error);
+      res.status(500).json({ error: "Failed to fetch pricing stats" });
     }
   });
 
