@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SingleScreenClaim from "@/components/SingleScreenClaim";
 import ResultsStep from "@/components/ResultsStep";
+import { Button } from "@/components/ui/button";
 import type { ClaimItem } from "@/components/ItemsStep";
 
 export default function Home() {
@@ -13,6 +14,7 @@ export default function Home() {
     items: ClaimItem[];
   } | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const handleCalculate = (data: {
     zipCode: string;
@@ -38,6 +40,15 @@ export default function Home() {
     setClaimData(null);
   };
 
+  const scrollToForm = () => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Focus on the ZIP code input after scrolling
+    setTimeout(() => {
+      const zipInput = document.getElementById('zipCode');
+      zipInput?.focus();
+    }, 500);
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
@@ -50,8 +61,19 @@ export default function Home() {
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Free consumer advocacy tool to help you get the full amount you deserve from underpaid insurance claims.
               </p>
+              {/* Top CTA - Scroll to Form */}
+              <Button 
+                onClick={scrollToForm}
+                size="lg"
+                className="text-lg h-12 px-12"
+                data-testid="button-calculate-recovery-top"
+              >
+                Calculate My Recovery
+              </Button>
             </div>
-            <SingleScreenClaim onCalculate={handleCalculate} onAnalysisComplete={handleAnalysisComplete} />
+            <div ref={formRef}>
+              <SingleScreenClaim onCalculate={handleCalculate} onAnalysisComplete={handleAnalysisComplete} />
+            </div>
           </div>
         ) : claimData ? (
           <div className="max-w-4xl mx-auto">
