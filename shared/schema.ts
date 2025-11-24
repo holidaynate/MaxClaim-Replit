@@ -16,6 +16,7 @@ export const eventType = pgEnum("event_type", [
   "export_pdf",
   "export_email"
 ]);
+export const unitType = pgEnum("unit_type", ["LF", "SF", "SQ", "CT", "EA"]);
 
 // Users table (keep existing structure)
 export const users = pgTable("users", {
@@ -37,6 +38,7 @@ export const sessions = pgTable("sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   zipCode: char("zip_code", { length: 5 }),
   zipPrefix: char("zip_prefix", { length: 3 }),
+  propertyAddress: text("property_address"),
   locale: varchar("locale", { length: 5 }).default("en"),
   textSize: varchar("text_size", { length: 20 }).default("normal"),
   highContrast: integer("high_contrast").default(0).$type<boolean>(),
@@ -107,6 +109,7 @@ export const claimLineItems = pgTable("claim_line_items", {
   category: text("category").notNull(),
   description: text("description").notNull(),
   quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  unit: unitType("unit").notNull().default("EA"),
   quotedPrice: numeric("quoted_price", { precision: 12, scale: 2 }).notNull().$type<number>(),
   fmvPrice: numeric("fmv_price", { precision: 12, scale: 2 }).notNull().$type<number>(),
   variancePct: numeric("variance_pct", { precision: 5, scale: 2 }).notNull().$type<number>(),
@@ -228,15 +231,61 @@ export const sessionSourceUsageRelations = relations(sessionSourceUsage, ({ one 
   }),
 }));
 
+// Pricing Data Points - Track all user inputs to refine pricing accuracy
+export const pricingDataPoints = pgTable("pricing_data_points", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: text("category").notNull(),
+  unit: unitType("unit").notNull(),
+  zipCode: char("zip_code", { length: 5 }),
+  zipPrefix: char("zip_prefix", { length: 3 }),
+  propertyAddress: text("property_address"),
+  quotedPrice: numeric("quoted_price", { precision: 12, scale: 2 }).notNull().$type<number>(),
+  fmvPrice: numeric("fmv_price", { precision: 12, scale: 2 }).notNull().$type<number>(),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  source: text("source").default("user_upload"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  categoryUnitIdx: index("pricing_data_category_unit_idx").on(table.category, table.unit),
+  zipPrefixIdx: index("pricing_data_zip_prefix_idx").on(table.zipPrefix),
+  createdAtIdx: index("pricing_data_created_at_idx").on(table.createdAt),
+}));
+
+export const insertPricingDataPointSchema = createInsertSchema(pricingDataPoints).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPricingDataPoint = z.infer<typeof insertPricingDataPointSchema>;
+export type PricingDataPoint = typeof pricingDataPoints.$inferSelect;
+
+export const pricingDataPointsRelations = relations(pricingDataPoints, ({ one }) => ({
+  session: one(sessions, {
+    fields: [pricingDataPoints.sessionId],
+    references: [sessions.id],
+  }),
+}));
+
 // Form data type for multi-step form
 export const claimFormSchema = z.object({
   zipCode: z.string().min(5, "ZIP code must be at least 5 digits"),
+  propertyAddress: z.string().optional(),
   items: z.array(z.object({
     category: z.string().min(1, "Category is required"),
     description: z.string().min(1, "Description is required"),
     quantity: z.number().min(1, "Quantity must be at least 1"),
+    unit: z.enum(["LF", "SF", "SQ", "CT", "EA"]).default("EA"),
     quotedPrice: z.number().min(0, "Price must be positive"),
   })).min(1, "Add at least one item"),
 });
 
 export type ClaimFormData = z.infer<typeof claimFormSchema>;
+
+// Unit type helpers
+export const UNIT_TYPES = {
+  LF: { label: "Linear Feet", abbr: "LF", description: "Measured in linear feet (e.g., fencing, piping)" },
+  SF: { label: "Square Feet", abbr: "SF", description: "Measured in square feet (e.g., flooring, painting)" },
+  SQ: { label: "Roofing Squares", abbr: "SQ", description: "100 square feet per square (roofing only)" },
+  CT: { label: "Count/Units", abbr: "CT", description: "Individual items (e.g., windows, doors, appliances)" },
+  EA: { label: "Each", abbr: "EA", description: "Single units or items" },
+} as const;

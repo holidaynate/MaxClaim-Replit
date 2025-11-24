@@ -12,6 +12,8 @@ import {
   type Source,
   type SourceVersion,
   type InsertSessionSourceUsage,
+  type PricingDataPoint,
+  type InsertPricingDataPoint,
   users,
   sessions,
   sessionEvents,
@@ -20,6 +22,7 @@ import {
   sources,
   sourceVersions,
   sessionSourceUsage,
+  pricingDataPoints,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and } from "drizzle-orm";
@@ -67,6 +70,16 @@ export interface IStorage {
   // Attribution/Sources
   getSources(): Promise<Array<Source & { versions: SourceVersion[] }>>;
   logSourceUsage(data: InsertSessionSourceUsage): Promise<void>;
+  
+  // Pricing Data Points - Track user inputs for continuous improvement
+  addPricingDataPoint(data: InsertPricingDataPoint): Promise<PricingDataPoint>;
+  getPricingStats(category: string, unit: string, zipPrefix?: string): Promise<{
+    min: number;
+    max: number;
+    avg: number;
+    last: number;
+    count: number;
+  }>;
   
   // Claim analytics (anonymous - no PII) - legacy compatibility
   recordClaimAnalysis(data: {
@@ -182,6 +195,56 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       // Ignore duplicate key errors (source already logged for this session)
     }
+  }
+
+  // Pricing Data Points - Track user inputs for continuous improvement
+  async addPricingDataPoint(data: InsertPricingDataPoint): Promise<PricingDataPoint> {
+    const zipPrefix = data.zipCode ? data.zipCode.substring(0, 3) : undefined;
+    const dataPoint = { ...data, zipPrefix };
+    const [point] = await db.insert(pricingDataPoints).values(dataPoint).returning();
+    return point;
+  }
+
+  async getPricingStats(category: string, unit: string, zipPrefix?: string): Promise<{
+    min: number;
+    max: number;
+    avg: number;
+    last: number;
+    count: number;
+  }> {
+    const conditions = [
+      eq(pricingDataPoints.category, category),
+      eq(pricingDataPoints.unit, unit as any),
+    ];
+    
+    if (zipPrefix) {
+      conditions.push(eq(pricingDataPoints.zipPrefix, zipPrefix));
+    }
+
+    const result = await db
+      .select({
+        min: sql<number>`min(${pricingDataPoints.fmvPrice})::float`,
+        max: sql<number>`max(${pricingDataPoints.fmvPrice})::float`,
+        avg: sql<number>`avg(${pricingDataPoints.fmvPrice})::float`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(pricingDataPoints)
+      .where(and(...conditions));
+
+    const lastEntry = await db
+      .select({ fmvPrice: pricingDataPoints.fmvPrice })
+      .from(pricingDataPoints)
+      .where(and(...conditions))
+      .orderBy(desc(pricingDataPoints.createdAt))
+      .limit(1);
+
+    return {
+      min: result[0]?.min || 0,
+      max: result[0]?.max || 0,
+      avg: result[0]?.avg || 0,
+      last: lastEntry[0]?.fmvPrice || 0,
+      count: result[0]?.count || 0,
+    };
   }
 
   // Legacy analytics compatibility - now persists data via claims table
