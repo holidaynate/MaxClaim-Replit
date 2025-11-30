@@ -1,9 +1,13 @@
 import { useState, useRef } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import Hero from "@/components/Hero";
+import HowItWorks from "@/components/HowItWorks";
+import ContractorPanel from "@/components/ContractorPanel";
+import ResourceBand from "@/components/ResourceBand";
+import PartnerSection from "@/components/PartnerSection";
 import SingleScreenClaim from "@/components/SingleScreenClaim";
 import ResultsStep from "@/components/ResultsStep";
-import { Button } from "@/components/ui/button";
 import type { ClaimItem } from "@/components/ItemsStep";
 
 export default function Home() {
@@ -14,6 +18,7 @@ export default function Home() {
     items: ClaimItem[];
   } | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const [userZip, setUserZip] = useState("");
   const formRef = useRef<HTMLDivElement>(null);
 
   const handleCalculate = (data: {
@@ -28,6 +33,7 @@ export default function Home() {
       propertyAddress: data.propertyAddress,
       items: data.items,
     });
+    setUserZip(data.zipCode);
   };
 
   const handleAnalysisComplete = (results: any) => {
@@ -38,44 +44,46 @@ export default function Home() {
   const resetForm = () => {
     setShowResults(false);
     setClaimData(null);
+    setUserZip(""); // Clear ZIP to reset contractor panel
   };
 
-  const scrollToForm = () => {
-    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Focus on the ZIP code input after scrolling
-    setTimeout(() => {
-      const zipInput = document.getElementById('zipCode');
-      zipInput?.focus();
-    }, 500);
+  const handleZipChange = (zip: string) => {
+    setUserZip(zip);
   };
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-background">
       <Header />
       
-      <main className="flex-1 py-8 px-4">
-        {!showResults ? (
-          <div className="space-y-6">
-            <div className="text-center space-y-4">
-              <h1 className="text-4xl font-bold">Max-Claim</h1>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Free consumer advocacy tool to help you get the full amount you deserve from underpaid insurance claims.
-              </p>
-              {/* Top CTA - Scroll to Form */}
-              <Button 
-                onClick={scrollToForm}
-                size="lg"
-                className="text-lg h-12 px-12"
-                data-testid="button-calculate-recovery-top"
-              >
-                Calculate My Recovery
-              </Button>
+      {!showResults ? (
+        <>
+          <Hero />
+          <HowItWorks />
+          
+          {/* Main Content: Form + Sidebar */}
+          <section id="claim-wizard" className="max-w-6xl mx-auto px-4 py-12">
+            <div className="grid gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              {/* Left: Claim Form */}
+              <div ref={formRef}>
+                <SingleScreenClaim 
+                  onCalculate={handleCalculate} 
+                  onAnalysisComplete={handleAnalysisComplete}
+                  onZipChange={handleZipChange}
+                />
+              </div>
+              
+              {/* Right: Sidebar */}
+              <div className="space-y-6">
+                <ContractorPanel userZip={userZip} />
+                <ResourceBand />
+              </div>
             </div>
-            <div ref={formRef}>
-              <SingleScreenClaim onCalculate={handleCalculate} onAnalysisComplete={handleAnalysisComplete} />
-            </div>
-          </div>
-        ) : claimData ? (
+          </section>
+          
+          <PartnerSection />
+        </>
+      ) : claimData ? (
+        <main className="flex-1 py-8 px-4">
           <div className="max-w-4xl mx-auto">
             <ResultsStep
               zipCode={claimData.zipCode}
@@ -83,8 +91,8 @@ export default function Home() {
               onStartOver={resetForm}
             />
           </div>
-        ) : null}
-      </main>
+        </main>
+      ) : null}
       
       <Footer />
     </div>

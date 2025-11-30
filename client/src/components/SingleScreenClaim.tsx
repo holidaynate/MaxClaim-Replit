@@ -37,9 +37,10 @@ interface SingleScreenClaimProps {
     items: ClaimItem[];
   }) => void;
   onAnalysisComplete: (results: any) => void;
+  onZipChange?: (zip: string) => void;
 }
 
-export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: SingleScreenClaimProps) {
+export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZipChange }: SingleScreenClaimProps) {
   const [zipCode, setZipCode] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
   const [damageType, setDamageType] = useState("");
@@ -238,7 +239,14 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete }: S
                 type="text"
                 placeholder="78744"
                 value={zipCode}
-                onChange={(e) => setZipCode(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                onChange={(e) => {
+                  const newZip = e.target.value.replace(/\D/g, '').slice(0, 5);
+                  setZipCode(newZip);
+                  if (onZipChange) {
+                    // Update immediately if 5 digits, clear if less
+                    onZipChange(newZip.length === 5 ? newZip : "");
+                  }
+                }}
                 maxLength={5}
                 required
                 data-testid="input-zipcode"
