@@ -19,6 +19,7 @@ export default function Home() {
   } | null>(null);
   const [analysisResults, setAnalysisResults] = useState<any>(null);
   const [userZip, setUserZip] = useState("");
+  const [resetKey, setResetKey] = useState(0);
   const formRef = useRef<HTMLDivElement>(null);
 
   const handleCalculate = (data: {
@@ -45,6 +46,7 @@ export default function Home() {
     setShowResults(false);
     setClaimData(null);
     setUserZip(""); // Clear ZIP to reset contractor panel
+    setResetKey(prev => prev + 1); // Increment to trigger form reset
   };
 
   const handleZipChange = (zip: string) => {
@@ -69,6 +71,7 @@ export default function Home() {
                   onCalculate={handleCalculate} 
                   onAnalysisComplete={handleAnalysisComplete}
                   onZipChange={handleZipChange}
+                  resetKey={resetKey}
                 />
               </div>
               

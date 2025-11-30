@@ -41,7 +41,7 @@ const CONTRACTORS: Contractor[] = [
 ];
 
 function getByZip(zip: string): Contractor[] {
-  if (!zip) return CONTRACTORS.filter((c) => c.active && c.featured);
+  if (!zip) return []; // Return empty array when no ZIP
   const local = CONTRACTORS.filter(
     (c) => c.active && c.zips.includes(zip)
   );
@@ -72,8 +72,15 @@ export default function ContractorPanel({ userZip }: ContractorPanelProps) {
         homeowners and may receive referral fees from some partners. Always
         verify licenses and insurance.
       </p>
+      {!userZip && (
+        <div className="p-6 rounded-xl border border-slate-700 bg-slate-950/70 text-center" data-testid="message-enter-zip">
+          <p className="text-xs text-slate-400">
+            Please enter your ZIP code above to see contractors in your area.
+          </p>
+        </div>
+      )}
       <div className="space-y-3">
-        {list.map((c) => (
+        {userZip && list.map((c) => (
           <div
             key={c.name}
             className="rounded-xl border border-slate-700 bg-slate-950/70 p-3 hover-elevate"
@@ -115,14 +122,16 @@ export default function ContractorPanel({ userZip }: ContractorPanelProps) {
           </div>
         ))}
       </div>
-      <div className="mt-4 p-3 rounded-lg bg-sky-500/5 border border-sky-500/10">
-        <p className="text-[11px] text-slate-400">
-          <span className="font-semibold text-sky-300">Contractor?</span> Join our referral network.{" "}
-          <a href="#partner-with-maxclaim" className="text-sky-300 underline hover:text-sky-200">
-            Learn more
-          </a>
-        </p>
-      </div>
+      {userZip && (
+        <div className="mt-4 p-3 rounded-lg bg-sky-500/5 border border-sky-500/10">
+          <p className="text-[11px] text-slate-400">
+            <span className="font-semibold text-sky-300">Contractor?</span> Join our referral network.{" "}
+            <a href="#partner-with-maxclaim" className="text-sky-300 underline hover:text-sky-200">
+              Learn more
+            </a>
+          </p>
+        </div>
+      )}
     </aside>
   );
 }

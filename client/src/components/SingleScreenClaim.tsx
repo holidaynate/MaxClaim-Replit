@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -38,15 +38,29 @@ interface SingleScreenClaimProps {
   }) => void;
   onAnalysisComplete: (results: any) => void;
   onZipChange?: (zip: string) => void;
+  resetKey?: number; // Used to trigger form reset
 }
 
-export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZipChange }: SingleScreenClaimProps) {
+export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZipChange, resetKey = 0 }: SingleScreenClaimProps) {
   const [zipCode, setZipCode] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
   const [damageType, setDamageType] = useState("");
   const [insuranceOffer, setInsuranceOffer] = useState("");
   const [items, setItems] = useState<ClaimItem[]>([]);
   const { toast } = useToast();
+
+  // Reset form when resetKey changes (skip initial mount)
+  useEffect(() => {
+    if (resetKey === 0) return; // Skip on initial mount
+    setZipCode("");
+    setPropertyAddress("");
+    setDamageType("");
+    setInsuranceOffer("");
+    setItems([]);
+    if (onZipChange) {
+      onZipChange("");
+    }
+  }, [resetKey, onZipChange]);
 
   const analysisMutation = useMutation({
     mutationFn: async (data: {
