@@ -356,7 +356,7 @@ export const partnerLeads = pgTable("partner_leads", {
   sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
   claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
   leadType: leadType("lead_type").notNull(),
-  zipCode: char("zip_code", { length: 5 }),
+  zipCode: varchar("zip_code", { length: 5 }),
   metadata: jsonb("metadata"),
   clickedAt: timestamp("clicked_at", { withTimezone: true }),
   convertedAt: timestamp("converted_at", { withTimezone: true }),
@@ -380,7 +380,7 @@ export type PartnerLead = typeof partnerLeads.$inferSelect;
 // ZIP Targeting - Partner service areas with priority
 export const zipTargeting = pgTable("zip_targeting", {
   partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
-  zipCode: char("zip_code", { length: 5 }).notNull(),
+  zipCode: varchar("zip_code", { length: 5 }).notNull(),
   priority: integer("priority").default(1).notNull(),
   weight: integer("weight").default(1).notNull(), // For rotation algorithm based on spend
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

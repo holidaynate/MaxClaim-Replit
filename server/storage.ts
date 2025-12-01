@@ -37,7 +37,7 @@ import {
   zipTargeting,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, like } from "drizzle-orm";
 
 // Analytics data (no PII - only ZIP codes and aggregate data)
 interface ClaimAnalysis {
@@ -465,11 +465,12 @@ export class DatabaseStorage implements IStorage {
     zipCode: string, 
     filters?: { status?: string; tier?: string }
   ): Promise<Array<Partner & { priority: number }>> {
-    // First get partners that serve this ZIP code
+    // Find partners where the user's ZIP code starts with their stored ZIP prefix
+    // For example: if user enters "78701", match stored "787", "7870", or "78701"
     const targeting = await db
       .select()
       .from(zipTargeting)
-      .where(eq(zipTargeting.zipCode, zipCode));
+      .where(sql`${zipCode} LIKE ${zipTargeting.zipCode} || '%'`);
     
     if (targeting.length === 0) {
       return [];
