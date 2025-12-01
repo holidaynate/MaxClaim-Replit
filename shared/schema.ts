@@ -21,6 +21,15 @@ export const partnerType = pgEnum("partner_type", ["contractor", "adjuster", "ag
 export const partnerTier = pgEnum("partner_tier", ["advertiser", "affiliate", "partner"]);
 export const partnerStatus = pgEnum("partner_status", ["pending", "approved", "rejected", "suspended"]);
 export const leadType = pgEnum("lead_type", ["click", "referral", "conversion"]);
+export const auditFlag = pgEnum("audit_flag", [
+  "OK",
+  "Below market minimum",
+  "Above market maximum",
+  "Significantly below average",
+  "Significantly above average",
+  "No data available"
+]);
+export const auditSeverity = pgEnum("audit_severity", ["success", "warning", "error", "info"]);
 
 // Users table (keep existing structure)
 export const users = pgTable("users", {
@@ -434,6 +443,50 @@ export const zipTargetingRelations = relations(zipTargeting, ({ one }) => ({
   partner: one(partners, {
     fields: [zipTargeting.partnerId],
     references: [partners.id],
+  }),
+}));
+
+// Price Audit Results - Store audit results for compliance and reporting
+export const priceAuditResults = pgTable("price_audit_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  claimLineItemId: varchar("claim_line_item_id").references(() => claimLineItems.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  itemName: text("item_name").notNull(),
+  matchedItem: text("matched_item"),
+  userPrice: numeric("user_price", { precision: 12, scale: 2 }).notNull().$type<number>(),
+  marketMin: numeric("market_min", { precision: 12, scale: 2 }).$type<number>(),
+  marketAvg: numeric("market_avg", { precision: 12, scale: 2 }).$type<number>(),
+  marketMax: numeric("market_max", { precision: 12, scale: 2 }).$type<number>(),
+  unit: text("unit"),
+  category: text("category"),
+  flag: auditFlag("flag").notNull(),
+  severity: auditSeverity("severity").notNull(),
+  percentFromAvg: numeric("percent_from_avg", { precision: 6, scale: 2 }).$type<number>(),
+  sampleSize: integer("sample_size"),
+  zipCode: char("zip_code", { length: 5 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sessionIdx: index("price_audit_results_session_idx").on(table.sessionId),
+  flagIdx: index("price_audit_results_flag_idx").on(table.flag),
+  createdAtIdx: index("price_audit_results_created_at_idx").on(table.createdAt),
+}));
+
+export const insertPriceAuditResultSchema = createInsertSchema(priceAuditResults).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPriceAuditResult = z.infer<typeof insertPriceAuditResultSchema>;
+export type PriceAuditResult = typeof priceAuditResults.$inferSelect;
+
+export const priceAuditResultsRelations = relations(priceAuditResults, ({ one }) => ({
+  claimLineItem: one(claimLineItems, {
+    fields: [priceAuditResults.claimLineItemId],
+    references: [claimLineItems.id],
+  }),
+  session: one(sessions, {
+    fields: [priceAuditResults.sessionId],
+    references: [sessions.id],
   }),
 }));
 

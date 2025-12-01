@@ -617,6 +617,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create price audit result for compliance tracking
+  app.post("/api/price-audits", async (req, res) => {
+    try {
+      const auditData = z.object({
+        claimLineItemId: z.string().optional(),
+        sessionId: z.string().optional(),
+        itemName: z.string(),
+        matchedItem: z.string().optional(),
+        userPrice: z.number(),
+        marketMin: z.number().optional(),
+        marketAvg: z.number().optional(),
+        marketMax: z.number().optional(),
+        unit: z.string().optional(),
+        category: z.string().optional(),
+        flag: z.enum(["OK", "Below market minimum", "Above market maximum", "Significantly below average", "Significantly above average", "No data available"]),
+        severity: z.enum(["success", "warning", "error", "info"]),
+        percentFromAvg: z.number().optional(),
+        sampleSize: z.number().optional(),
+        zipCode: z.string().optional(),
+      }).parse(req.body);
+
+      const result = await storage.createPriceAuditResult({
+        claimLineItemId: auditData.claimLineItemId || null,
+        sessionId: auditData.sessionId || null,
+        itemName: auditData.itemName,
+        matchedItem: auditData.matchedItem || null,
+        userPrice: auditData.userPrice,
+        marketMin: auditData.marketMin || null,
+        marketAvg: auditData.marketAvg || null,
+        marketMax: auditData.marketMax || null,
+        unit: auditData.unit || null,
+        category: auditData.category || null,
+        flag: auditData.flag,
+        severity: auditData.severity,
+        percentFromAvg: auditData.percentFromAvg || null,
+        sampleSize: auditData.sampleSize || null,
+        zipCode: auditData.zipCode || null,
+      });
+
+      res.json({
+        success: true,
+        auditId: result.id
+      });
+    } catch (error: any) {
+      console.error('Create price audit error:', error);
+      res.status(400).json({ 
+        error: 'Failed to store price audit',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get price audit results (admin endpoint)
+  app.get("/api/price-audits", requireAdmin, async (req, res) => {
+    try {
+      const { sessionId, flag, startDate, endDate } = req.query;
+      
+      const filters: any = {};
+      if (sessionId) filters.sessionId = sessionId as string;
+      if (flag) filters.flag = flag as string;
+      if (startDate) filters.startDate = new Date(startDate as string);
+      if (endDate) filters.endDate = new Date(endDate as string);
+      
+      const results = await storage.getPriceAuditResults(
+        Object.keys(filters).length > 0 ? filters : undefined
+      );
+      
+      res.json({ audits: results });
+    } catch (error: any) {
+      console.error('Get price audits error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get price audits',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get price audit stats (admin endpoint)
+  app.get("/api/price-audits/stats", requireAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getPriceAuditStats();
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Get price audit stats error:', error);
+      res.status(500).json({ 
+        error: 'Failed to get price audit stats',
+        details: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

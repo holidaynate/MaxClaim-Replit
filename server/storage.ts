@@ -22,6 +22,8 @@ import {
   type InsertPartnerLead,
   type ZipTargeting,
   type InsertZipTargeting,
+  type PriceAuditResult,
+  type InsertPriceAuditResult,
   users,
   sessions,
   sessionEvents,
@@ -35,6 +37,7 @@ import {
   partnershipLOIs,
   partnerLeads,
   zipTargeting,
+  priceAuditResults,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, inArray, like } from "drizzle-orm";
@@ -112,6 +115,11 @@ export interface IStorage {
   getPartnersByZipCode(zipCode: string, filters?: { status?: string; tier?: string }): Promise<Array<Partner & { priority: number }>>;
   createPartnerLead(data: InsertPartnerLead): Promise<PartnerLead>;
   getPartnerLeads(partnerId: string): Promise<PartnerLead[]>;
+  
+  // Price audit results for compliance and reporting
+  createPriceAuditResult(data: InsertPriceAuditResult): Promise<PriceAuditResult>;
+  getPriceAuditResults(filters?: { sessionId?: string; flag?: string; startDate?: Date; endDate?: Date }): Promise<PriceAuditResult[]>;
+  getPriceAuditStats(): Promise<{ totalAudits: number; byFlag: Record<string, number>; avgPercentFromAvg: number }>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -514,6 +522,74 @@ export class DatabaseStorage implements IStorage {
       .from(partnerLeads)
       .where(eq(partnerLeads.partnerId, partnerId))
       .orderBy(desc(partnerLeads.createdAt));
+  }
+
+  // Price audit results for compliance and reporting
+  async createPriceAuditResult(data: InsertPriceAuditResult): Promise<PriceAuditResult> {
+    const [result] = await db.insert(priceAuditResults).values(data).returning();
+    return result;
+  }
+
+  async getPriceAuditResults(filters?: { 
+    sessionId?: string; 
+    flag?: string; 
+    startDate?: Date; 
+    endDate?: Date 
+  }): Promise<PriceAuditResult[]> {
+    const conditions = [];
+    
+    if (filters?.sessionId) {
+      conditions.push(eq(priceAuditResults.sessionId, filters.sessionId));
+    }
+    if (filters?.flag) {
+      conditions.push(eq(priceAuditResults.flag, filters.flag as any));
+    }
+    if (filters?.startDate) {
+      conditions.push(sql`${priceAuditResults.createdAt} >= ${filters.startDate}`);
+    }
+    if (filters?.endDate) {
+      conditions.push(sql`${priceAuditResults.createdAt} <= ${filters.endDate}`);
+    }
+    
+    if (conditions.length === 0) {
+      return await db
+        .select()
+        .from(priceAuditResults)
+        .orderBy(desc(priceAuditResults.createdAt))
+        .limit(1000);
+    }
+    
+    return await db
+      .select()
+      .from(priceAuditResults)
+      .where(and(...conditions))
+      .orderBy(desc(priceAuditResults.createdAt));
+  }
+
+  async getPriceAuditStats(): Promise<{ 
+    totalAudits: number; 
+    byFlag: Record<string, number>; 
+    avgPercentFromAvg: number 
+  }> {
+    const allResults = await db.select().from(priceAuditResults);
+    
+    const byFlag: Record<string, number> = {};
+    let totalPercentFromAvg = 0;
+    let countWithPercent = 0;
+    
+    for (const result of allResults) {
+      byFlag[result.flag] = (byFlag[result.flag] || 0) + 1;
+      if (result.percentFromAvg !== null && result.percentFromAvg !== undefined) {
+        totalPercentFromAvg += Number(result.percentFromAvg);
+        countWithPercent++;
+      }
+    }
+    
+    return {
+      totalAudits: allResults.length,
+      byFlag,
+      avgPercentFromAvg: countWithPercent > 0 ? totalPercentFromAvg / countWithPercent : 0,
+    };
   }
 }
 
