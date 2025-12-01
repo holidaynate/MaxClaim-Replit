@@ -432,11 +432,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "pending",
       }, loiData.zipCodes);
 
+      // Auto-approve if enabled (for beta/testing)
+      const autoApprove = process.env.AUTO_APPROVE_PARTNERS === "true";
+      if (autoApprove) {
+        await storage.updatePartnerStatus(partner.id, "approved");
+        console.log(`✅ Auto-approved partner: ${partner.companyName} (${partner.email})`);
+      }
+
       res.json({
         success: true,
         partnerId: partner.id,
         loiId: loi.id,
-        message: "Application submitted successfully"
+        message: autoApprove 
+          ? "Application submitted and automatically approved" 
+          : "Application submitted successfully"
       });
     } catch (error: any) {
       console.error('Partner LOI submission error:', error);
