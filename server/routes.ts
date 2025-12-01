@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { analyzeClaimItem } from "./pricing-data";
@@ -9,6 +9,13 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+
+// Extend Express session type
+declare module "express-session" {
+  interface SessionData {
+    isAdmin?: boolean;
+  }
+}
 
 const claimAnalysisSchema = z.object({
   zipCode: z.string().min(5),
@@ -22,7 +29,46 @@ const claimAnalysisSchema = z.object({
   }))
 });
 
+// Middleware to verify admin authentication
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.isAdmin) {
+    return next();
+  }
+  res.status(401).json({ error: "Unauthorized - Admin access required" });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Admin login endpoint
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { password } = z.object({
+        password: z.string(),
+      }).parse(req.body);
+
+      const adminPassword = process.env.ADMIN_PASSWORD || "maxclaim2025beta";
+
+      if (password === adminPassword) {
+        req.session.isAdmin = true;
+        res.json({ success: true, message: "Logged in successfully" });
+      } else {
+        res.status(401).json({ error: "Invalid password" });
+      }
+    } catch (error: any) {
+      res.status(400).json({ error: "Invalid request", details: error.message });
+    }
+  });
+
+  // Admin logout endpoint
+  app.post("/api/admin/logout", (req, res) => {
+    req.session.isAdmin = false;
+    res.json({ success: true, message: "Logged out successfully" });
+  });
+
+  // Check admin session status
+  app.get("/api/admin/status", (req, res) => {
+    res.json({ isAdmin: !!req.session?.isAdmin });
+  });
+
   // Analyze claim and calculate FMV with external API enrichment
   app.post("/api/claims/analyze", async (req, res) => {
     try {
@@ -463,13 +509,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let partners;
       if (zipCode && typeof zipCode === 'string') {
-        // Get partners for specific ZIP code (only approved by default for public use)
+        // Public use - get partners for specific ZIP code (only approved by default)
         partners = await storage.getPartnersByZipCode(zipCode, {
           status: status as string || "approved",
           tier: tier as string,
         });
       } else {
-        // Get all partners with filters (admin use)
+        // Admin use - require authentication for full partner list
+        if (!req.session?.isAdmin) {
+          return res.status(401).json({ error: "Unauthorized - Admin access required" });
+        }
+        
         partners = await storage.getPartners({
           status: status as string,
           type: type as string,
@@ -507,8 +557,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update partner status (admin endpoint)
-  app.patch("/api/partners/:id/status", async (req, res) => {
+  // Update partner status (admin endpoint - protected)
+  app.patch("/api/partners/:id/status", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { status, reviewerId } = z.object({

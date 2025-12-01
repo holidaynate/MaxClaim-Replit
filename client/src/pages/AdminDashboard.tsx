@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,18 +25,43 @@ interface Partner {
   priority?: number;
 }
 
-// Simple password protection (for beta - replace with proper auth later)
-const ADMIN_PASSWORD = "maxclaim2025";
-
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected">("pending");
   const { toast } = useToast();
 
+  // Check authentication status on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/admin/status", {
+          credentials: "include",
+        });
+        const data = await res.json();
+        setIsAuthenticated(data.isAdmin || false);
+      } catch (error) {
+        setIsAuthenticated(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
   // Fetch partners based on status
   const { data: partnersData, isLoading } = useQuery<{ partners: Partner[] }>({
-    queryKey: ["/api/partners", { status: activeTab }],
+    queryKey: ["/api/partners", activeTab],
+    queryFn: async () => {
+      const res = await fetch(`/api/partners?status=${activeTab}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch partners: ${res.statusText}`);
+      }
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -88,22 +113,43 @@ export default function AdminDashboard() {
     },
   });
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
+  const loginMutation = useMutation({
+    mutationFn: async (password: string) => {
+      const res = await apiRequest("/api/admin/login", "POST", { password });
+      return res.json();
+    },
+    onSuccess: () => {
       setIsAuthenticated(true);
       toast({
         title: "Welcome",
         description: "Logged in to admin dashboard",
       });
-    } else {
+    },
+    onError: (error: any) => {
       toast({
         title: "Access Denied",
         description: "Incorrect password",
         variant: "destructive",
       });
-    }
+    },
+  });
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    loginMutation.mutate(password);
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6">
+            <p className="text-center text-slate-400">Checking authentication...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -124,10 +170,16 @@ export default function AdminDashboard() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter admin password"
                   data-testid="input-admin-password"
+                  disabled={loginMutation.isPending}
                 />
               </div>
-              <Button type="submit" className="w-full" data-testid="button-admin-login">
-                Login
+              <Button 
+                type="submit" 
+                className="w-full" 
+                data-testid="button-admin-login"
+                disabled={loginMutation.isPending}
+              >
+                {loginMutation.isPending ? "Logging in..." : "Login"}
               </Button>
             </form>
           </CardContent>
