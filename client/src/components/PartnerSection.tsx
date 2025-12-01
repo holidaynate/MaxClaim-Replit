@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { Handshake, TrendingUp, Users } from "lucide-react";
+import PartnerLOIModal from "./PartnerLOIModal";
 
 export default function PartnerSection() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [partnerType, setPartnerType] = useState<"contractor" | "adjuster" | "agency">("contractor");
   const benefits = [
     {
       icon: Users,
@@ -59,20 +63,26 @@ export default function PartnerSection() {
             We serve homeowners in Texas and expanding nationwide in 2026.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a
-              href="mailto:partners@max-claim.com?subject=Partner Application - Contractor"
+            <button
+              onClick={() => {
+                setPartnerType("contractor");
+                setModalOpen(true);
+              }}
               className="inline-flex items-center justify-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/40 hover:bg-sky-400 transition"
               data-testid="button-partner-apply"
             >
               Apply as Contractor
-            </a>
-            <a
-              href="mailto:partners@max-claim.com?subject=Partner Application - Public Adjuster"
+            </button>
+            <button
+              onClick={() => {
+                setPartnerType("adjuster");
+                setModalOpen(true);
+              }}
               className="inline-flex items-center justify-center rounded-full border border-slate-600 px-6 py-3 text-sm font-semibold text-slate-100 hover:border-sky-400 hover:text-sky-200 transition"
               data-testid="button-partner-adjuster"
             >
               Apply as Public Adjuster
-            </a>
+            </button>
           </div>
           <p className="mt-4 text-xs text-slate-500">
             Questions? Email us at{" "}
@@ -82,6 +92,12 @@ export default function PartnerSection() {
           </p>
         </div>
       </div>
+
+      <PartnerLOIModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        defaultType={partnerType}
+      />
     </section>
   );
 }

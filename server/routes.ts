@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { analyzeClaimItem } from "./pricing-data";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
+import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -360,6 +361,198 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(500).json({ 
         error: 'Failed to process document',
+        details: error.message 
+      });
+    }
+  });
+
+  // Partnership LOI submission
+  app.post("/api/partners/loi", async (req, res) => {
+    try {
+      const loiData = z.object({
+        type: z.enum(["contractor", "adjuster", "agency"]),
+        companyName: z.string(),
+        contactPerson: z.string(),
+        email: z.string().email(),
+        phone: z.string(),
+        website: z.string().optional(),
+        licenseNumber: z.string().optional(),
+        zipCodes: z.array(z.string()).min(1),
+        pricingPreferences: z.object({
+          cpc: z.object({
+            enabled: z.boolean(),
+            amount: z.coerce.number().optional(),
+            budgetPeriod: z.enum(["daily", "monthly"]).optional(),
+            budgetCap: z.coerce.number().optional(),
+          }).optional(),
+          affiliate: z.object({
+            enabled: z.boolean(),
+            commissionPct: z.coerce.number().optional(),
+            paymentTerms: z.string().optional(),
+          }).optional(),
+          monthlyBanner: z.object({
+            enabled: z.boolean(),
+            amount: z.coerce.number().optional(),
+            size: z.string().optional(),
+            placement: z.string().optional(),
+          }).optional(),
+        }),
+        notes: z.string().optional(),
+      }).parse(req.body);
+
+      // Filter out disabled pricing options before storing
+      const sanitizedPrefs = { ...loiData.pricingPreferences };
+      if (sanitizedPrefs.cpc && !sanitizedPrefs.cpc.enabled) {
+        delete sanitizedPrefs.cpc;
+      }
+      if (sanitizedPrefs.affiliate && !sanitizedPrefs.affiliate.enabled) {
+        delete sanitizedPrefs.affiliate;
+      }
+      if (sanitizedPrefs.monthlyBanner && !sanitizedPrefs.monthlyBanner.enabled) {
+        delete sanitizedPrefs.monthlyBanner;
+      }
+
+      // Create partner and LOI in a transactional way
+      const partner = await storage.createPartner({
+        companyName: loiData.companyName,
+        type: loiData.type,
+        tier: "advertiser",
+        contactPerson: loiData.contactPerson,
+        email: loiData.email,
+        phone: loiData.phone,
+        website: loiData.website,
+        licenseNumber: loiData.licenseNumber,
+        status: "pending",
+      });
+
+      const loi = await storage.createPartnershipLOI({
+        partnerId: partner.id,
+        pricingPreferences: sanitizedPrefs,
+        notes: loiData.notes,
+        status: "pending",
+      }, loiData.zipCodes);
+
+      res.json({
+        success: true,
+        partnerId: partner.id,
+        loiId: loi.id,
+        message: "Application submitted successfully"
+      });
+    } catch (error: any) {
+      console.error('Partner LOI submission error:', error);
+      res.status(400).json({ 
+        error: 'Failed to submit application',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get partners with filters
+  app.get("/api/partners", async (req, res) => {
+    try {
+      const { status, type, tier, zipCode } = req.query;
+
+      let partners;
+      if (zipCode && typeof zipCode === 'string') {
+        // Get partners for specific ZIP code (only approved by default for public use)
+        partners = await storage.getPartnersByZipCode(zipCode, {
+          status: status as string || "approved",
+          tier: tier as string,
+        });
+      } else {
+        // Get all partners with filters (admin use)
+        partners = await storage.getPartners({
+          status: status as string,
+          type: type as string,
+          tier: tier as string,
+        });
+      }
+
+      res.json({ partners });
+    } catch (error: any) {
+      console.error('Get partners error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve partners',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get single partner
+  app.get("/api/partners/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const partner = await storage.getPartner(id);
+
+      if (!partner) {
+        return res.status(404).json({ error: 'Partner not found' });
+      }
+
+      res.json({ partner });
+    } catch (error: any) {
+      console.error('Get partner error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve partner',
+        details: error.message 
+      });
+    }
+  });
+
+  // Update partner status (admin endpoint)
+  app.patch("/api/partners/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, reviewerId } = z.object({
+        status: z.enum(["pending", "approved", "rejected", "suspended"]),
+        reviewerId: z.string().optional(),
+      }).parse(req.body);
+
+      await storage.updatePartnerStatus(id, status, reviewerId);
+
+      res.json({
+        success: true,
+        message: `Partner status updated to ${status}`
+      });
+    } catch (error: any) {
+      console.error('Update partner status error:', error);
+      res.status(400).json({ 
+        error: 'Failed to update partner status',
+        details: error.message 
+      });
+    }
+  });
+
+  // Track partner lead (click, referral, conversion)
+  app.post("/api/partners/:id/leads", async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      const leadData = z.object({
+        sessionId: z.string().optional(),
+        claimId: z.string().optional(),
+        leadType: z.enum(["click", "referral", "conversion"]),
+        zipCode: z.string().optional(),
+        metadata: z.any().optional(),
+      }).parse(req.body);
+
+      const lead = await storage.createPartnerLead({
+        partnerId,
+        sessionId: leadData.sessionId || null,
+        claimId: leadData.claimId || null,
+        leadType: leadData.leadType,
+        zipCode: leadData.zipCode || null,
+        metadata: leadData.metadata,
+        clickedAt: leadData.leadType === "click" ? new Date() : null,
+        convertedAt: leadData.leadType === "conversion" ? new Date() : null,
+      });
+
+      res.json({
+        success: true,
+        leadId: lead.id
+      });
+    } catch (error: any) {
+      console.error('Create partner lead error:', error);
+      res.status(400).json({ 
+        error: 'Failed to track partner lead',
         details: error.message 
       });
     }

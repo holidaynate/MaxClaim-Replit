@@ -17,6 +17,10 @@ export const eventType = pgEnum("event_type", [
   "export_email"
 ]);
 export const unitType = pgEnum("unit_type", ["LF", "SF", "SQ", "CT", "EA"]);
+export const partnerType = pgEnum("partner_type", ["contractor", "adjuster", "agency"]);
+export const partnerTier = pgEnum("partner_tier", ["advertiser", "affiliate", "partner"]);
+export const partnerStatus = pgEnum("partner_status", ["pending", "approved", "rejected", "suspended"]);
+export const leadType = pgEnum("lead_type", ["click", "referral", "conversion"]);
 
 // Users table (keep existing structure)
 export const users = pgTable("users", {
@@ -263,6 +267,173 @@ export const pricingDataPointsRelations = relations(pricingDataPoints, ({ one })
   session: one(sessions, {
     fields: [pricingDataPoints.sessionId],
     references: [sessions.id],
+  }),
+}));
+
+// Partners - Contractors, Adjusters, and Agencies applying for the network
+export const partners = pgTable("partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyName: text("company_name").notNull(),
+  type: partnerType("type").notNull(),
+  tier: partnerTier("tier").default("advertiser").notNull(),
+  contactPerson: text("contact_person").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  website: text("website"),
+  licenseNumber: text("license_number"),
+  status: partnerStatus("status").default("pending").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  emailIdx: index("partners_email_idx").on(table.email),
+  statusIdx: index("partners_status_idx").on(table.status),
+  typeIdx: index("partners_type_idx").on(table.type),
+}));
+
+export const insertPartnerSchema = createInsertSchema(partners).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPartner = z.infer<typeof insertPartnerSchema>;
+export type Partner = typeof partners.$inferSelect;
+
+// Partnership LOIs - Letter of Intent submissions with pricing preferences
+export const partnershipLOIs = pgTable("partnership_lois", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  pricingPreferences: jsonb("pricing_preferences").notNull().$type<{
+    cpc?: { enabled: boolean; amount: number; budgetPeriod: "daily" | "monthly"; budgetCap: number };
+    affiliate?: { enabled: boolean; commissionPct: number; paymentTerms: string };
+    monthlyBanner?: { enabled: boolean; amount: number; size: string; placement: string };
+  }>(),
+  notes: text("notes"),
+  status: partnerStatus("status").default("pending").notNull(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+}, (table) => ({
+  partnerIdx: index("partnership_lois_partner_idx").on(table.partnerId),
+  statusIdx: index("partnership_lois_status_idx").on(table.status),
+}));
+
+const pricingPreferencesSchema = z.object({
+  cpc: z.object({
+    enabled: z.boolean(),
+    amount: z.number().optional(),
+    budgetPeriod: z.enum(["daily", "monthly"]).optional(),
+    budgetCap: z.number().optional(),
+  }).optional(),
+  affiliate: z.object({
+    enabled: z.boolean(),
+    commissionPct: z.number().optional(),
+    paymentTerms: z.string().optional(),
+  }).optional(),
+  monthlyBanner: z.object({
+    enabled: z.boolean(),
+    amount: z.number().optional(),
+    size: z.string().optional(),
+    placement: z.string().optional(),
+  }).optional(),
+}).passthrough();
+
+export const insertPartnershipLOISchema = createInsertSchema(partnershipLOIs).omit({
+  id: true,
+  submittedAt: true,
+  reviewedAt: true,
+}).extend({
+  pricingPreferences: pricingPreferencesSchema,
+});
+
+export type InsertPartnershipLOI = z.infer<typeof insertPartnershipLOISchema>;
+export type PartnershipLOI = typeof partnershipLOIs.$inferSelect;
+
+// Partner Leads - Track clicks, referrals, and conversions
+export const partnerLeads = pgTable("partner_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
+  leadType: leadType("lead_type").notNull(),
+  zipCode: char("zip_code", { length: 5 }),
+  metadata: jsonb("metadata"),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("partner_leads_partner_idx").on(table.partnerId),
+  sessionIdx: index("partner_leads_session_idx").on(table.sessionId),
+  typeIdx: index("partner_leads_type_idx").on(table.leadType),
+  createdAtIdx: index("partner_leads_created_at_idx").on(table.createdAt),
+  clickedAtIdx: index("partner_leads_clicked_at_idx").on(table.clickedAt),
+}));
+
+export const insertPartnerLeadSchema = createInsertSchema(partnerLeads).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPartnerLead = z.infer<typeof insertPartnerLeadSchema>;
+export type PartnerLead = typeof partnerLeads.$inferSelect;
+
+// ZIP Targeting - Partner service areas with priority
+export const zipTargeting = pgTable("zip_targeting", {
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  zipCode: char("zip_code", { length: 5 }).notNull(),
+  priority: integer("priority").default(1).notNull(),
+  weight: integer("weight").default(1).notNull(), // For rotation algorithm based on spend
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  pk: index("zip_targeting_pk").on(table.partnerId, table.zipCode),
+  zipIdx: index("zip_targeting_zip_idx").on(table.zipCode),
+  zipPriorityIdx: index("zip_targeting_zip_priority_idx").on(table.zipCode, table.priority),
+}));
+
+export const insertZipTargetingSchema = createInsertSchema(zipTargeting).omit({
+  createdAt: true,
+});
+
+export type InsertZipTargeting = z.infer<typeof insertZipTargetingSchema>;
+export type ZipTargeting = typeof zipTargeting.$inferSelect;
+
+// Partnership Relations
+export const partnersRelations = relations(partners, ({ many }) => ({
+  lois: many(partnershipLOIs),
+  leads: many(partnerLeads),
+  zipTargets: many(zipTargeting),
+}));
+
+export const partnershipLOIsRelations = relations(partnershipLOIs, ({ one }) => ({
+  partner: one(partners, {
+    fields: [partnershipLOIs.partnerId],
+    references: [partners.id],
+  }),
+  reviewer: one(users, {
+    fields: [partnershipLOIs.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
+export const partnerLeadsRelations = relations(partnerLeads, ({ one }) => ({
+  partner: one(partners, {
+    fields: [partnerLeads.partnerId],
+    references: [partners.id],
+  }),
+  session: one(sessions, {
+    fields: [partnerLeads.sessionId],
+    references: [sessions.id],
+  }),
+  claim: one(claims, {
+    fields: [partnerLeads.claimId],
+    references: [claims.id],
+  }),
+}));
+
+export const zipTargetingRelations = relations(zipTargeting, ({ one }) => ({
+  partner: one(partners, {
+    fields: [zipTargeting.partnerId],
+    references: [partners.id],
   }),
 }));
 

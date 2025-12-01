@@ -14,6 +14,14 @@ import {
   type InsertSessionSourceUsage,
   type PricingDataPoint,
   type InsertPricingDataPoint,
+  type Partner,
+  type InsertPartner,
+  type PartnershipLOI,
+  type InsertPartnershipLOI,
+  type PartnerLead,
+  type InsertPartnerLead,
+  type ZipTargeting,
+  type InsertZipTargeting,
   users,
   sessions,
   sessionEvents,
@@ -23,9 +31,13 @@ import {
   sourceVersions,
   sessionSourceUsage,
   pricingDataPoints,
+  partners,
+  partnershipLOIs,
+  partnerLeads,
+  zipTargeting,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 
 // Analytics data (no PII - only ZIP codes and aggregate data)
 interface ClaimAnalysis {
@@ -90,6 +102,16 @@ export interface IStorage {
     categories: string[];
   }): Promise<ClaimAnalysis>;
   getRegionalStats(): Promise<RegionalStats[]>;
+  
+  // Partnership management
+  createPartner(data: InsertPartner): Promise<Partner>;
+  createPartnershipLOI(data: InsertPartnershipLOI, zipCodes: string[]): Promise<PartnershipLOI>;
+  getPartners(filters?: { status?: string; type?: string; tier?: string }): Promise<Partner[]>;
+  getPartner(id: string): Promise<Partner | undefined>;
+  updatePartnerStatus(id: string, status: "pending" | "approved" | "rejected" | "suspended", reviewerId?: string): Promise<void>;
+  getPartnersByZipCode(zipCode: string, filters?: { status?: string; tier?: string }): Promise<Array<Partner & { priority: number }>>;
+  createPartnerLead(data: InsertPartnerLead): Promise<PartnerLead>;
+  getPartnerLeads(partnerId: string): Promise<PartnerLead[]>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -344,6 +366,153 @@ export class DatabaseStorage implements IStorage {
     );
 
     return stats;
+  }
+
+  // Partnership management
+  async createPartner(data: InsertPartner): Promise<Partner> {
+    const [partner] = await db.insert(partners).values(data).returning();
+    return partner;
+  }
+
+  async createPartnershipLOI(data: InsertPartnershipLOI, zipCodes: string[]): Promise<PartnershipLOI> {
+    // Sanitize pricing preferences - remove disabled options
+    const sanitizedPrefs = { ...data.pricingPreferences };
+    if (sanitizedPrefs.cpc && !sanitizedPrefs.cpc.enabled) {
+      delete sanitizedPrefs.cpc;
+    }
+    if (sanitizedPrefs.affiliate && !sanitizedPrefs.affiliate.enabled) {
+      delete sanitizedPrefs.affiliate;
+    }
+    if (sanitizedPrefs.monthlyBanner && !sanitizedPrefs.monthlyBanner.enabled) {
+      delete sanitizedPrefs.monthlyBanner;
+    }
+
+    const [loi] = await db.insert(partnershipLOIs).values({
+      ...data,
+      pricingPreferences: sanitizedPrefs as any,
+    }).returning();
+    
+    // Insert ZIP code targeting for the partner in a transaction-safe way
+    if (zipCodes.length > 0) {
+      for (const zipCode of zipCodes) {
+        try {
+          await db.insert(zipTargeting).values({
+            partnerId: data.partnerId,
+            zipCode,
+            priority: 1, // Default priority
+          });
+        } catch (error) {
+          // Skip duplicates silently
+        }
+      }
+    }
+    
+    return loi;
+  }
+
+  async getPartners(filters?: { status?: string; type?: string; tier?: string }): Promise<Partner[]> {
+    let query = db.select().from(partners);
+    
+    const conditions = [];
+    if (filters?.status) {
+      conditions.push(eq(partners.status, filters.status as any));
+    }
+    if (filters?.type) {
+      conditions.push(eq(partners.type, filters.type as any));
+    }
+    if (filters?.tier) {
+      conditions.push(eq(partners.tier, filters.tier as any));
+    }
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    return await query.orderBy(desc(partners.createdAt));
+  }
+
+  async getPartner(id: string): Promise<Partner | undefined> {
+    const [partner] = await db.select().from(partners).where(eq(partners.id, id));
+    return partner || undefined;
+  }
+
+  async updatePartnerStatus(id: string, status: "pending" | "approved" | "rejected" | "suspended", reviewerId?: string): Promise<void> {
+    // Update partner status
+    await db
+      .update(partners)
+      .set({ 
+        status,
+        updatedAt: new Date()
+      })
+      .where(eq(partners.id, id));
+    
+    // Also update all LOIs for this partner
+    const updateData: any = {
+      status,
+      reviewedAt: new Date(),
+    };
+    if (reviewerId) {
+      updateData.reviewedBy = reviewerId;
+    }
+    
+    await db
+      .update(partnershipLOIs)
+      .set(updateData)
+      .where(eq(partnershipLOIs.partnerId, id));
+  }
+
+  async getPartnersByZipCode(
+    zipCode: string, 
+    filters?: { status?: string; tier?: string }
+  ): Promise<Array<Partner & { priority: number }>> {
+    // First get partners that serve this ZIP code
+    const targeting = await db
+      .select()
+      .from(zipTargeting)
+      .where(eq(zipTargeting.zipCode, zipCode));
+    
+    if (targeting.length === 0) {
+      return [];
+    }
+    
+    const partnerIds = targeting.map(t => t.partnerId);
+    
+    // Now get the full partner details with filters
+    const conditions = [inArray(partners.id, partnerIds)];
+    
+    if (filters?.status) {
+      conditions.push(eq(partners.status, filters.status as any));
+    }
+    if (filters?.tier) {
+      conditions.push(eq(partners.tier, filters.tier as any));
+    }
+    
+    const partnerResults = await db
+      .select()
+      .from(partners)
+      .where(and(...conditions));
+    
+    // Merge priority from targeting
+    return partnerResults.map(partner => {
+      const target = targeting.find(t => t.partnerId === partner.id);
+      return {
+        ...partner,
+        priority: target?.priority || 1,
+      };
+    }).sort((a, b) => b.priority - a.priority); // Sort by priority descending
+  }
+
+  async createPartnerLead(data: InsertPartnerLead): Promise<PartnerLead> {
+    const [lead] = await db.insert(partnerLeads).values(data).returning();
+    return lead;
+  }
+
+  async getPartnerLeads(partnerId: string): Promise<PartnerLead[]> {
+    return await db
+      .select()
+      .from(partnerLeads)
+      .where(eq(partnerLeads.partnerId, partnerId))
+      .orderBy(desc(partnerLeads.createdAt));
   }
 }
 
