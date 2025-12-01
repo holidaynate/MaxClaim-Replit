@@ -306,8 +306,10 @@ export default function Footer() {
             <section>
               <h3 className="font-semibold mb-2">Free Forever</h3>
               <p className="text-muted-foreground">
-                Max-Claim is completely free to use with no hidden costs, no registration required, and no data harvesting. 
-                We're here to help consumers, not profit from their misfortune.
+                MaxClaim is free to use and always will be. To keep it free, we display ads and include partner 
+                or affiliate links, and we may earn a fee or commission if you click them or use their services. 
+                These listings are not endorsements, and we aim to highlight local assistance, contractors, and 
+                other resources that may help you in your time of need.
               </p>
             </section>
 

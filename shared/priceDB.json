@@ -1,0 +1,969 @@
+{
+  "Remove 3-tab": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      47.47,
+      47.47,
+      34.67,
+      47.48,
+      47.47,
+      47.47,
+      31.14
+    ],
+    "min": 31.14,
+    "max": 47.48,
+    "avg": 43.31
+  },
+  "Replace 3-Tab": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      129.97,
+      129.97,
+      145.58,
+      140.65,
+      152.93,
+      140.92,
+      157.37
+    ],
+    "min": 129.97,
+    "max": 157.37,
+    "avg": 142.48
+  },
+  "Remove HD": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      47.47,
+      47.47,
+      47.48,
+      47.47,
+      35.61,
+      47.47,
+      31.14,
+      47.95
+    ],
+    "min": 31.14,
+    "max": 47.95,
+    "avg": 44.01
+  },
+  "Replace HD": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      178.86,
+      175,
+      164.17
+    ],
+    "min": 164.17,
+    "max": 178.86,
+    "avg": 172.68
+  },
+  "Addtl Layer": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      22.99,
+      21.38
+    ],
+    "min": 21.38,
+    "max": 22.99,
+    "avg": 22.18
+  },
+  "Remove Steep": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      2.95,
+      7.83,
+      7.83
+    ],
+    "min": 2.95,
+    "max": 7.83,
+    "avg": 6.2
+  },
+  "Remove Shake": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      42.06
+    ],
+    "min": 42.06,
+    "max": 42.06,
+    "avg": 42.06
+  },
+  "Re-Deck": {
+    "category": "ROOF",
+    "unit": "SQ FT",
+    "prices": [
+      1.18
+    ],
+    "min": 1.18,
+    "max": 1.18,
+    "avg": 1.18
+  },
+  "Steep Charge": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      27.35,
+      27.35
+    ],
+    "min": 27.35,
+    "max": 27.35,
+    "avg": 27.35
+  },
+  "High Roof Charge": {
+    "category": "ROOF",
+    "unit": "SQ",
+    "prices": [
+      13.38
+    ],
+    "min": 13.38,
+    "max": 13.38,
+    "avg": 13.38
+  },
+  "Ridge Cap": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      4.07,
+      2.97,
+      3.25
+    ],
+    "min": 2.97,
+    "max": 4.07,
+    "avg": 3.43
+  },
+  "Turtle Vent": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      39.25,
+      39.25,
+      28.75,
+      34.23
+    ],
+    "min": 28.75,
+    "max": 39.25,
+    "avg": 35.37
+  },
+  "Pipe Jack": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      22.7,
+      25.04,
+      27.74,
+      21.04,
+      21.1
+    ],
+    "min": 21.04,
+    "max": 27.74,
+    "avg": 23.52
+  },
+  "Lead Jack": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      51.7,
+      50.26,
+      54.29,
+      51.78
+    ],
+    "min": 50.26,
+    "max": 54.29,
+    "avg": 52.01
+  },
+  "Paint Jack": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      21.38
+    ],
+    "min": 21.38,
+    "max": 21.38,
+    "avg": 21.38
+  },
+  "Valley Flashing": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      2.97,
+      3.47,
+      2.59,
+      3.15
+    ],
+    "min": 2.59,
+    "max": 3.47,
+    "avg": 3.05
+  },
+  "Chimney Flashing": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      191.99
+    ],
+    "min": 191.99,
+    "max": 191.99,
+    "avg": 191.99
+  },
+  "Paint Flashing": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      0.58
+    ],
+    "min": 0.58,
+    "max": 0.58,
+    "avg": 0.58
+  },
+  "Drip Edge": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      1.28,
+      1.46,
+      1.36,
+      1.41,
+      1.46,
+      1.61,
+      1.59,
+      1.46,
+      1.28
+    ],
+    "min": 1.28,
+    "max": 1.61,
+    "avg": 1.43
+  },
+  "Chimney Cover": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      258.87
+    ],
+    "min": 258.87,
+    "max": 258.87,
+    "avg": 258.87
+  },
+  "Exhaust Cap": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      34.97,
+      63.27,
+      62.69,
+      63.39,
+      43.79
+    ],
+    "min": 34.97,
+    "max": 63.39,
+    "avg": 53.62
+  },
+  "Turbine Vent": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      41.18,
+      101.27,
+      101.39,
+      92.87
+    ],
+    "min": 41.18,
+    "max": 101.39,
+    "avg": 84.18
+  },
+  "Power Attic Vent": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      220.45
+    ],
+    "min": 220.45,
+    "max": 220.45,
+    "avg": 220.45
+  },
+  "Ridge Vent": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      6.07,
+      42.71,
+      7.57,
+      5.58
+    ],
+    "min": 5.58,
+    "max": 42.71,
+    "avg": 15.48
+  },
+  "Flue Cap": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      42.85,
+      108.53,
+      96.4,
+      94.02,
+      42.98
+    ],
+    "min": 42.85,
+    "max": 108.53,
+    "avg": 76.96
+  },
+  "R&R Gutter/Down Spout": {
+    "category": "ROOF",
+    "unit": "LF",
+    "prices": [
+      6.99,
+      6.97
+    ],
+    "min": 6.97,
+    "max": 6.99,
+    "avg": 6.98
+  },
+  "Detach/Reset Satellite": {
+    "category": "ROOF",
+    "unit": "CT",
+    "prices": [
+      20.11,
+      155.49,
+      20.11,
+      36.72,
+      20.11
+    ],
+    "min": 20.11,
+    "max": 155.49,
+    "avg": 50.51
+  },
+  "Remove Flat": {
+    "category": "FLAT ROOF/BITUMEN",
+    "unit": "SQ",
+    "prices": [
+      27.82,
+      24.44
+    ],
+    "min": 24.44,
+    "max": 27.82,
+    "avg": 26.13
+  },
+  "Replace Flat": {
+    "category": "FLAT ROOF/BITUMEN",
+    "unit": "SQ",
+    "prices": [
+      237.71,
+      128.49
+    ],
+    "min": 128.49,
+    "max": 237.71,
+    "avg": 183.1
+  },
+  "R & R Drip": {
+    "category": "FLAT ROOF/BITUMEN",
+    "unit": "LF",
+    "prices": [
+      1.46,
+      1.59
+    ],
+    "min": 1.46,
+    "max": 1.59,
+    "avg": 1.52
+  },
+  "Prime & Paint Fascia 6-8\"": {
+    "category": "SOFFIT, FASCIA & TRIM",
+    "unit": "SQ FT",
+    "prices": [
+      1.26,
+      0.98,
+      1.26,
+      1.26
+    ],
+    "min": 0.98,
+    "max": 1.26,
+    "avg": 1.19
+  },
+  "R&R 2\" Trim - Pine": {
+    "category": "SOFFIT, FASCIA & TRIM",
+    "unit": "LF",
+    "prices": [
+      8.9,
+      2.02
+    ],
+    "min": 2.02,
+    "max": 8.9,
+    "avg": 5.46
+  },
+  "R&R Fascia 1\"x6\" - Pine": {
+    "category": "SOFFIT, FASCIA & TRIM",
+    "unit": "LF",
+    "prices": [
+      4.92
+    ],
+    "min": 4.92,
+    "max": 4.92,
+    "avg": 4.92
+  },
+  "R&R Fascia 1\"x4\" - Cedar": {
+    "category": "SOFFIT, FASCIA & TRIM",
+    "unit": "LF",
+    "prices": [
+      3.33
+    ],
+    "min": 3.33,
+    "max": 3.33,
+    "avg": 3.33
+  },
+  "R&R Fascia 1\"x8\" - Cedar": {
+    "category": "SOFFIT, FASCIA & TRIM",
+    "unit": "LF",
+    "prices": [
+      4.7
+    ],
+    "min": 4.7,
+    "max": 4.7,
+    "avg": 4.7
+  },
+  "Mask & Prep": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.63
+    ],
+    "min": 0.63,
+    "max": 0.63,
+    "avg": 0.63
+  },
+  "Seal & Paint": {
+    "category": "EXTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.85,
+      0.61,
+      0.87
+    ],
+    "min": 0.61,
+    "max": 0.87,
+    "avg": 0.78
+  },
+  "Strip Paint Door": {
+    "category": "EXTERIOR PAINT",
+    "unit": "CT",
+    "prices": [
+      26.25,
+      21.78
+    ],
+    "min": 21.78,
+    "max": 26.25,
+    "avg": 24.02
+  },
+  "Stain & Finish Door": {
+    "category": "EXTERIOR PAINT",
+    "unit": "CT",
+    "prices": [
+      34.99,
+      35.02
+    ],
+    "min": 34.99,
+    "max": 35.02,
+    "avg": 35.01
+  },
+  "Siding": {
+    "category": "EXTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      175,
+      2.08
+    ],
+    "min": 2.08,
+    "max": 175,
+    "avg": 88.54
+  },
+  "Glazing Bead": {
+    "category": "WINDOWS & DOORS",
+    "unit": "LF",
+    "prices": [
+      1.43,
+      1.58,
+      1.53
+    ],
+    "min": 1.43,
+    "max": 1.58,
+    "avg": 1.51
+  },
+  "Reglaze Window 1-9sf": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      49.65
+    ],
+    "min": 49.65,
+    "max": 49.65,
+    "avg": 49.65
+  },
+  "Reglaze Window 17-25sf": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      132.4
+    ],
+    "min": 132.4,
+    "max": 132.4,
+    "avg": 132.4
+  },
+  "Reglaze Double Pane Window": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      97.46,
+      97.46
+    ],
+    "min": 97.46,
+    "max": 97.46,
+    "avg": 97.46
+  },
+  "Remove Screen": {
+    "category": "WINDOWS & DOORS",
+    "unit": "SQ FT",
+    "prices": [
+      2.12
+    ],
+    "min": 2.12,
+    "max": 2.12,
+    "avg": 2.12
+  },
+  "Replace Screen": {
+    "category": "WINDOWS & DOORS",
+    "unit": "SQ FT",
+    "prices": [
+      25.17,
+      27.29,
+      22.22,
+      27.29,
+      20.1,
+      21.67
+    ],
+    "min": 20.1,
+    "max": 27.29,
+    "avg": 23.96
+  },
+  "Sunscreen": {
+    "category": "WINDOWS & DOORS",
+    "unit": "SQ FT",
+    "prices": [
+      1.15
+    ],
+    "min": 1.15,
+    "max": 1.15,
+    "avg": 1.15
+  },
+  "R&R Shutters": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      103.91
+    ],
+    "min": 103.91,
+    "max": 103.91,
+    "avg": 103.91
+  },
+  "R&R Wood Blinds": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      72.2
+    ],
+    "min": 72.2,
+    "max": 72.2,
+    "avg": 72.2
+  },
+  "Detach/Reset Lockset": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      19.14
+    ],
+    "min": 19.14,
+    "max": 19.14,
+    "avg": 19.14
+  },
+  "R&R Storm Door": {
+    "category": "WINDOWS & DOORS",
+    "unit": "CT",
+    "prices": [
+      118.69,
+      118.74
+    ],
+    "min": 118.69,
+    "max": 118.74,
+    "avg": 118.72
+  },
+  "Remove Post": {
+    "category": "FENCE",
+    "unit": "CT",
+    "prices": [
+      8.4
+    ],
+    "min": 8.4,
+    "max": 8.4,
+    "avg": 8.4
+  },
+  "Replace Post": {
+    "category": "FENCE",
+    "unit": "CT",
+    "prices": [
+      44.39,
+      52.79
+    ],
+    "min": 44.39,
+    "max": 52.79,
+    "avg": 48.59
+  },
+  "Detach & Reset": {
+    "category": "FENCE",
+    "unit": "8FT PC",
+    "prices": [
+      47.92
+    ],
+    "min": 47.92,
+    "max": 47.92,
+    "avg": 47.92
+  },
+  "R & R Wood Fence 6\"": {
+    "category": "FENCE",
+    "unit": "LF",
+    "prices": [
+      26.43
+    ],
+    "min": 26.43,
+    "max": 26.43,
+    "avg": 26.43
+  },
+  "Wood Slat": {
+    "category": "FENCE",
+    "unit": "CT",
+    "prices": [
+      4.81
+    ],
+    "min": 4.81,
+    "max": 4.81,
+    "avg": 4.81
+  },
+  "Lattice": {
+    "category": "FENCE",
+    "unit": "SQ FT",
+    "prices": [
+      3.2
+    ],
+    "min": 3.2,
+    "max": 3.2,
+    "avg": 3.2
+  },
+  "Power Wash": {
+    "category": "FENCE",
+    "unit": "SQ FT",
+    "prices": [
+      0.2,
+      0.2
+    ],
+    "min": 0.2,
+    "max": 0.2,
+    "avg": 0.2
+  },
+  "Seal/Paint": {
+    "category": "FENCE",
+    "unit": "SQ FT",
+    "prices": [
+      0.7,
+      0.87
+    ],
+    "min": 0.7,
+    "max": 0.87,
+    "avg": 0.78
+  },
+  "Drywall Patch/Repair": {
+    "category": "INTERIOR PAINT",
+    "unit": "CT",
+    "prices": [
+      39.3
+    ],
+    "min": 39.3,
+    "max": 39.3,
+    "avg": 39.3
+  },
+  "R&R Popcorn Texture": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.9
+    ],
+    "min": 0.9,
+    "max": 0.9,
+    "avg": 0.9
+  },
+  "Texture Drywall": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.34,
+      0.23
+    ],
+    "min": 0.23,
+    "max": 0.34,
+    "avg": 0.29
+  },
+  "R&R Blown-In Insulation": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.92
+    ],
+    "min": 0.92,
+    "max": 0.92,
+    "avg": 0.92
+  },
+  "Prime/Paint Walls": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.7,
+      1.45
+    ],
+    "min": 0.7,
+    "max": 1.45,
+    "avg": 1.07
+  },
+  "Clean Carpet": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.33
+    ],
+    "min": 0.33,
+    "max": 0.33,
+    "avg": 0.33
+  },
+  "Move & Reset Contents": {
+    "category": "INTERIOR PAINT",
+    "unit": "CT",
+    "prices": [
+      113.42
+    ],
+    "min": 113.42,
+    "max": 113.42,
+    "avg": 113.42
+  },
+  "Tape & Float 5/8\" Drywall": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      1.37,
+      0.96
+    ],
+    "min": 0.96,
+    "max": 1.37,
+    "avg": 1.17
+  },
+  "Clean Floor": {
+    "category": "INTERIOR PAINT",
+    "unit": "SQ FT",
+    "prices": [
+      0.44
+    ],
+    "min": 0.44,
+    "max": 0.44,
+    "avg": 0.44
+  },
+  "Light Fixture Repair": {
+    "category": "ELECTRICAL",
+    "unit": "CT",
+    "prices": [
+      135,
+      68.68
+    ],
+    "min": 68.68,
+    "max": 135,
+    "avg": 101.84
+  },
+  "Light Fixture Material": {
+    "category": "ELECTRICAL",
+    "unit": "CT",
+    "prices": [
+      33.32
+    ],
+    "min": 33.32,
+    "max": 33.32,
+    "avg": 33.32
+  },
+  "R&R Meter": {
+    "category": "ELECTRICAL",
+    "unit": "CT",
+    "prices": [
+      257.29
+    ],
+    "min": 257.29,
+    "max": 257.29,
+    "avg": 257.29
+  },
+  "Wood Flooring": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      11.02
+    ],
+    "min": 11.02,
+    "max": 11.02,
+    "avg": 11.02
+  },
+  "Floor Glue": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      1.73
+    ],
+    "min": 1.73,
+    "max": 1.73,
+    "avg": 1.73
+  },
+  "Floor Moulding": {
+    "category": "FLOOR",
+    "unit": "LF",
+    "prices": [
+      4.94
+    ],
+    "min": 4.94,
+    "max": 4.94,
+    "avg": 4.94
+  },
+  "Remove Carpet": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      0.15
+    ],
+    "min": 0.15,
+    "max": 0.15,
+    "avg": 0.15
+  },
+  "R&R Pad": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      0.64
+    ],
+    "min": 0.64,
+    "max": 0.64,
+    "avg": 0.64
+  },
+  "Install Carpet": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      2.61
+    ],
+    "min": 2.61,
+    "max": 2.61,
+    "avg": 2.61
+  },
+  "Latex Seal": {
+    "category": "FLOOR",
+    "unit": "SQ FT",
+    "prices": [
+      0.35
+    ],
+    "min": 0.35,
+    "max": 0.35,
+    "avg": 0.35
+  },
+  "Detach/Rehang Garage Door": {
+    "category": "GARAGE",
+    "unit": "CT",
+    "prices": [
+      1314.43
+    ],
+    "min": 1314.43,
+    "max": 1314.43,
+    "avg": 1314.43
+  },
+  "R&R Garage Door Jamb & Trim": {
+    "category": "GARAGE",
+    "unit": "CT",
+    "prices": [
+      5.41
+    ],
+    "min": 5.41,
+    "max": 5.41,
+    "avg": 5.41
+  },
+  "Paint Garage Door, Jamb & Trim": {
+    "category": "GARAGE",
+    "unit": "CT",
+    "prices": [
+      74.16
+    ],
+    "min": 74.16,
+    "max": 74.16,
+    "avg": 74.16
+  },
+  "R&R Stucco": {
+    "category": "STUCCO/BRICK",
+    "unit": "SQ FT",
+    "prices": [
+      5.35
+    ],
+    "min": 5.35,
+    "max": 5.35,
+    "avg": 5.35
+  },
+  "Stucco Patch": {
+    "category": "STUCCO/BRICK",
+    "unit": "CT",
+    "prices": [
+      107.65
+    ],
+    "min": 107.65,
+    "max": 107.65,
+    "avg": 107.65
+  },
+  "Stucco Trim": {
+    "category": "STUCCO/BRICK",
+    "unit": "LF",
+    "prices": [
+      3.44
+    ],
+    "min": 3.44,
+    "max": 3.44,
+    "avg": 3.44
+  },
+  "Stucco Color (redash - coarse)": {
+    "category": "STUCCO/BRICK",
+    "unit": "SQ FT",
+    "prices": [
+      2.08,
+      1.59
+    ],
+    "min": 1.59,
+    "max": 2.08,
+    "avg": 1.83
+  },
+  "Stucco Fog Coat": {
+    "category": "STUCCO/BRICK",
+    "unit": "SQ FT",
+    "prices": [
+      0.58,
+      0.81
+    ],
+    "min": 0.58,
+    "max": 0.81,
+    "avg": 0.7
+  },
+  "R&R Brick": {
+    "category": "STUCCO/BRICK",
+    "unit": "SQ FT",
+    "prices": [
+      8.87
+    ],
+    "min": 8.87,
+    "max": 8.87,
+    "avg": 8.87
+  }
+}

@@ -9,7 +9,7 @@ export default function Hero() {
             MaxClaim Recovery Suite · Free Beta
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-slate-50" data-testid="text-hero-heading">
-            AI-Powered Storm Claim Review{" "}
+            AI-Powered Disaster & Loss Claim Review{" "}
             <span className="block text-sky-300">
               for Homeowners, Contractors & Public Adjusters
             </span>
