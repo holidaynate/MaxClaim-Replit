@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { DocumentUpload } from "./DocumentUpload";
+import { auditClaimItem } from "@shared/priceAudit";
 import type { ClaimItem } from "./ItemsStep";
 
 const TRUST_BADGES = [
@@ -62,6 +63,37 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
     }
   }, [resetKey, onZipChange]);
 
+  // Helper function to persist price audit results for compliance tracking
+  const persistAuditResults = async (itemsToAudit: ClaimItem[], zip: string) => {
+    for (const item of itemsToAudit) {
+      if (!item.description || item.quotedPrice <= 0) continue;
+      
+      const audit = auditClaimItem(item.description, item.quotedPrice);
+      if (!audit) continue;
+      
+      try {
+        await apiRequest("POST", "/api/price-audits", {
+          itemName: item.description,
+          matchedItem: audit.matchedItem,
+          userPrice: item.quotedPrice,
+          marketMin: audit.min,
+          marketAvg: audit.avg,
+          marketMax: audit.max,
+          unit: audit.unit,
+          category: item.category,
+          flag: audit.flag,
+          severity: audit.severity,
+          percentFromAvg: audit.percentFromAvg,
+          sampleSize: audit.sampleSize,
+          zipCode: zip,
+        });
+      } catch (error) {
+        console.error("Failed to persist audit result:", error);
+        // Don't fail the whole flow if audit persistence fails
+      }
+    }
+  };
+
   const analysisMutation = useMutation({
     mutationFn: async (data: {
       zipCode: string;
@@ -77,7 +109,10 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
       const response = await apiRequest("POST", "/api/claims/analyze", data);
       return await response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data, variables) => {
+      // Persist price audit results for compliance tracking (fire-and-forget)
+      persistAuditResults(variables.items, variables.zipCode);
+      
       onAnalysisComplete(data);
       toast({
         title: "Analysis Complete",
