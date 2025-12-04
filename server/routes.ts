@@ -49,7 +49,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: z.string(),
       }).parse(req.body);
 
-      const adminPassword = process.env.ADMIN_PASSWORD || "maxclaim2025beta";
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      
+      if (!adminPassword) {
+        res.status(500).json({ error: "Server configuration error: ADMIN_PASSWORD not set" });
+        return;
+      }
 
       if (password === adminPassword) {
         req.session.isAdmin = true;
