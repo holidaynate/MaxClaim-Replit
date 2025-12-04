@@ -1,632 +1,722 @@
 {
   "Remove 3-Tab Asphalt": {
     "UNIT": "SQ",
-    "RRC_COST": 31.14,
-    "INS_MAX_COST": 47.48,
-    "AVG_PRICE": 43.31,
-    "SAMPLES": 7
+    "UNIT_PRICE": 31.14,
+    "AVERAGE_PRICE": 39.31,
+    "FMV_PRICE": 47.48,
+    "SAMPLES": 7,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Install 3-Tab Asphalt": {
     "UNIT": "SQ",
-    "RRC_COST": 129.97,
-    "INS_MAX_COST": 157.37,
-    "AVG_PRICE": 142.48,
-    "SAMPLES": 7
+    "UNIT_PRICE": 129.97,
+    "AVERAGE_PRICE": 143.67,
+    "FMV_PRICE": 157.37,
+    "SAMPLES": 7,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Replace 3-Tab": {
     "UNIT": "SQ",
-    "RRC_COST": 129.97,
-    "INS_MAX_COST": 157.37,
-    "AVG_PRICE": 142.48,
-    "SAMPLES": 7
+    "UNIT_PRICE": 129.97,
+    "AVERAGE_PRICE": 143.67,
+    "FMV_PRICE": 157.37,
+    "SAMPLES": 7,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove HD": {
     "UNIT": "SQ",
-    "RRC_COST": 31.14,
-    "INS_MAX_COST": 47.95,
-    "AVG_PRICE": 44.01,
-    "SAMPLES": 8
+    "UNIT_PRICE": 31.14,
+    "AVERAGE_PRICE": 39.55,
+    "FMV_PRICE": 47.95,
+    "SAMPLES": 8,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Replace HD": {
     "UNIT": "SQ",
-    "RRC_COST": 164.17,
-    "INS_MAX_COST": 178.86,
-    "AVG_PRICE": 172.68,
-    "SAMPLES": 3
+    "UNIT_PRICE": 164.17,
+    "AVERAGE_PRICE": 171.52,
+    "FMV_PRICE": 178.86,
+    "SAMPLES": 3,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Addtl Layer": {
     "UNIT": "SQ",
-    "RRC_COST": 21.38,
-    "INS_MAX_COST": 22.99,
-    "AVG_PRICE": 22.18,
-    "SAMPLES": 2
+    "UNIT_PRICE": 21.38,
+    "AVERAGE_PRICE": 22.19,
+    "FMV_PRICE": 22.99,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Steep": {
     "UNIT": "SQ",
-    "RRC_COST": 2.95,
-    "INS_MAX_COST": 7.83,
-    "AVG_PRICE": 6.2,
-    "SAMPLES": 3
+    "UNIT_PRICE": 2.95,
+    "AVERAGE_PRICE": 5.39,
+    "FMV_PRICE": 7.83,
+    "SAMPLES": 3,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Shake": {
     "UNIT": "SQ",
-    "RRC_COST": 42.06,
-    "INS_MAX_COST": 42.06,
-    "AVG_PRICE": 42.06,
-    "SAMPLES": 1
+    "UNIT_PRICE": 42.06,
+    "AVERAGE_PRICE": 42.06,
+    "FMV_PRICE": 42.06,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Re-Deck": {
     "UNIT": "SF",
-    "RRC_COST": 1.18,
-    "INS_MAX_COST": 1.18,
-    "AVG_PRICE": 1.18,
-    "SAMPLES": 1
+    "UNIT_PRICE": 1.18,
+    "AVERAGE_PRICE": 1.18,
+    "FMV_PRICE": 1.18,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Steep Charge": {
     "UNIT": "SQ",
-    "RRC_COST": 27.35,
-    "INS_MAX_COST": 27.35,
-    "AVG_PRICE": 27.35,
-    "SAMPLES": 2
+    "UNIT_PRICE": 27.35,
+    "AVERAGE_PRICE": 27.35,
+    "FMV_PRICE": 27.35,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "High Roof Charge": {
     "UNIT": "SQ",
-    "RRC_COST": 13.38,
-    "INS_MAX_COST": 13.38,
-    "AVG_PRICE": 13.38,
-    "SAMPLES": 1
+    "UNIT_PRICE": 13.38,
+    "AVERAGE_PRICE": 13.38,
+    "FMV_PRICE": 13.38,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Ridge Cap": {
     "UNIT": "LF",
-    "RRC_COST": 2.97,
-    "INS_MAX_COST": 4.07,
-    "AVG_PRICE": 3.43,
-    "SAMPLES": 3
+    "UNIT_PRICE": 2.97,
+    "AVERAGE_PRICE": 3.52,
+    "FMV_PRICE": 4.07,
+    "SAMPLES": 3,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Turtle Vent": {
     "UNIT": "CT",
-    "RRC_COST": 28.75,
-    "INS_MAX_COST": 39.25,
-    "AVG_PRICE": 35.37,
-    "SAMPLES": 4
+    "UNIT_PRICE": 28.75,
+    "AVERAGE_PRICE": 34.00,
+    "FMV_PRICE": 39.25,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Pipe Jack": {
     "UNIT": "CT",
-    "RRC_COST": 21.04,
-    "INS_MAX_COST": 27.74,
-    "AVG_PRICE": 23.52,
-    "SAMPLES": 5
+    "UNIT_PRICE": 21.04,
+    "AVERAGE_PRICE": 24.39,
+    "FMV_PRICE": 27.74,
+    "SAMPLES": 5,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Lead Jack": {
     "UNIT": "CT",
-    "RRC_COST": 50.26,
-    "INS_MAX_COST": 54.29,
-    "AVG_PRICE": 52.01,
-    "SAMPLES": 4
+    "UNIT_PRICE": 50.26,
+    "AVERAGE_PRICE": 52.28,
+    "FMV_PRICE": 54.29,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Paint Jack": {
     "UNIT": "CT",
-    "RRC_COST": 21.38,
-    "INS_MAX_COST": 21.38,
-    "AVG_PRICE": 21.38,
-    "SAMPLES": 1
+    "UNIT_PRICE": 21.38,
+    "AVERAGE_PRICE": 21.38,
+    "FMV_PRICE": 21.38,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Valley Flashing": {
     "UNIT": "LF",
-    "RRC_COST": 2.59,
-    "INS_MAX_COST": 3.47,
-    "AVG_PRICE": 3.05,
-    "SAMPLES": 4
+    "UNIT_PRICE": 2.59,
+    "AVERAGE_PRICE": 3.03,
+    "FMV_PRICE": 3.47,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Flashing - Valley": {
     "UNIT": "LF",
-    "RRC_COST": 2.59,
-    "INS_MAX_COST": 3.47,
-    "AVG_PRICE": 3.05,
-    "SAMPLES": 4
+    "UNIT_PRICE": 2.59,
+    "AVERAGE_PRICE": 3.03,
+    "FMV_PRICE": 3.47,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Chimney Flashing": {
     "UNIT": "LF",
-    "RRC_COST": 191.99,
-    "INS_MAX_COST": 191.99,
-    "AVG_PRICE": 191.99,
-    "SAMPLES": 1
+    "UNIT_PRICE": 191.99,
+    "AVERAGE_PRICE": 191.99,
+    "FMV_PRICE": 191.99,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Paint Flashing": {
     "UNIT": "LF",
-    "RRC_COST": 0.58,
-    "INS_MAX_COST": 0.58,
-    "AVG_PRICE": 0.58,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.58,
+    "AVERAGE_PRICE": 0.58,
+    "FMV_PRICE": 0.58,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Drip Edge": {
     "UNIT": "LF",
-    "RRC_COST": 1.28,
-    "INS_MAX_COST": 1.61,
-    "AVG_PRICE": 1.43,
-    "SAMPLES": 9
+    "UNIT_PRICE": 1.28,
+    "AVERAGE_PRICE": 1.45,
+    "FMV_PRICE": 1.61,
+    "SAMPLES": 9,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Chimney Cover": {
     "UNIT": "CT",
-    "RRC_COST": 258.87,
-    "INS_MAX_COST": 258.87,
-    "AVG_PRICE": 258.87,
-    "SAMPLES": 1
+    "UNIT_PRICE": 258.87,
+    "AVERAGE_PRICE": 258.87,
+    "FMV_PRICE": 258.87,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Exhaust Cap": {
     "UNIT": "CT",
-    "RRC_COST": 34.97,
-    "INS_MAX_COST": 63.39,
-    "AVG_PRICE": 53.62,
-    "SAMPLES": 5
+    "UNIT_PRICE": 34.97,
+    "AVERAGE_PRICE": 49.18,
+    "FMV_PRICE": 63.39,
+    "SAMPLES": 5,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Turbine Vent": {
     "UNIT": "CT",
-    "RRC_COST": 41.18,
-    "INS_MAX_COST": 101.39,
-    "AVG_PRICE": 84.18,
-    "SAMPLES": 4
+    "UNIT_PRICE": 41.18,
+    "AVERAGE_PRICE": 71.29,
+    "FMV_PRICE": 101.39,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Power Attic Vent": {
     "UNIT": "CT",
-    "RRC_COST": 220.45,
-    "INS_MAX_COST": 220.45,
-    "AVG_PRICE": 220.45,
-    "SAMPLES": 1
+    "UNIT_PRICE": 220.45,
+    "AVERAGE_PRICE": 220.45,
+    "FMV_PRICE": 220.45,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Ridge Vent": {
     "UNIT": "LF",
-    "RRC_COST": 5.58,
-    "INS_MAX_COST": 42.71,
-    "AVG_PRICE": 15.48,
-    "SAMPLES": 4
+    "UNIT_PRICE": 5.58,
+    "AVERAGE_PRICE": 24.15,
+    "FMV_PRICE": 42.71,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Flue Cap": {
     "UNIT": "CT",
-    "RRC_COST": 42.85,
-    "INS_MAX_COST": 108.53,
-    "AVG_PRICE": 76.96,
-    "SAMPLES": 5
+    "UNIT_PRICE": 42.85,
+    "AVERAGE_PRICE": 75.69,
+    "FMV_PRICE": 108.53,
+    "SAMPLES": 5,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Gutter/Down Spout": {
     "UNIT": "LF",
-    "RRC_COST": 6.97,
-    "INS_MAX_COST": 6.99,
-    "AVG_PRICE": 6.98,
-    "SAMPLES": 2
+    "UNIT_PRICE": 6.97,
+    "AVERAGE_PRICE": 6.98,
+    "FMV_PRICE": 6.99,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Detach/Reset Satellite": {
     "UNIT": "CT",
-    "RRC_COST": 20.11,
-    "INS_MAX_COST": 155.49,
-    "AVG_PRICE": 50.51,
-    "SAMPLES": 5
+    "UNIT_PRICE": 20.11,
+    "AVERAGE_PRICE": 87.80,
+    "FMV_PRICE": 155.49,
+    "SAMPLES": 5,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Flat": {
     "UNIT": "SQ",
-    "RRC_COST": 24.44,
-    "INS_MAX_COST": 27.82,
-    "AVG_PRICE": 26.13,
-    "SAMPLES": 2
+    "UNIT_PRICE": 24.44,
+    "AVERAGE_PRICE": 26.13,
+    "FMV_PRICE": 27.82,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Replace Flat": {
     "UNIT": "SQ",
-    "RRC_COST": 128.49,
-    "INS_MAX_COST": 237.71,
-    "AVG_PRICE": 183.1,
-    "SAMPLES": 2
+    "UNIT_PRICE": 128.49,
+    "AVERAGE_PRICE": 183.10,
+    "FMV_PRICE": 237.71,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R & R Drip": {
     "UNIT": "LF",
-    "RRC_COST": 1.46,
-    "INS_MAX_COST": 1.59,
-    "AVG_PRICE": 1.52,
-    "SAMPLES": 2
+    "UNIT_PRICE": 1.46,
+    "AVERAGE_PRICE": 1.53,
+    "FMV_PRICE": 1.59,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Prime & Paint Fascia 6-8\"": {
     "UNIT": "SF",
-    "RRC_COST": 0.98,
-    "INS_MAX_COST": 1.26,
-    "AVG_PRICE": 1.19,
-    "SAMPLES": 4
+    "UNIT_PRICE": 0.98,
+    "AVERAGE_PRICE": 1.12,
+    "FMV_PRICE": 1.26,
+    "SAMPLES": 4,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R 2\" Trim - Pine": {
     "UNIT": "LF",
-    "RRC_COST": 2.02,
-    "INS_MAX_COST": 8.9,
-    "AVG_PRICE": 5.46,
-    "SAMPLES": 2
+    "UNIT_PRICE": 2.02,
+    "AVERAGE_PRICE": 5.46,
+    "FMV_PRICE": 8.90,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Fascia 1\"x6\" - Pine": {
     "UNIT": "LF",
-    "RRC_COST": 4.92,
-    "INS_MAX_COST": 4.92,
-    "AVG_PRICE": 4.92,
-    "SAMPLES": 1
+    "UNIT_PRICE": 4.92,
+    "AVERAGE_PRICE": 4.92,
+    "FMV_PRICE": 4.92,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Fascia 1\"x4\" - Cedar": {
     "UNIT": "LF",
-    "RRC_COST": 3.33,
-    "INS_MAX_COST": 3.33,
-    "AVG_PRICE": 3.33,
-    "SAMPLES": 1
+    "UNIT_PRICE": 3.33,
+    "AVERAGE_PRICE": 3.33,
+    "FMV_PRICE": 3.33,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Fascia 1\"x8\" - Cedar": {
     "UNIT": "LF",
-    "RRC_COST": 4.7,
-    "INS_MAX_COST": 4.7,
-    "AVG_PRICE": 4.7,
-    "SAMPLES": 1
+    "UNIT_PRICE": 4.70,
+    "AVERAGE_PRICE": 4.70,
+    "FMV_PRICE": 4.70,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Underlayment 30lb": {
     "UNIT": "SF",
-    "RRC_COST": 0.50,
-    "INS_MAX_COST": 0.85,
-    "AVG_PRICE": 0.65,
-    "SAMPLES": 8
+    "UNIT_PRICE": 0.50,
+    "AVERAGE_PRICE": 0.68,
+    "FMV_PRICE": 0.85,
+    "SAMPLES": 8,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Mask & Prep": {
     "UNIT": "SF",
-    "RRC_COST": 0.63,
-    "INS_MAX_COST": 0.63,
-    "AVG_PRICE": 0.63,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.63,
+    "AVERAGE_PRICE": 0.63,
+    "FMV_PRICE": 0.63,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Seal & Paint": {
     "UNIT": "SF",
-    "RRC_COST": 0.61,
-    "INS_MAX_COST": 0.87,
-    "AVG_PRICE": 0.78,
-    "SAMPLES": 3
+    "UNIT_PRICE": 0.61,
+    "AVERAGE_PRICE": 0.74,
+    "FMV_PRICE": 0.87,
+    "SAMPLES": 3,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Strip Paint Door": {
     "UNIT": "CT",
-    "RRC_COST": 21.78,
-    "INS_MAX_COST": 26.25,
-    "AVG_PRICE": 24.02,
-    "SAMPLES": 2
+    "UNIT_PRICE": 21.78,
+    "AVERAGE_PRICE": 24.02,
+    "FMV_PRICE": 26.25,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Stain & Finish Door": {
     "UNIT": "CT",
-    "RRC_COST": 34.99,
-    "INS_MAX_COST": 35.02,
-    "AVG_PRICE": 35.01,
-    "SAMPLES": 2
+    "UNIT_PRICE": 34.99,
+    "AVERAGE_PRICE": 35.01,
+    "FMV_PRICE": 35.02,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Siding": {
     "UNIT": "SF",
-    "RRC_COST": 2.08,
-    "INS_MAX_COST": 175,
-    "AVG_PRICE": 88.54,
-    "SAMPLES": 2
+    "UNIT_PRICE": 2.08,
+    "AVERAGE_PRICE": 88.54,
+    "FMV_PRICE": 175.00,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Glazing Bead": {
     "UNIT": "LF",
-    "RRC_COST": 1.43,
-    "INS_MAX_COST": 1.58,
-    "AVG_PRICE": 1.51,
-    "SAMPLES": 3
+    "UNIT_PRICE": 1.43,
+    "AVERAGE_PRICE": 1.51,
+    "FMV_PRICE": 1.58,
+    "SAMPLES": 3,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Reglaze Window 1-9sf": {
     "UNIT": "CT",
-    "RRC_COST": 49.65,
-    "INS_MAX_COST": 49.65,
-    "AVG_PRICE": 49.65,
-    "SAMPLES": 1
+    "UNIT_PRICE": 49.65,
+    "AVERAGE_PRICE": 49.65,
+    "FMV_PRICE": 49.65,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Reglaze Window 17-25sf": {
     "UNIT": "CT",
-    "RRC_COST": 132.4,
-    "INS_MAX_COST": 132.4,
-    "AVG_PRICE": 132.4,
-    "SAMPLES": 1
+    "UNIT_PRICE": 132.40,
+    "AVERAGE_PRICE": 132.40,
+    "FMV_PRICE": 132.40,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Reglaze Double Pane Window": {
     "UNIT": "CT",
-    "RRC_COST": 97.46,
-    "INS_MAX_COST": 97.46,
-    "AVG_PRICE": 97.46,
-    "SAMPLES": 2
+    "UNIT_PRICE": 97.46,
+    "AVERAGE_PRICE": 97.46,
+    "FMV_PRICE": 97.46,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Screen": {
     "UNIT": "SF",
-    "RRC_COST": 2.12,
-    "INS_MAX_COST": 2.12,
-    "AVG_PRICE": 2.12,
-    "SAMPLES": 1
+    "UNIT_PRICE": 2.12,
+    "AVERAGE_PRICE": 2.12,
+    "FMV_PRICE": 2.12,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Replace Screen": {
     "UNIT": "SF",
-    "RRC_COST": 20.1,
-    "INS_MAX_COST": 27.29,
-    "AVG_PRICE": 23.96,
-    "SAMPLES": 6
+    "UNIT_PRICE": 20.10,
+    "AVERAGE_PRICE": 23.70,
+    "FMV_PRICE": 27.29,
+    "SAMPLES": 6,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Sunscreen": {
     "UNIT": "SF",
-    "RRC_COST": 1.15,
-    "INS_MAX_COST": 1.15,
-    "AVG_PRICE": 1.15,
-    "SAMPLES": 1
+    "UNIT_PRICE": 1.15,
+    "AVERAGE_PRICE": 1.15,
+    "FMV_PRICE": 1.15,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Shutters": {
     "UNIT": "CT",
-    "RRC_COST": 103.91,
-    "INS_MAX_COST": 103.91,
-    "AVG_PRICE": 103.91,
-    "SAMPLES": 1
+    "UNIT_PRICE": 103.91,
+    "AVERAGE_PRICE": 103.91,
+    "FMV_PRICE": 103.91,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Wood Blinds": {
     "UNIT": "CT",
-    "RRC_COST": 72.2,
-    "INS_MAX_COST": 72.2,
-    "AVG_PRICE": 72.2,
-    "SAMPLES": 1
+    "UNIT_PRICE": 72.20,
+    "AVERAGE_PRICE": 72.20,
+    "FMV_PRICE": 72.20,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Detach/Reset Lockset": {
     "UNIT": "CT",
-    "RRC_COST": 19.14,
-    "INS_MAX_COST": 19.14,
-    "AVG_PRICE": 19.14,
-    "SAMPLES": 1
+    "UNIT_PRICE": 19.14,
+    "AVERAGE_PRICE": 19.14,
+    "FMV_PRICE": 19.14,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Storm Door": {
     "UNIT": "CT",
-    "RRC_COST": 118.69,
-    "INS_MAX_COST": 118.74,
-    "AVG_PRICE": 118.72,
-    "SAMPLES": 2
+    "UNIT_PRICE": 118.69,
+    "AVERAGE_PRICE": 118.72,
+    "FMV_PRICE": 118.74,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Post": {
     "UNIT": "CT",
-    "RRC_COST": 8.4,
-    "INS_MAX_COST": 8.4,
-    "AVG_PRICE": 8.4,
-    "SAMPLES": 1
+    "UNIT_PRICE": 8.40,
+    "AVERAGE_PRICE": 8.40,
+    "FMV_PRICE": 8.40,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Replace Post": {
     "UNIT": "CT",
-    "RRC_COST": 44.39,
-    "INS_MAX_COST": 52.79,
-    "AVG_PRICE": 48.59,
-    "SAMPLES": 2
+    "UNIT_PRICE": 44.39,
+    "AVERAGE_PRICE": 48.59,
+    "FMV_PRICE": 52.79,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Detach & Reset": {
     "UNIT": "8FT PC",
-    "RRC_COST": 47.92,
-    "INS_MAX_COST": 47.92,
-    "AVG_PRICE": 47.92,
-    "SAMPLES": 1
+    "UNIT_PRICE": 47.92,
+    "AVERAGE_PRICE": 47.92,
+    "FMV_PRICE": 47.92,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R & R Wood Fence 6\"": {
     "UNIT": "LF",
-    "RRC_COST": 26.43,
-    "INS_MAX_COST": 26.43,
-    "AVG_PRICE": 26.43,
-    "SAMPLES": 1
+    "UNIT_PRICE": 26.43,
+    "AVERAGE_PRICE": 26.43,
+    "FMV_PRICE": 26.43,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Wood Slat": {
     "UNIT": "CT",
-    "RRC_COST": 4.81,
-    "INS_MAX_COST": 4.81,
-    "AVG_PRICE": 4.81,
-    "SAMPLES": 1
+    "UNIT_PRICE": 4.81,
+    "AVERAGE_PRICE": 4.81,
+    "FMV_PRICE": 4.81,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Lattice": {
     "UNIT": "SF",
-    "RRC_COST": 3.2,
-    "INS_MAX_COST": 3.2,
-    "AVG_PRICE": 3.2,
-    "SAMPLES": 1
+    "UNIT_PRICE": 3.20,
+    "AVERAGE_PRICE": 3.20,
+    "FMV_PRICE": 3.20,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Power Wash": {
     "UNIT": "SF",
-    "RRC_COST": 0.2,
-    "INS_MAX_COST": 0.2,
-    "AVG_PRICE": 0.2,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.20,
+    "AVERAGE_PRICE": 0.20,
+    "FMV_PRICE": 0.20,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Seal/Paint": {
     "UNIT": "SF",
-    "RRC_COST": 0.7,
-    "INS_MAX_COST": 0.87,
-    "AVG_PRICE": 0.78,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.70,
+    "AVERAGE_PRICE": 0.79,
+    "FMV_PRICE": 0.87,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Drywall Patch/Repair": {
     "UNIT": "CT",
-    "RRC_COST": 39.3,
-    "INS_MAX_COST": 39.3,
-    "AVG_PRICE": 39.3,
-    "SAMPLES": 1
+    "UNIT_PRICE": 39.30,
+    "AVERAGE_PRICE": 39.30,
+    "FMV_PRICE": 39.30,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Popcorn Texture": {
     "UNIT": "SF",
-    "RRC_COST": 0.9,
-    "INS_MAX_COST": 0.9,
-    "AVG_PRICE": 0.9,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.90,
+    "AVERAGE_PRICE": 0.90,
+    "FMV_PRICE": 0.90,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Texture Drywall": {
     "UNIT": "SF",
-    "RRC_COST": 0.23,
-    "INS_MAX_COST": 0.34,
-    "AVG_PRICE": 0.29,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.23,
+    "AVERAGE_PRICE": 0.29,
+    "FMV_PRICE": 0.34,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Blown-In Insulation": {
     "UNIT": "SF",
-    "RRC_COST": 0.92,
-    "INS_MAX_COST": 0.92,
-    "AVG_PRICE": 0.92,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.92,
+    "AVERAGE_PRICE": 0.92,
+    "FMV_PRICE": 0.92,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Prime/Paint Walls": {
     "UNIT": "SF",
-    "RRC_COST": 0.7,
-    "INS_MAX_COST": 1.45,
-    "AVG_PRICE": 1.07,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.70,
+    "AVERAGE_PRICE": 1.08,
+    "FMV_PRICE": 1.45,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Clean Carpet": {
     "UNIT": "SF",
-    "RRC_COST": 0.33,
-    "INS_MAX_COST": 0.33,
-    "AVG_PRICE": 0.33,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.33,
+    "AVERAGE_PRICE": 0.33,
+    "FMV_PRICE": 0.33,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Move & Reset Contents": {
     "UNIT": "CT",
-    "RRC_COST": 113.42,
-    "INS_MAX_COST": 113.42,
-    "AVG_PRICE": 113.42,
-    "SAMPLES": 1
+    "UNIT_PRICE": 113.42,
+    "AVERAGE_PRICE": 113.42,
+    "FMV_PRICE": 113.42,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Tape & Float 5/8\" Drywall": {
     "UNIT": "SF",
-    "RRC_COST": 0.96,
-    "INS_MAX_COST": 1.37,
-    "AVG_PRICE": 1.17,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.96,
+    "AVERAGE_PRICE": 1.17,
+    "FMV_PRICE": 1.37,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Clean Floor": {
     "UNIT": "SF",
-    "RRC_COST": 0.44,
-    "INS_MAX_COST": 0.44,
-    "AVG_PRICE": 0.44,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.44,
+    "AVERAGE_PRICE": 0.44,
+    "FMV_PRICE": 0.44,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Light Fixture Repair": {
     "UNIT": "CT",
-    "RRC_COST": 68.68,
-    "INS_MAX_COST": 135,
-    "AVG_PRICE": 101.84,
-    "SAMPLES": 2
+    "UNIT_PRICE": 68.68,
+    "AVERAGE_PRICE": 101.84,
+    "FMV_PRICE": 135.00,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Light Fixture Material": {
     "UNIT": "CT",
-    "RRC_COST": 33.32,
-    "INS_MAX_COST": 33.32,
-    "AVG_PRICE": 33.32,
-    "SAMPLES": 1
+    "UNIT_PRICE": 33.32,
+    "AVERAGE_PRICE": 33.32,
+    "FMV_PRICE": 33.32,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Meter": {
     "UNIT": "CT",
-    "RRC_COST": 257.29,
-    "INS_MAX_COST": 257.29,
-    "AVG_PRICE": 257.29,
-    "SAMPLES": 1
+    "UNIT_PRICE": 257.29,
+    "AVERAGE_PRICE": 257.29,
+    "FMV_PRICE": 257.29,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Wood Flooring": {
     "UNIT": "SF",
-    "RRC_COST": 11.02,
-    "INS_MAX_COST": 11.02,
-    "AVG_PRICE": 11.02,
-    "SAMPLES": 1
+    "UNIT_PRICE": 11.02,
+    "AVERAGE_PRICE": 11.02,
+    "FMV_PRICE": 11.02,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Floor Glue": {
     "UNIT": "SF",
-    "RRC_COST": 1.73,
-    "INS_MAX_COST": 1.73,
-    "AVG_PRICE": 1.73,
-    "SAMPLES": 1
+    "UNIT_PRICE": 1.73,
+    "AVERAGE_PRICE": 1.73,
+    "FMV_PRICE": 1.73,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Floor Moulding": {
     "UNIT": "LF",
-    "RRC_COST": 4.94,
-    "INS_MAX_COST": 4.94,
-    "AVG_PRICE": 4.94,
-    "SAMPLES": 1
+    "UNIT_PRICE": 4.94,
+    "AVERAGE_PRICE": 4.94,
+    "FMV_PRICE": 4.94,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Remove Carpet": {
     "UNIT": "SF",
-    "RRC_COST": 0.15,
-    "INS_MAX_COST": 0.15,
-    "AVG_PRICE": 0.15,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.15,
+    "AVERAGE_PRICE": 0.15,
+    "FMV_PRICE": 0.15,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Pad": {
     "UNIT": "SF",
-    "RRC_COST": 0.64,
-    "INS_MAX_COST": 0.64,
-    "AVG_PRICE": 0.64,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.64,
+    "AVERAGE_PRICE": 0.64,
+    "FMV_PRICE": 0.64,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Install Carpet": {
     "UNIT": "SF",
-    "RRC_COST": 2.61,
-    "INS_MAX_COST": 2.61,
-    "AVG_PRICE": 2.61,
-    "SAMPLES": 1
+    "UNIT_PRICE": 2.61,
+    "AVERAGE_PRICE": 2.61,
+    "FMV_PRICE": 2.61,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Latex Seal": {
     "UNIT": "SF",
-    "RRC_COST": 0.35,
-    "INS_MAX_COST": 0.35,
-    "AVG_PRICE": 0.35,
-    "SAMPLES": 1
+    "UNIT_PRICE": 0.35,
+    "AVERAGE_PRICE": 0.35,
+    "FMV_PRICE": 0.35,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Detach/Rehang Garage Door": {
     "UNIT": "CT",
-    "RRC_COST": 1314.43,
-    "INS_MAX_COST": 1314.43,
-    "AVG_PRICE": 1314.43,
-    "SAMPLES": 1
+    "UNIT_PRICE": 1314.43,
+    "AVERAGE_PRICE": 1314.43,
+    "FMV_PRICE": 1314.43,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Garage Door Jamb & Trim": {
     "UNIT": "CT",
-    "RRC_COST": 5.41,
-    "INS_MAX_COST": 5.41,
-    "AVG_PRICE": 5.41,
-    "SAMPLES": 1
+    "UNIT_PRICE": 5.41,
+    "AVERAGE_PRICE": 5.41,
+    "FMV_PRICE": 5.41,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Paint Garage Door, Jamb & Trim": {
     "UNIT": "CT",
-    "RRC_COST": 74.16,
-    "INS_MAX_COST": 74.16,
-    "AVG_PRICE": 74.16,
-    "SAMPLES": 1
+    "UNIT_PRICE": 74.16,
+    "AVERAGE_PRICE": 74.16,
+    "FMV_PRICE": 74.16,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Stucco": {
     "UNIT": "SF",
-    "RRC_COST": 5.35,
-    "INS_MAX_COST": 5.35,
-    "AVG_PRICE": 5.35,
-    "SAMPLES": 1
+    "UNIT_PRICE": 5.35,
+    "AVERAGE_PRICE": 5.35,
+    "FMV_PRICE": 5.35,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Stucco Patch": {
     "UNIT": "CT",
-    "RRC_COST": 107.65,
-    "INS_MAX_COST": 107.65,
-    "AVG_PRICE": 107.65,
-    "SAMPLES": 1
+    "UNIT_PRICE": 107.65,
+    "AVERAGE_PRICE": 107.65,
+    "FMV_PRICE": 107.65,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Stucco Trim": {
     "UNIT": "LF",
-    "RRC_COST": 3.44,
-    "INS_MAX_COST": 3.44,
-    "AVG_PRICE": 3.44,
-    "SAMPLES": 1
+    "UNIT_PRICE": 3.44,
+    "AVERAGE_PRICE": 3.44,
+    "FMV_PRICE": 3.44,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Stucco Color (redash - coarse)": {
     "UNIT": "SF",
-    "RRC_COST": 1.59,
-    "INS_MAX_COST": 2.08,
-    "AVG_PRICE": 1.83,
-    "SAMPLES": 2
+    "UNIT_PRICE": 1.59,
+    "AVERAGE_PRICE": 1.84,
+    "FMV_PRICE": 2.08,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "Stucco Fog Coat": {
     "UNIT": "SF",
-    "RRC_COST": 0.58,
-    "INS_MAX_COST": 0.81,
-    "AVG_PRICE": 0.7,
-    "SAMPLES": 2
+    "UNIT_PRICE": 0.58,
+    "AVERAGE_PRICE": 0.70,
+    "FMV_PRICE": 0.81,
+    "SAMPLES": 2,
+    "LAST_UPDATED": "2025-12-04"
   },
   "R&R Brick": {
     "UNIT": "SF",
-    "RRC_COST": 8.87,
-    "INS_MAX_COST": 8.87,
-    "AVG_PRICE": 8.87,
-    "SAMPLES": 1
+    "UNIT_PRICE": 8.87,
+    "AVERAGE_PRICE": 8.87,
+    "FMV_PRICE": 8.87,
+    "SAMPLES": 1,
+    "LAST_UPDATED": "2025-12-04"
   }
 }

@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, AlertTriangle, AlertCircle, Info, TrendingDown, TrendingUp, XCircle, HelpCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle, Info, TrendingDown, TrendingUp, XCircle, HelpCircle, DollarSign } from "lucide-react";
 import type { AuditResult, AuditStatus, AuditSeverity, PriceAuditResult } from "@shared/priceAudit";
 
 interface PriceAuditBadgeProps {
@@ -8,8 +8,8 @@ interface PriceAuditBadgeProps {
   showDetails?: boolean;
 }
 
-const severityStyles: Record<AuditSeverity | 'success', { badge: string; icon: typeof CheckCircle2 }> = {
-  none: { badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", icon: CheckCircle2 },
+const severityStyles: Record<AuditSeverity, { badge: string; icon: typeof CheckCircle2 }> = {
+  none: { badge: "bg-slate-500/20 text-slate-400 border-slate-500/30", icon: CheckCircle2 },
   success: { badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", icon: CheckCircle2 },
   warning: { badge: "bg-amber-500/20 text-amber-400 border-amber-500/30", icon: AlertTriangle },
   error: { badge: "bg-red-500/20 text-red-400 border-red-500/30", icon: AlertCircle },
@@ -18,19 +18,19 @@ const severityStyles: Record<AuditSeverity | 'success', { badge: string; icon: t
 
 const statusLabels: Record<AuditStatus, string> = {
   PASS: "Price OK",
-  LOW_FLAG: "Below RRC Min",
-  HIGH_FLAG: "Above Insurer Max",
+  LOW: "Underpaid",
+  FMV: "Fair Value",
   MISSING_ITEM: "Not Found",
   INVALID_QUANTITY: "Invalid Qty"
 };
 
 function isV2Audit(audit: AuditResult | PriceAuditResult): audit is AuditResult {
-  return 'status' in audit && ['PASS', 'LOW_FLAG', 'HIGH_FLAG', 'MISSING_ITEM', 'INVALID_QUANTITY'].includes((audit as AuditResult).status);
+  return 'status' in audit && ['PASS', 'LOW', 'FMV', 'MISSING_ITEM', 'INVALID_QUANTITY'].includes((audit as AuditResult).status);
 }
 
 export default function PriceAuditBadge({ audit, showDetails = true }: PriceAuditBadgeProps) {
   if (isV2Audit(audit)) {
-    const { status, severity, message, pricing, unit, quantity, subtotal, subtotalDifference, suggestions } = audit;
+    const { status, severity, message, marketPricing, unit, enteredQty, subtotal, underpaymentOpportunity, suggestions } = audit;
     const style = severityStyles[severity] || severityStyles.info;
     const Icon = style.icon;
 
@@ -84,26 +84,26 @@ export default function PriceAuditBadge({ audit, showDetails = true }: PriceAudi
                 <Icon className="w-3 h-3 mr-1" />
                 {statusLabels[status]}
               </Badge>
-              {showDetails && pricing && (
+              {showDetails && marketPricing && (
                 <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-0.5">
                     <TrendingDown className="w-3 h-3" />
-                    ${pricing.rrcMin.toFixed(2)}
+                    ${marketPricing.unitPrice.toFixed(2)}
                   </span>
-                  <span className="font-medium text-foreground">~${pricing.average.toFixed(2)}</span>
-                  <span className="flex items-center gap-0.5">
+                  <span className="font-medium text-foreground">~${marketPricing.averagePrice.toFixed(2)}</span>
+                  <span className="flex items-center gap-0.5 text-emerald-400">
                     <TrendingUp className="w-3 h-3" />
-                    ${pricing.insMax.toFixed(2)}
+                    ${marketPricing.fmvPrice.toFixed(2)}
                   </span>
                   {unit && <span className="text-muted-foreground">/{unit}</span>}
                 </div>
               )}
-              {showDetails && subtotal && quantity && (
+              {showDetails && subtotal > 0 && enteredQty > 0 && (
                 <div className="text-[10px] text-muted-foreground">
-                  Subtotal: ${subtotal} ({quantity} {unit})
-                  {subtotalDifference && parseFloat(subtotalDifference) !== 0 && (
-                    <span className={parseFloat(subtotalDifference) < 0 ? "text-amber-400 ml-1" : "text-emerald-400 ml-1"}>
-                      ({parseFloat(subtotalDifference) > 0 ? '+' : ''}{subtotalDifference})
+                  Subtotal: ${subtotal.toFixed(2)} ({enteredQty} {unit})
+                  {underpaymentOpportunity > 0 && (
+                    <span className="text-green-500 ml-1 font-medium">
+                      (+${underpaymentOpportunity.toFixed(2)} opportunity)
                     </span>
                   )}
                 </div>
@@ -113,16 +113,19 @@ export default function PriceAuditBadge({ audit, showDetails = true }: PriceAudi
           <TooltipContent className="max-w-xs">
             <div className="space-y-2 text-xs">
               <p>{message}</p>
-              {pricing && (
+              {marketPricing && (
                 <>
-                  <p><strong>RRC Min:</strong> ${pricing.rrcMin.toFixed(2)}/{unit}</p>
-                  <p><strong>Insurer Max:</strong> ${pricing.insMax.toFixed(2)}/{unit}</p>
-                  <p><strong>Average:</strong> ${pricing.average.toFixed(2)}/{unit}</p>
-                  <p><strong>Your Price:</strong> ${pricing.entered.toFixed(2)}/{unit}</p>
+                  <p><strong>Floor (Min):</strong> ${marketPricing.unitPrice.toFixed(2)}/{unit}</p>
+                  <p><strong>Average:</strong> ${marketPricing.averagePrice.toFixed(2)}/{unit}</p>
+                  <p><strong>FMV (Max):</strong> ${marketPricing.fmvPrice.toFixed(2)}/{unit}</p>
+                  <p><strong>Your Price:</strong> ${audit.enteredPrice.toFixed(2)}/{unit}</p>
                 </>
               )}
-              {subtotal && (
-                <p><strong>Line Total:</strong> ${subtotal}</p>
+              {underpaymentOpportunity > 0 && (
+                <p className="text-green-400 font-medium">
+                  <DollarSign className="w-3 h-3 inline" />
+                  Uplift Opportunity: +${underpaymentOpportunity.toFixed(2)}
+                </p>
               )}
             </div>
           </TooltipContent>
@@ -190,7 +193,7 @@ export default function PriceAuditBadge({ audit, showDetails = true }: PriceAudi
               </p>
             )}
             {sampleSize !== undefined && (
-              <p className="text-muted-foreground">Based on {sampleSize} insurer quotes</p>
+              <p className="text-muted-foreground">Based on {sampleSize} claim samples</p>
             )}
           </div>
         </TooltipContent>

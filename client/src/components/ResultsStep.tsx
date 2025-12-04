@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Download, Mail, Printer, AlertTriangle, Info } from "lucide-react";
+import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Download, Mail, Printer, AlertTriangle, Info, DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,25 +89,25 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
 
   const getStatusBadge = (auditResult: AuditResult) => {
     switch (auditResult.status) {
-      case 'LOW_FLAG':
+      case 'LOW':
         return (
           <Badge variant="destructive" className="gap-1">
             <AlertTriangle className="w-3 h-3" />
             Underpaid
           </Badge>
         );
-      case 'HIGH_FLAG':
+      case 'FMV':
         return (
-          <Badge className="gap-1 bg-amber-500/20 text-amber-400 border-amber-500/30">
-            <AlertCircle className="w-3 h-3" />
-            Overpaid
+          <Badge className="gap-1 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+            <CheckCircle className="w-3 h-3" />
+            Fair Value
           </Badge>
         );
       case 'PASS':
         return (
           <Badge variant="secondary" className="gap-1 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
             <CheckCircle className="w-3 h-3" />
-            Fair Price
+            OK
           </Badge>
         );
       case 'MISSING_ITEM':
@@ -169,33 +169,36 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card className={batchAuditResults.flagBreakdown.lowFlags > 0 ? "border-amber-500/50" : ""}>
+        <Card className={batchAuditResults.flagBreakdown.low > 0 ? "border-amber-500/50" : ""}>
           <CardHeader className="pb-3">
             <CardDescription className="flex items-center gap-1">
               <TrendingDown className="w-3 h-3 text-amber-500" />
               Underpaid Items
             </CardDescription>
             <CardTitle className="text-2xl text-amber-500" data-testid="text-low-flags">
-              {batchAuditResults.flagBreakdown.lowFlags}
+              {batchAuditResults.flagBreakdown.low}
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card className={batchAuditResults.flagBreakdown.highFlags > 0 ? "border-red-500/50" : ""}>
+        <Card className={batchAuditResults.flagBreakdown.fmv > 0 ? "border-emerald-500/50" : ""}>
           <CardHeader className="pb-3">
             <CardDescription className="flex items-center gap-1">
-              <TrendingUp className="w-3 h-3 text-red-500" />
-              Overpaid Items
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
+              FMV Achieved
             </CardDescription>
-            <CardTitle className="text-2xl text-red-500" data-testid="text-high-flags">
-              {batchAuditResults.flagBreakdown.highFlags}
+            <CardTitle className="text-2xl text-emerald-500" data-testid="text-fmv-items">
+              {batchAuditResults.flagBreakdown.fmv}
             </CardTitle>
           </CardHeader>
         </Card>
         <Card className="border-2 border-green-600">
           <CardHeader className="pb-3">
-            <CardDescription>Potential Underpayment</CardDescription>
+            <CardDescription className="flex items-center gap-1">
+              <DollarSign className="w-3 h-3 text-green-600" />
+              Underpayment Opportunity
+            </CardDescription>
             <CardTitle className="text-2xl text-green-600" data-testid="text-underpayment">
-              ${batchAuditResults.potentialUnderpayment.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${batchAuditResults.totalUnderpaymentOpportunity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -213,21 +216,21 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
         </Card>
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Expected Market Value</CardDescription>
-            <CardTitle className="text-2xl text-primary" data-testid="text-expected-value">
-              ${batchAuditResults.totalExpectedValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <CardDescription>Fair Market Value Total</CardDescription>
+            <CardTitle className="text-2xl text-primary" data-testid="text-fmv-total">
+              ${batchAuditResults.totalFmvValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card className={batchAuditResults.variance < 0 ? "border-amber-500" : ""}>
+        <Card className={batchAuditResults.totalUnderpaymentOpportunity > 0 ? "border-green-500" : ""}>
           <CardHeader className="pb-3">
-            <CardDescription>Variance from Market</CardDescription>
-            <CardTitle className={`text-2xl flex items-center gap-2 ${batchAuditResults.variance < 0 ? 'text-amber-500' : 'text-emerald-500'}`} data-testid="text-variance">
-              {batchAuditResults.variance < 0 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
-              ${Math.abs(batchAuditResults.variance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <CardDescription>You Could Claim More</CardDescription>
+            <CardTitle className={`text-2xl flex items-center gap-2 ${batchAuditResults.totalUnderpaymentOpportunity > 0 ? 'text-green-500' : 'text-emerald-500'}`} data-testid="text-opportunity">
+              {batchAuditResults.totalUnderpaymentOpportunity > 0 && <TrendingUp className="w-5 h-5" />}
+              +${batchAuditResults.totalUnderpaymentOpportunity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              {batchAuditResults.variance < 0 ? 'Below market average' : 'Above market average'}
+              {batchAuditResults.totalUnderpaymentOpportunity > 0 ? 'Total uplift opportunity to FMV' : 'All items at fair market value'}
             </p>
           </CardHeader>
         </Card>
@@ -238,7 +241,7 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
         <CardHeader>
           <CardTitle>Price Audit Results</CardTitle>
           <CardDescription>
-            Unit price comparison against RRC contractor minimum and insurer maximum rates
+            Unit price comparison: UNIT_PRICE (floor) to FMV_PRICE (ceiling)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -247,11 +250,12 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
-                  <TableHead className="text-right">Unit Price</TableHead>
-                  <TableHead className="text-right">RRC Min</TableHead>
-                  <TableHead className="text-right">Ins Max</TableHead>
+                  <TableHead className="text-right">Your Price</TableHead>
+                  <TableHead className="text-right">Floor</TableHead>
+                  <TableHead className="text-right">FMV</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead className="text-right">Opportunity</TableHead>
                   <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -265,19 +269,28 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {result.pricing ? `$${result.pricing.entered.toFixed(2)}` : '-'}
+                      {result.enteredPrice > 0 ? `$${result.enteredPrice.toFixed(2)}` : '-'}
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">
-                      {result.pricing ? `$${result.pricing.rrcMin.toFixed(2)}` : '-'}
+                      {result.marketPricing ? `$${result.marketPricing.unitPrice.toFixed(2)}` : '-'}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {result.pricing ? `$${result.pricing.insMax.toFixed(2)}` : '-'}
+                    <TableCell className="text-right text-emerald-400">
+                      {result.marketPricing ? `$${result.marketPricing.fmvPrice.toFixed(2)}` : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {result.quantity?.toFixed(2) || '-'}
+                      {result.enteredQty > 0 ? result.enteredQty.toFixed(2) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {result.subtotal > 0 ? `$${result.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {result.underpaymentOpportunity > 0 ? (
+                        <span className="text-green-500 font-medium">
+                          +${result.underpaymentOpportunity.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {getStatusBadge(result)}

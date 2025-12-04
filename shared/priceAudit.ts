@@ -2,76 +2,80 @@ import priceDB from './priceDB.json';
 
 /**
  * MaxClaim Audit Engine v2.0
- * Enforces RRC_COST/INS_MAX_COST min/max flags and quantity validation
- * Compares UNIT PRICES (not totals) against database ranges
+ * Dynamic Market Pricing System
+ * 
+ * UNIT_PRICE = Lowest price from ALL claims (Contractor floor)
+ * FMV_PRICE = Highest price from ALL claims (Insurer ceiling/uplift target)
+ * AVERAGE_PRICE = (UNIT_PRICE + FMV_PRICE) / 2 (Fair market midpoint)
+ * 
+ * Badge Logic:
+ * - LOW = Price < FMV_PRICE (underpaid opportunity - can claim more)
+ * - FMV = Price >= FMV_PRICE (fair market value achieved)
  */
 
-// New v2.0 status types
 export type AuditStatus = 
   | 'PASS'
-  | 'LOW_FLAG'
-  | 'HIGH_FLAG'
+  | 'LOW'
+  | 'FMV'
   | 'MISSING_ITEM'
   | 'INVALID_QUANTITY';
 
-export type AuditSeverity = 'none' | 'warning' | 'error' | 'info';
+export type AuditSeverity = 'none' | 'warning' | 'error' | 'info' | 'success';
 
-// New v2.0 pricing structure from priceDB
 export interface PriceDBItem {
   UNIT: string;
-  RRC_COST: number;    // Contractor minimum (below this = underpaid)
-  INS_MAX_COST: number; // Insurer maximum (above this = overpaid)
-  AVG_PRICE: number;   // Average market price
-  SAMPLES: number;     // Number of data points
+  UNIT_PRICE: number;      // Lowest from all claims (Min/Floor)
+  AVERAGE_PRICE: number;   // Midpoint between min/max
+  FMV_PRICE: number;       // Highest from all claims (Max/Ceiling)
+  SAMPLES: number;
+  LAST_UPDATED?: string;
 }
 
-// Single item audit result
 export interface AuditResult {
   item: string;
   status: AuditStatus;
   message: string;
+  badges: string[];
   flagged: boolean;
   severity: AuditSeverity;
   unit?: string;
-  pricing?: {
-    rrcMin: number;
-    insMax: number;
-    average: number;
-    entered: number;
+  marketPricing?: {
+    unitPrice: number;      // Lowest market price (floor)
+    averagePrice: number;   // Midpoint
+    fmvPrice: number;       // Highest market price (ceiling)
   };
-  quantity?: number;
+  enteredPrice: number;
+  enteredQty: number;
   subtotal: number;
-  expectedSubtotal: number;
-  subtotalDifference: number;
+  fmvSubtotal: number;
+  avgSubtotal: number;
+  underpaymentOpportunity: number;
   subtotalString?: string;
-  expectedSubtotalString?: string;
-  subtotalDifferenceString?: string;
+  fmvSubtotalString?: string;
+  underpaymentString?: string;
   suggestions?: string[];
 }
 
-// Batch audit summary
 export interface BatchAuditResult {
   totalItems: number;
   flaggedItems: number;
-  passedItems: number;
+  fmvItems: number;
+  lowItems: number;
   totalClaimValue: number;
-  totalExpectedValue: number;
-  variance: number;
-  potentialUnderpayment: number;
+  totalFmvValue: number;
+  totalUnderpaymentOpportunity: number;
   totalClaimValueString: string;
-  totalExpectedValueString: string;
-  varianceString: string;
-  potentialUnderpaymentString: string;
+  totalFmvValueString: string;
+  totalUnderpaymentString: string;
   flagBreakdown: {
-    lowFlags: number;
-    highFlags: number;
+    low: number;
+    fmv: number;
     missing: number;
     invalid: number;
   };
   results: AuditResult[];
 }
 
-// Legacy types for backward compatibility
 export type AuditFlag = 
   | 'OK'
   | 'Below market minimum'
@@ -95,11 +99,8 @@ export interface PriceAuditResult {
   sampleSize?: number;
 }
 
-const typedPriceDB = priceDB as Record<string, PriceDBItem>;
+let typedPriceDB = priceDB as Record<string, PriceDBItem>;
 
-/**
- * Helper: Find similar items using fuzzy matching
- */
 function getSimilarItems(searchTerm: string): string[] {
   const items = Object.keys(typedPriceDB);
   const searchWords = searchTerm.toLowerCase().split(' ');
@@ -112,20 +113,15 @@ function getSimilarItems(searchTerm: string): string[] {
     .slice(0, 3);
 }
 
-/**
- * Fuzzy match item names
- */
 function fuzzyMatch(itemName: string): string | undefined {
   const normalizedInput = itemName.toLowerCase().trim();
   
-  // Exact match first
   for (const key of Object.keys(typedPriceDB)) {
     if (key.toLowerCase() === normalizedInput) {
       return key;
     }
   }
   
-  // Partial match
   for (const key of Object.keys(typedPriceDB)) {
     const normalizedKey = key.toLowerCase();
     if (normalizedKey.includes(normalizedInput) || normalizedInput.includes(normalizedKey)) {
@@ -137,8 +133,52 @@ function fuzzyMatch(itemName: string): string | undefined {
 }
 
 /**
- * Audit single claim item (v2.0)
- * Compares UNIT PRICE against RRC_COST/INS_MAX_COST range
+ * Updates priceDB when new claim data comes in
+ * Single high/low price can shift the entire market range
+ */
+export function updateMarketPrice(
+  itemName: string, 
+  newPrice: number, 
+  unit: string = 'SQ',
+  source: string = 'claim'
+): PriceDBItem {
+  const normalizedItemName = itemName.trim();
+  let itemData = typedPriceDB[normalizedItemName];
+  
+  if (!itemData) {
+    typedPriceDB[normalizedItemName] = {
+      UNIT: unit,
+      UNIT_PRICE: newPrice,
+      AVERAGE_PRICE: newPrice,
+      FMV_PRICE: newPrice,
+      SAMPLES: 1,
+      LAST_UPDATED: new Date().toISOString().split('T')[0]
+    };
+    console.log(`📊 New item ${normalizedItemName}: $${newPrice}/${unit}`);
+    return typedPriceDB[normalizedItemName];
+  }
+
+  const currentMin = itemData.UNIT_PRICE;
+  const currentMax = itemData.FMV_PRICE;
+  
+  itemData.UNIT_PRICE = Math.min(currentMin, newPrice);
+  itemData.FMV_PRICE = Math.max(currentMax, newPrice);
+  itemData.AVERAGE_PRICE = (itemData.UNIT_PRICE + itemData.FMV_PRICE) / 2;
+  itemData.SAMPLES = (itemData.SAMPLES || 0) + 1;
+  itemData.LAST_UPDATED = new Date().toISOString().split('T')[0];
+  
+  console.log(`📊 Updated ${normalizedItemName}: $${currentMin}→$${itemData.UNIT_PRICE} | $${currentMax}→$${itemData.FMV_PRICE}`);
+  
+  return itemData;
+}
+
+/**
+ * Audit single claim item
+ * Compares entered price against dynamic market range
+ * 
+ * Badge Logic:
+ * - LOW = Price < FMV_PRICE (underpaid - opportunity to claim more)
+ * - FMV = Price >= FMV_PRICE (fair market value achieved)
  */
 export function auditClaimItem(
   itemName: string,
@@ -148,84 +188,93 @@ export function auditClaimItem(
   const normalizedItemName = itemName.trim();
   const matchedKey = fuzzyMatch(normalizedItemName);
   
-  // MISSING ITEM CHECK
   if (!matchedKey) {
     return {
       item: itemName,
       status: 'MISSING_ITEM',
       message: `"${itemName}" not found in MaxClaim database`,
+      badges: [],
       flagged: true,
       severity: 'info',
+      enteredPrice: 0,
+      enteredQty: 0,
       subtotal: 0,
-      expectedSubtotal: 0,
-      subtotalDifference: 0,
+      fmvSubtotal: 0,
+      avgSubtotal: 0,
+      underpaymentOpportunity: 0,
       suggestions: getSimilarItems(itemName)
     };
   }
 
   const itemData = typedPriceDB[matchedKey];
-  const { UNIT, RRC_COST, INS_MAX_COST, AVG_PRICE } = itemData;
+  const { UNIT, UNIT_PRICE, AVERAGE_PRICE, FMV_PRICE } = itemData;
 
-  // QUANTITY VALIDATION (MUST BE > 0)
   if (!enteredQty || enteredQty <= 0 || !Number.isFinite(enteredQty)) {
     return {
       item: itemName,
       status: 'INVALID_QUANTITY',
       message: `Quantity must be > 0 (received: ${enteredQty})`,
+      badges: [],
       flagged: true,
       severity: 'error',
       unit: UNIT,
+      enteredPrice: 0,
+      enteredQty: 0,
       subtotal: 0,
-      expectedSubtotal: 0,
-      subtotalDifference: 0
+      fmvSubtotal: 0,
+      avgSubtotal: 0,
+      underpaymentOpportunity: 0
     };
   }
 
-  // PRICE AUDIT (RRC_COST vs INS_MAX_COST)
+  const badges: string[] = [];
   let status: AuditStatus = 'PASS';
-  let message = `Price $${enteredPrice.toFixed(2)} within acceptable range`;
+  let message = '';
   let flagged = false;
   let severity: AuditSeverity = 'none';
 
-  if (enteredPrice < RRC_COST) {
-    status = 'LOW_FLAG';
+  const subtotal = Math.round((enteredPrice * enteredQty) * 100) / 100;
+  const fmvSubtotal = Math.round((FMV_PRICE * enteredQty) * 100) / 100;
+  const avgSubtotal = Math.round((AVERAGE_PRICE * enteredQty) * 100) / 100;
+  const underpaymentOpportunity = Math.round((fmvSubtotal - subtotal) * 100) / 100;
+
+  if (enteredPrice >= FMV_PRICE) {
+    status = 'FMV';
+    badges.push('FMV');
+    severity = 'success';
+    message = `Fair Market Value achieved: $${enteredPrice.toFixed(2)} >= $${FMV_PRICE.toFixed(2)}/${UNIT}`;
+    flagged = false;
+  } else {
+    status = 'LOW';
+    badges.push('LOW');
     severity = 'warning';
-    const difference = (RRC_COST - enteredPrice).toFixed(2);
-    message = `BELOW RRC MINIMUM: $${enteredPrice.toFixed(2)} < $${RRC_COST.toFixed(2)} (Losing $${difference}/${UNIT})`;
-    flagged = true;
-  } else if (enteredPrice > INS_MAX_COST) {
-    status = 'HIGH_FLAG';
-    severity = 'error';
-    const overage = (enteredPrice - INS_MAX_COST).toFixed(2);
-    message = `ABOVE INSURER MAX: $${enteredPrice.toFixed(2)} > $${INS_MAX_COST.toFixed(2)} (Overpaid $${overage}/${UNIT})`;
+    const uplift = (FMV_PRICE - enteredPrice).toFixed(2);
+    message = `Underpaid: $${enteredPrice.toFixed(2)} < $${FMV_PRICE.toFixed(2)}/${UNIT} (Opportunity: +$${uplift}/${UNIT})`;
     flagged = true;
   }
 
-  // Calculate subtotals and variance (keep as numbers for accurate aggregation)
-  const subtotal = Math.round((enteredPrice * enteredQty) * 100) / 100;
-  const expectedSubtotal = Math.round((AVG_PRICE * enteredQty) * 100) / 100;
-  const subtotalDifference = Math.round((subtotal - expectedSubtotal) * 100) / 100;
-
   return {
-    item: itemName,
+    item: matchedKey,
     status,
     message,
+    badges,
     flagged,
     severity,
     unit: UNIT,
-    pricing: {
-      rrcMin: RRC_COST,
-      insMax: INS_MAX_COST,
-      average: AVG_PRICE,
-      entered: Math.round(enteredPrice * 100) / 100
+    marketPricing: {
+      unitPrice: UNIT_PRICE,
+      averagePrice: AVERAGE_PRICE,
+      fmvPrice: FMV_PRICE
     },
-    quantity: Math.round(enteredQty * 100) / 100,
+    enteredPrice: Math.round(enteredPrice * 100) / 100,
+    enteredQty: Math.round(enteredQty * 100) / 100,
     subtotal,
-    expectedSubtotal,
-    subtotalDifference,
+    fmvSubtotal,
+    avgSubtotal,
+    underpaymentOpportunity: Math.max(0, underpaymentOpportunity),
     subtotalString: subtotal.toFixed(2),
-    expectedSubtotalString: expectedSubtotal.toFixed(2),
-    subtotalDifferenceString: subtotalDifference.toFixed(2)
+    fmvSubtotalString: fmvSubtotal.toFixed(2),
+    underpaymentString: Math.max(0, underpaymentOpportunity).toFixed(2)
   };
 }
 
@@ -239,43 +288,32 @@ export function auditBatch(
     auditClaimItem(item.name, item.price, item.qty)
   );
   
+  const lowItems = results.filter(r => r.status === 'LOW');
+  const fmvItems = results.filter(r => r.status === 'FMV');
   const flaggedItems = results.filter(r => r.flagged);
   
-  // Use numeric values directly (subtotal is now a number, not a string)
   const totalClaimValue = results.reduce((sum, r) => sum + (r.subtotal || 0), 0);
-  const totalExpectedValue = results.reduce((sum, r) => sum + (r.expectedSubtotal || 0), 0);
+  const totalFmvValue = results.reduce((sum, r) => sum + (r.fmvSubtotal || 0), 0);
+  const totalUnderpaymentOpportunity = results.reduce((sum, r) => sum + (r.underpaymentOpportunity || 0), 0);
   
-  // For LOW_FLAG items: calculate expected value - actual value (should be positive)
-  // This represents how much more the contractor should have charged
-  const potentialUnderpayment = results
-    .filter(r => r.status === 'LOW_FLAG')
-    .reduce((sum, r) => {
-      // For underpaid items: expected is higher than actual, so difference is negative
-      // We want the absolute value to show how much is being lost
-      return sum + Math.abs(r.subtotalDifference || 0);
-    }, 0);
-  
-  // Round final values
   const totalClaimValueRounded = Math.round(totalClaimValue * 100) / 100;
-  const totalExpectedValueRounded = Math.round(totalExpectedValue * 100) / 100;
-  const varianceRounded = Math.round((totalClaimValue - totalExpectedValue) * 100) / 100;
-  const potentialUnderpaymentRounded = Math.round(potentialUnderpayment * 100) / 100;
+  const totalFmvValueRounded = Math.round(totalFmvValue * 100) / 100;
+  const totalUnderpaymentRounded = Math.round(totalUnderpaymentOpportunity * 100) / 100;
 
   return {
     totalItems: results.length,
     flaggedItems: flaggedItems.length,
-    passedItems: results.length - flaggedItems.length,
+    fmvItems: fmvItems.length,
+    lowItems: lowItems.length,
     totalClaimValue: totalClaimValueRounded,
-    totalExpectedValue: totalExpectedValueRounded,
-    variance: varianceRounded,
-    potentialUnderpayment: potentialUnderpaymentRounded,
+    totalFmvValue: totalFmvValueRounded,
+    totalUnderpaymentOpportunity: totalUnderpaymentRounded,
     totalClaimValueString: totalClaimValueRounded.toFixed(2),
-    totalExpectedValueString: totalExpectedValueRounded.toFixed(2),
-    varianceString: varianceRounded.toFixed(2),
-    potentialUnderpaymentString: potentialUnderpaymentRounded.toFixed(2),
+    totalFmvValueString: totalFmvValueRounded.toFixed(2),
+    totalUnderpaymentString: totalUnderpaymentRounded.toFixed(2),
     flagBreakdown: {
-      lowFlags: results.filter(r => r.status === 'LOW_FLAG').length,
-      highFlags: results.filter(r => r.status === 'HIGH_FLAG').length,
+      low: lowItems.length,
+      fmv: fmvItems.length,
       missing: results.filter(r => r.status === 'MISSING_ITEM').length,
       invalid: results.filter(r => r.status === 'INVALID_QUANTITY').length
     },
@@ -283,7 +321,21 @@ export function auditBatch(
   };
 }
 
-// Legacy function for backward compatibility
+/**
+ * Process entire claim and update market prices
+ */
+export function processClaimAndUpdatePrices(
+  items: Array<{ name: string; price: number; qty: number; unit?: string }>
+): BatchAuditResult {
+  items.forEach(item => {
+    if (item.price > 0 && item.qty > 0) {
+      updateMarketPrice(item.name, item.price, item.unit || 'SQ', 'claim');
+    }
+  });
+  
+  return auditBatch(items);
+}
+
 export function auditClaimItemLegacy(itemName: string, userPrice: number): PriceAuditResult {
   const matchedKey = fuzzyMatch(itemName);
   
@@ -297,34 +349,34 @@ export function auditClaimItemLegacy(itemName: string, userPrice: number): Price
   }
   
   const priceData = typedPriceDB[matchedKey];
-  const { RRC_COST, INS_MAX_COST, AVG_PRICE, UNIT, SAMPLES } = priceData;
+  const { UNIT_PRICE, FMV_PRICE, AVERAGE_PRICE, UNIT, SAMPLES } = priceData;
   
   let flag: AuditFlag = 'OK';
   let severity: AuditSeverity = 'none';
   
-  if (userPrice < RRC_COST) {
+  if (userPrice < UNIT_PRICE) {
     flag = 'Below market minimum';
     severity = 'error';
-  } else if (userPrice > INS_MAX_COST) {
+  } else if (userPrice > FMV_PRICE) {
     flag = 'Above market maximum';
-    severity = 'warning';
-  } else if (userPrice < AVG_PRICE * 0.85) {
+    severity = 'success';
+  } else if (userPrice < AVERAGE_PRICE * 0.85) {
     flag = 'Significantly below average';
     severity = 'warning';
-  } else if (userPrice > AVG_PRICE * 1.15) {
+  } else if (userPrice > AVERAGE_PRICE * 1.15) {
     flag = 'Significantly above average';
     severity = 'info';
   }
   
-  const percentFromAvg = AVG_PRICE > 0 ? Number((((userPrice - AVG_PRICE) / AVG_PRICE) * 100).toFixed(1)) : 0;
+  const percentFromAvg = AVERAGE_PRICE > 0 ? Number((((userPrice - AVERAGE_PRICE) / AVERAGE_PRICE) * 100).toFixed(1)) : 0;
   
   return {
     item: itemName,
     matchedItem: matchedKey,
     userPrice,
-    min: RRC_COST,
-    avg: AVG_PRICE,
-    max: INS_MAX_COST,
+    min: UNIT_PRICE,
+    avg: AVERAGE_PRICE,
+    max: FMV_PRICE,
     unit: UNIT,
     flag,
     severity,
@@ -333,32 +385,28 @@ export function auditClaimItemLegacy(itemName: string, userPrice: number): Price
   };
 }
 
-/**
- * Get market data for an item
- */
 export function getMarketData(itemName: string): PriceDBItem | undefined {
   const matchedKey = fuzzyMatch(itemName);
   if (!matchedKey) return undefined;
   return typedPriceDB[matchedKey];
 }
 
-/**
- * Get all items for autocomplete
- */
-export function getAllItems(): Array<{ name: string; unit: string; avgPrice: number }> {
+export function getAllItems(): Array<{ name: string; unit: string; avgPrice: number; fmvPrice: number }> {
   return Object.entries(typedPriceDB).map(([name, data]) => ({
     name,
     unit: data.UNIT,
-    avgPrice: data.AVG_PRICE
+    avgPrice: data.AVERAGE_PRICE,
+    fmvPrice: data.FMV_PRICE
   }));
 }
 
-/**
- * Search items by query
- */
 export function searchItems(query: string): Array<{ name: string; data: PriceDBItem }> {
   const normalizedQuery = query.toLowerCase().trim();
   return Object.entries(typedPriceDB)
     .filter(([name]) => name.toLowerCase().includes(normalizedQuery))
     .map(([name, data]) => ({ name, data }));
+}
+
+export function getPriceDB(): Record<string, PriceDBItem> {
+  return typedPriceDB;
 }
