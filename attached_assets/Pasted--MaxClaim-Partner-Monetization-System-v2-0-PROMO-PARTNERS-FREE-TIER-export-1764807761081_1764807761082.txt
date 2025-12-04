@@ -1,0 +1,156 @@
+/**
+ * MaxClaim Partner & Monetization System v2.0
+ */
+
+// === PROMO PARTNERS (FREE TIER) ===
+export const PROMO_PARTNERS = [
+  { 
+    id: 'royal-roofing',
+    name: "Royal Roofing Construction", 
+    category: "Roofing", 
+    location: "Austin, TX",
+    website: "https://royalrc.com",
+    phone: "(512) 555-0100",
+    email: "info@royalrc.com",
+    tier: "premium",
+    free: true,
+    featured: true,
+    expiresAt: "2026-12-31"
+  },
+  { 
+    id: 'paint-pros',
+    name: "Paint Pros Austin", 
+    category: "Painting", 
+    location: "Austin, TX",
+    website: "https://paintprosaustin.com",
+    phone: "(512) 555-0200",
+    tier: "standard",
+    free: true,
+    expiresAt: "2026-06-30"
+  },
+  { 
+    id: 'green-home',
+    name: "Green Home Exteriors", 
+    category: "Siding", 
+    location: "Austin, TX",
+    website: "https://greenhomeexteriors.com",
+    phone: "(512) 555-0300",
+    tier: "standard",
+    free: true,
+    expiresAt: "2026-03-31"
+  }
+];
+
+// === INDUSTRY ORGANIZATIONS (B2B OUTREACH) ===
+export const INDUSTRY_ORGS = [
+  { 
+    name: "National Roofing Contractors Association (NRCA)", 
+    category: "Roofing", 
+    website: "https://www.nrca.net",
+    directory: "https://www.nrca.net/roofing/contractors",
+    contact: "membership@nrca.net"
+  },
+  { 
+    name: "Roofing Contractors Association of Texas (RCAT)", 
+    category: "Roofing", 
+    website: "https://www.rcat.net",
+    directory: "https://www.rcat.net/find-a-contractor",
+    contact: "info@rcat.net"
+  },
+  { 
+    name: "National Association of the Remodeling Industry (NARI)", 
+    category: "Remodel", 
+    website: "https://nari.org",
+    directory: "https://www.nari.org/Find-a-Pro",
+    contact: "info@nari.org"
+  },
+  { 
+    name: "National Association of Public Insurance Adjusters (NAPIA)", 
+    category: "Public Adjuster", 
+    website: "https://www.napia.com",
+    directory: "https://www.napia.com/find-an-adjuster",
+    contact: "info@napia.com"
+  }
+];
+
+// === AD RATE CARD ===
+export const AD_MODELS = {
+  CPC: { 
+    name: "Cost Per Click / Lead",
+    suggested: 50.00, 
+    min: 15.00, 
+    unit: 'per click',
+    description: "Pay only when users click your ad"
+  },
+  AFFILIATE: { 
+    name: "Affiliate Commission",
+    suggested: 0.15,  // 15%
+    min: 0.10,        // 10%
+    unit: 'of job value',
+    description: "Percentage of closed job value"
+  },
+  BANNER: { 
+    name: "Monthly Banner Ad",
+    suggested: 500.00, 
+    min: 50.00, 
+    unit: 'per month',
+    description: "Fixed monthly featured placement"
+  }
+};
+
+/**
+ * Enforce Minimum Viable Bid (MVB)
+ */
+export function enforceMinBid(model, partnerBid) {
+  const rateData = AD_MODELS[model];
+  if (!rateData) return { validatedBid: 0, message: "Invalid ad model" };
+
+  if (partnerBid < rateData.min) {
+    const formattedMin = model === 'AFFILIATE' 
+      ? `${(rateData.min * 100).toFixed(0)}%` 
+      : `$${rateData.min.toFixed(2)}`;
+    
+    return {
+      validatedBid: rateData.min,
+      message: `⚠️ Bid reverted to minimum (${formattedMin}). Consider bidding higher for better visibility.`
+    };
+  }
+
+  return { validatedBid: partnerBid, message: "✅ Bid accepted" };
+}
+
+/**
+ * Calculate ad rotation weight (the "weighing" mechanic)
+ */
+export function calculateAdWeight(model, partnerBid) {
+  const mvb = AD_MODELS[model]?.min;
+  if (!mvb || mvb === 0) return 0.1;
+
+  // Weight = Bid / MVB (capped at 5x for fairness)
+  const weight = partnerBid / mvb;
+  return Math.min(weight, 5.0);
+}
+
+/**
+ * Get partners by trade/category
+ */
+export function getPartnersByTrade(trade, location = null) {
+  let partners = PROMO_PARTNERS.filter(p => 
+    p.category.toLowerCase().includes(trade.toLowerCase())
+  );
+
+  if (location) {
+    partners = partners.filter(p => 
+      p.location.toLowerCase().includes(location.toLowerCase())
+    );
+  }
+
+  // Sort by tier (premium first) and featured status
+  partners.sort((a, b) => {
+    if (a.featured && !b.featured) return -1;
+    if (!a.featured && b.featured) return 1;
+    return 0;
+  });
+
+  return partners;
+}

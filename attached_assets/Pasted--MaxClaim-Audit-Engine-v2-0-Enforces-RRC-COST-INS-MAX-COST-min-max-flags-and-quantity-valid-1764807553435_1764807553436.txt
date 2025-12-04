@@ -1,0 +1,131 @@
+/**
+ * MaxClaim Audit Engine v2.0
+ * Enforces RRC_COST/INS_MAX_COST min/max flags and quantity validation
+ */
+
+export function auditClaimItem(itemName, enteredPrice, enteredQty, priceDB) {
+  const normalizedItemName = itemName.trim();
+  const itemData = priceDB[normalizedItemName];
+  
+  // ❌ MISSING ITEM CHECK
+  if (!itemData) {
+    return {
+      status: 'MISSING_ITEM',
+      message: `❌ "${itemName}" not found in MaxClaim database`,
+      flagged: true,
+      subtotal: null,
+      suggestions: getSimilarItems(itemName, priceDB)
+    };
+  }
+
+  const { UNIT, RRC_COST, INS_MAX_COST, AVG_PRICE } = itemData;
+
+  // ❌ QUANTITY VALIDATION (MUST BE > 0)
+  if (!enteredQty || enteredQty <= 0 || !Number.isFinite(enteredQty)) {
+    return {
+      status: 'INVALID_QUANTITY',
+      message: `❌ Quantity must be > 0 (received: ${enteredQty})`,
+      flagged: true,
+      unit: UNIT,
+      subtotal: null
+    };
+  }
+
+  // 💰 PRICE AUDIT (RRC_COST vs INS_MAX_COST)
+  let status = 'PASS';
+  let message = `✅ Price $${enteredPrice.toFixed(2)} within acceptable range`;
+  let flagged = false;
+  let severity = 'none';
+
+  if (enteredPrice < RRC_COST) {
+    status = 'LOW_FLAG';
+    severity = 'warning';
+    const difference = (RRC_COST - enteredPrice).toFixed(2);
+    message = `⚠️ BELOW RRC MINIMUM: $${enteredPrice.toFixed(2)} < $${RRC_COST.toFixed(2)} (Losing $${difference}/unit)`;
+    flagged = true;
+  } else if (enteredPrice > INS_MAX_COST) {
+    status = 'HIGH_FLAG';
+    severity = 'error';
+    const overage = (enteredPrice - INS_MAX_COST).toFixed(2);
+    message = `🚨 ABOVE INSURER MAX: $${enteredPrice.toFixed(2)} > $${INS_MAX_COST.toFixed(2)} (Overpaid $${overage}/unit)`;
+    flagged = true;
+  }
+
+  // Calculate subtotals and variance
+  const subtotal = enteredPrice * enteredQty;
+  const expectedSubtotal = AVG_PRICE * enteredQty;
+  const subtotalDifference = subtotal - expectedSubtotal;
+
+  return {
+    item: itemName,
+    status,
+    message,
+    flagged,
+    severity,
+    unit: UNIT,
+    pricing: {
+      rrcMin: RRC_COST,
+      insMax: INS_MAX_COST,
+      average: AVG_PRICE,
+      entered: parseFloat(enteredPrice.toFixed(2))
+    },
+    quantity: parseFloat(enteredQty.toFixed(2)),
+    subtotal: subtotal.toFixed(2),
+    expectedSubtotal: expectedSubtotal.toFixed(2),
+    subtotalDifference: subtotalDifference.toFixed(2)
+  };
+}
+
+/**
+ * Batch audit entire claim (multiple items)
+ */
+export function auditBatch(items, priceDB) {
+  const results = items.map(item => 
+    auditClaimItem(item.name, item.price, item.qty, priceDB)
+  );
+  
+  const flaggedItems = results.filter(r => r.flagged);
+  const totalClaimValue = results.reduce((sum, r) => 
+    sum + (r.subtotal ? parseFloat(r.subtotal) : 0), 0
+  );
+  const totalExpectedValue = results.reduce((sum, r) => 
+    sum + (r.expectedSubtotal ? parseFloat(r.expectedSubtotal) : 0), 0
+  );
+  const potentialUnderpayment = results
+    .filter(r => r.status === 'LOW_FLAG' && r.subtotal)
+    .reduce((sum, r) => sum + Math.abs(parseFloat(r.subtotalDifference)), 0);
+
+  const summary = {
+    totalItems: results.length,
+    flaggedItems: flaggedItems.length,
+    passedItems: results.length - flaggedItems.length,
+    totalClaimValue: totalClaimValue.toFixed(2),
+    totalExpectedValue: totalExpectedValue.toFixed(2),
+    variance: (totalClaimValue - totalExpectedValue).toFixed(2),
+    potentialUnderpayment: potentialUnderpayment.toFixed(2),
+    flagBreakdown: {
+      lowFlags: results.filter(r => r.status === 'LOW_FLAG').length,
+      highFlags: results.filter(r => r.status === 'HIGH_FLAG').length,
+      missing: results.filter(r => r.status === 'MISSING_ITEM').length,
+      invalid: results.filter(r => r.status === 'INVALID_QUANTITY').length
+    },
+    results
+  };
+  
+  return summary;
+}
+
+/**
+ * Helper: Find similar items using fuzzy matching
+ */
+function getSimilarItems(searchTerm, priceDB) {
+  const items = Object.keys(priceDB);
+  const searchWords = searchTerm.toLowerCase().split(' ');
+  
+  return items
+    .filter(item => {
+      const itemLower = item.toLowerCase();
+      return searchWords.some(word => itemLower.includes(word));
+    })
+    .slice(0, 3);
+}

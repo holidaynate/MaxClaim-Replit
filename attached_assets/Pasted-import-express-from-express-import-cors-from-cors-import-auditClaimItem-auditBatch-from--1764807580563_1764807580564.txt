@@ -1,0 +1,104 @@
+import express from 'express';
+import cors from 'cors';
+import { auditClaimItem, auditBatch } from './src/utils/auditEngine.js';
+import { getPartnersByTrade, enforceMinBid, calculateAdWeight, AD_MODELS } from './src/config/partners.js';
+import priceDB from './priceDB.json' assert { type: 'json' };
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public')); // Serve your existing frontend
+
+// === AUDIT ENDPOINTS ===
+
+// Single item audit
+app.post('/api/audit/single', (req, res) => {
+  const { item, price, qty } = req.body;
+  
+  if (!item || !price || !qty) {
+    return res.status(400).json({ 
+      error: 'Missing required fields: item, price, qty' 
+    });
+  }
+
+  const result = auditClaimItem(item, price, qty, priceDB);
+  res.json(result);
+});
+
+// Batch audit (full claim)
+app.post('/api/audit/batch', (req, res) => {
+  const { items } = req.body;
+  
+  if (!items || !Array.isArray(items)) {
+    return res.status(400).json({ 
+      error: 'Invalid request: items array required' 
+    });
+  }
+
+  const result = auditBatch(items, priceDB);
+  res.json(result);
+});
+
+// === PARTNER/AD ENDPOINTS ===
+
+// Get partners by trade
+app.get('/api/partners/:trade', (req, res) => {
+  const { trade } = req.params;
+  const { location } = req.query;
+  
+  const partners = getPartnersByTrade(trade, location);
+  res.json({ trade, partners });
+});
+
+// Validate partner bid
+app.post('/api/partners/validate-bid', (req, res) => {
+  const { model, bid } = req.body;
+  
+  if (!model || !bid) {
+    return res.status(400).json({ error: 'Missing model or bid' });
+  }
+
+  const validation = enforceMinBid(model, bid);
+  const weight = calculateAdWeight(model, validation.validatedBid);
+  
+  res.json({
+    ...validation,
+    weight,
+    rotationMultiplier: `${weight.toFixed(1)}x`
+  });
+});
+
+// Get ad rate card
+app.get('/api/partners/rate-card', (req, res) => {
+  res.json({ rateCard: AD_MODELS });
+});
+
+// === UTILITY ENDPOINTS ===
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    version: '2.0.0',
+    timestamp: new Date().toISOString() 
+  });
+});
+
+// Get price database items (for autocomplete)
+app.get('/api/items', (req, res) => {
+  const items = Object.keys(priceDB).map(name => ({
+    name,
+    unit: priceDB[name].UNIT,
+    avgPrice: priceDB[name].AVG_PRICE
+  }));
+  res.json({ items });
+});
+
+// === START SERVER ===
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 MaxClaim v2.0 API running on port ${PORT}`);
+  console.log(`📊 Loaded ${Object.keys(priceDB).length} items in price database`);
+});
