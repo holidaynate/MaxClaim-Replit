@@ -18,6 +18,7 @@ Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeSc
 - **Single-Screen Claim Wizard**: Streamlined flow for document upload, ZIP code, damage type, and insurance offer amount.
 - **ZIP-Aware Contractor Matching**: Filters local contractors based on user ZIP code, with CTAs and referral tracking for monetization.
 - **Unit-Aware Pricing**: Supports 5 unit types (LF, SF, SQ, CT, EA) with descriptive tooltips.
+- **v2.0 Audit Engine** (shared/priceAudit.ts): Unit-price based audit comparing entered prices against RRC_COST (contractor minimum) and INS_MAX_COST (insurer maximum) ranges. Flags items as LOW_FLAG (underpaid), HIGH_FLAG (overpaid), PASS (fair), MISSING_ITEM (not in database), or INVALID_QUANTITY. Auto-calculates subtotals from unit price × quantity. Batch audit provides summary with total claim value, expected market value, variance, and potential underpayment calculations.
 - **Document Upload & OCR**: Supports JPG, PNG, PDF with dual OCR engine (**OCR.space API** and **Tesseract.js** fallback).
 - **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data sources for real-time FMV adjustments.
 - **Continuous Learning System**: Refines FMV calculations using historical user submission data (70% user data + 30% baseline).

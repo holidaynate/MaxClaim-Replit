@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, TrendingUp, Download, Mail, Printer } from "lucide-react";
+import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Download, Mail, Printer, AlertTriangle, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { exportResultsToPDF } from "@/lib/pdf-export";
 import { generateEmailReportSummary } from "@/lib/email-report";
 import { EmailReportDialog } from "@/components/EmailReportDialog";
+import { auditBatch, type BatchAuditResult, type AuditResult } from "@shared/priceAudit";
 import type { ClaimItem } from "./ItemsStep";
 
 interface ResultsStepProps {
@@ -51,6 +52,14 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
   const [results, setResults] = useState<AnalysisResponse | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
+  const batchAuditResults: BatchAuditResult = auditBatch(
+    items.map(item => ({
+      name: item.description,
+      price: item.unitPrice,
+      qty: item.quantity
+    }))
+  );
+
   const analysisMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest(
@@ -62,7 +71,8 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
             category: item.category,
             description: item.description,
             quantity: item.quantity,
-            quotedPrice: item.quotedPrice
+            unit: item.unit,
+            quotedPrice: item.unitPrice * item.quantity
           }))
         }
       );
@@ -76,6 +86,46 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
   useEffect(() => {
     analysisMutation.mutate();
   }, []);
+
+  const getStatusBadge = (auditResult: AuditResult) => {
+    switch (auditResult.status) {
+      case 'LOW_FLAG':
+        return (
+          <Badge variant="destructive" className="gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            Underpaid
+          </Badge>
+        );
+      case 'HIGH_FLAG':
+        return (
+          <Badge className="gap-1 bg-amber-500/20 text-amber-400 border-amber-500/30">
+            <AlertCircle className="w-3 h-3" />
+            Overpaid
+          </Badge>
+        );
+      case 'PASS':
+        return (
+          <Badge variant="secondary" className="gap-1 bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+            <CheckCircle className="w-3 h-3" />
+            Fair Price
+          </Badge>
+        );
+      case 'MISSING_ITEM':
+        return (
+          <Badge variant="outline" className="gap-1">
+            <Info className="w-3 h-3" />
+            No Data
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="gap-1">
+            <Info className="w-3 h-3" />
+            Unknown
+          </Badge>
+        );
+    }
+  };
 
   if (analysisMutation.isPending || !results) {
     return (
@@ -109,87 +159,128 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* v2.0 Audit Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardDescription>Insurance Company Offer</CardDescription>
-            <CardTitle className="text-2xl">
-              ${summary.totalInsuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <CardDescription>Total Items</CardDescription>
+            <CardTitle className="text-2xl" data-testid="text-total-items">
+              {batchAuditResults.totalItems}
             </CardTitle>
           </CardHeader>
         </Card>
-        <Card>
+        <Card className={batchAuditResults.flagBreakdown.lowFlags > 0 ? "border-amber-500/50" : ""}>
           <CardHeader className="pb-3">
-            <CardDescription>Fair Market Value</CardDescription>
-            <CardTitle className="text-2xl text-primary">
-              ${summary.totalFMV.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <CardDescription className="flex items-center gap-1">
+              <TrendingDown className="w-3 h-3 text-amber-500" />
+              Underpaid Items
+            </CardDescription>
+            <CardTitle className="text-2xl text-amber-500" data-testid="text-low-flags">
+              {batchAuditResults.flagBreakdown.lowFlags}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className={batchAuditResults.flagBreakdown.highFlags > 0 ? "border-red-500/50" : ""}>
+          <CardHeader className="pb-3">
+            <CardDescription className="flex items-center gap-1">
+              <TrendingUp className="w-3 h-3 text-red-500" />
+              Overpaid Items
+            </CardDescription>
+            <CardTitle className="text-2xl text-red-500" data-testid="text-high-flags">
+              {batchAuditResults.flagBreakdown.highFlags}
             </CardTitle>
           </CardHeader>
         </Card>
         <Card className="border-2 border-green-600">
           <CardHeader className="pb-3">
-            <CardDescription>Additional Amount You Deserve</CardDescription>
-            <CardTitle className="text-2xl text-green-600 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              ${summary.totalAdditional.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <CardDescription>Potential Underpayment</CardDescription>
+            <CardTitle className="text-2xl text-green-600" data-testid="text-underpayment">
+              ${batchAuditResults.potentialUnderpayment.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">{summary.overallIncrease.toFixed(1)}% increase</p>
           </CardHeader>
         </Card>
       </div>
 
-      {/* Detailed Results */}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Your Claim Total</CardDescription>
+            <CardTitle className="text-2xl" data-testid="text-claim-total">
+              ${batchAuditResults.totalClaimValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardDescription>Expected Market Value</CardDescription>
+            <CardTitle className="text-2xl text-primary" data-testid="text-expected-value">
+              ${batchAuditResults.totalExpectedValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card className={batchAuditResults.variance < 0 ? "border-amber-500" : ""}>
+          <CardHeader className="pb-3">
+            <CardDescription>Variance from Market</CardDescription>
+            <CardTitle className={`text-2xl flex items-center gap-2 ${batchAuditResults.variance < 0 ? 'text-amber-500' : 'text-emerald-500'}`} data-testid="text-variance">
+              {batchAuditResults.variance < 0 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
+              ${Math.abs(batchAuditResults.variance).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              {batchAuditResults.variance < 0 ? 'Below market average' : 'Above market average'}
+            </p>
+          </CardHeader>
+        </Card>
+      </div>
+
+      {/* v2.0 Detailed Audit Results */}
       <Card>
         <CardHeader>
-          <CardTitle>Line-Item Analysis</CardTitle>
+          <CardTitle>Price Audit Results</CardTitle>
           <CardDescription>
-            Comparison of insurance offer vs. fair market values for ZIP code {zipCode}
+            Unit price comparison against RRC contractor minimum and insurer maximum rates
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="border rounded-md">
+          <div className="border rounded-md overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Item</TableHead>
-                  <TableHead className="text-right">Insurance Offer</TableHead>
-                  <TableHead className="text-right">Fair Market Value</TableHead>
-                  <TableHead className="text-right">Additional</TableHead>
+                  <TableHead className="text-right">Unit Price</TableHead>
+                  <TableHead className="text-right">RRC Min</TableHead>
+                  <TableHead className="text-right">Ins Max</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
                   <TableHead className="text-right">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {itemResults.map((item, index) => (
+                {batchAuditResults.results.map((result, index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{item.description}</p>
-                        <p className="text-sm text-muted-foreground">{item.category}</p>
+                        <p className="font-medium">{result.item}</p>
+                        {result.unit && <p className="text-sm text-muted-foreground">per {result.unit}</p>}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${item.insuranceOffer.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {result.pricing ? `$${result.pricing.entered.toFixed(2)}` : '-'}
                     </TableCell>
-                    <TableCell className="text-right text-primary font-medium">
-                      ${item.fmvPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    <TableCell className="text-right text-muted-foreground">
+                      {result.pricing ? `$${result.pricing.rrcMin.toFixed(2)}` : '-'}
                     </TableCell>
-                    <TableCell className="text-right text-green-600 font-medium">
-                      +${item.additionalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    <TableCell className="text-right text-muted-foreground">
+                      {result.pricing ? `$${result.pricing.insMax.toFixed(2)}` : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {item.status === 'underpaid' && (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          Underpaid
-                        </Badge>
-                      )}
-                      {item.status === 'fair' && (
-                        <Badge variant="secondary" className="gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          Fair Offer
-                        </Badge>
-                      )}
+                      {result.quantity?.toFixed(2) || '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {result.subtotal > 0 ? `$${result.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {getStatusBadge(result)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -198,6 +289,27 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
           </div>
         </CardContent>
       </Card>
+
+      {/* Legacy FMV Analysis from backend */}
+      {summary.totalAdditional > 0 && (
+        <Card className="border-2 border-green-600">
+          <CardHeader>
+            <CardTitle className="text-green-600 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Additional Amount You May Deserve
+            </CardTitle>
+            <CardDescription>
+              Based on regional fair market values for ZIP code {zipCode}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-600" data-testid="text-additional-amount">
+              +${summary.totalAdditional.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">{summary.overallIncrease.toFixed(1)}% above insurance offer</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Regional Context from External APIs */}
       {results.regionalContext && (
@@ -210,7 +322,6 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* FEMA Claims Data */}
               {results.regionalContext.femaClaimCount > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Historical Claims in Your Area</p>
@@ -228,7 +339,6 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                 </div>
               )}
 
-              {/* BLS Inflation Adjustment */}
               <div className="space-y-1">
                 <p className="text-sm font-medium">Construction Cost Inflation</p>
                 <p className="text-2xl font-bold" data-testid="text-inflation">
@@ -250,7 +360,6 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
               </div>
             </div>
 
-            {/* Top Insurance Complaints */}
             {results.regionalContext.topComplaints && results.regionalContext.topComplaints.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm font-medium">Most Complained About Insurers (Texas)</p>

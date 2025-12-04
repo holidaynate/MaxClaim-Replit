@@ -5,6 +5,7 @@ import { analyzeClaimItem } from "./pricing-data";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
 import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
+import { auditClaimItem, auditBatch, getAllItems, getMarketData, type AuditResult, type BatchAuditResult } from "@shared/priceAudit";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -24,8 +25,11 @@ const claimAnalysisSchema = z.object({
     category: z.string(),
     description: z.string(),
     quantity: z.number(),
-    unit: z.enum(["LF", "SF", "SQ", "CT", "EA"]).default("EA"),
-    quotedPrice: z.number(),
+    unit: z.string().default("EA"),
+    quotedPrice: z.number().optional(),
+    unitPrice: z.number().optional(),
+  }).refine(data => data.quotedPrice !== undefined || data.unitPrice !== undefined, {
+    message: "Either quotedPrice or unitPrice must be provided"
   }))
 });
 
@@ -69,10 +73,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ isAdmin: !!req.session?.isAdmin });
   });
 
+  // Helper to normalize claim items - derive both unitPrice and quotedPrice (subtotal)
+  // Throws error if quantity is invalid
+  function normalizeClaimItem(item: {
+    category: string;
+    description: string;
+    quantity: number;
+    unit: string;
+    quotedPrice?: number;
+    unitPrice?: number;
+  }): { category: string; description: string; quantity: number; unit: string; unitPrice: number; subtotal: number } {
+    // Reject invalid quantities - do not silently default
+    if (!item.quantity || item.quantity <= 0 || !Number.isFinite(item.quantity)) {
+      throw new Error(`Invalid quantity for item "${item.description}": quantity must be > 0`);
+    }
+    
+    const qty = item.quantity;
+    let unitPrice: number;
+    let subtotal: number;
+    
+    if (item.unitPrice !== undefined && item.unitPrice > 0) {
+      unitPrice = item.unitPrice;
+      subtotal = unitPrice * qty;
+    } else if (item.quotedPrice !== undefined && item.quotedPrice > 0) {
+      subtotal = item.quotedPrice;
+      unitPrice = subtotal / qty;
+    } else {
+      unitPrice = 0;
+      subtotal = 0;
+    }
+    
+    return {
+      category: item.category,
+      description: item.description,
+      quantity: qty,
+      unit: item.unit || 'EA',
+      unitPrice,
+      subtotal
+    };
+  }
+
   // Analyze claim and calculate FMV with external API enrichment
   app.post("/api/claims/analyze", async (req, res) => {
     try {
       const data = claimAnalysisSchema.parse(req.body);
+      
+      // Normalize items to consistent format - will throw on invalid quantities
+      let normalizedItems: Array<ReturnType<typeof normalizeClaimItem>>;
+      try {
+        normalizedItems = data.items.map(normalizeClaimItem);
+      } catch (normError: any) {
+        return res.status(400).json({ 
+          error: "Invalid item data", 
+          details: normError.message 
+        });
+      }
       
       // Fetch BLS inflation data and regional context in parallel
       const blsApiKey = process.env.BLS_API_KEY; // Optional - works without it but with rate limits
@@ -86,7 +141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const zipPrefix = data.zipCode.substring(0, 3);
       
-      const results = await Promise.all(data.items.map(async (item) => {
+      const results = await Promise.all(normalizedItems.map(async (item) => {
         // Try to get pricing stats for this category/unit
         const pricingStats = await storage.getPricingStats(item.category, item.unit, zipPrefix).catch(() => null);
         
@@ -94,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           item.category,
           item.description,
           item.quantity,
-          item.quotedPrice,
+          item.subtotal,
           data.zipCode,
           inflationMultiplier,
           pricingStats
@@ -105,7 +160,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: item.description,
           quantity: item.quantity,
           unit: item.unit,
-          insuranceOffer: item.quotedPrice,
+          unitPrice: item.unitPrice,
+          insuranceOffer: item.subtotal,
           fmvPrice: analysis.fmvPrice,
           additionalAmount: analysis.additionalAmount,
           percentageIncrease: analysis.percentageIncrease,
@@ -113,7 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       }));
 
-      const totalInsuranceOffer = data.items.reduce((sum, item) => sum + item.quotedPrice, 0);
+      const totalInsuranceOffer = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
       const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
       const totalAdditional = totalFMV - totalInsuranceOffer;
       const overallIncrease = (totalAdditional / totalInsuranceOffer) * 100;
@@ -706,6 +762,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: error.message 
       });
     }
+  });
+
+  // ========== MaxClaim v2.0 AUDIT ENDPOINTS ==========
+
+  // Single item audit (v2.0)
+  app.post("/api/audit/single", (req, res) => {
+    try {
+      const { item, price, qty } = z.object({
+        item: z.string().min(1, "Item name is required"),
+        price: z.number().positive("Price must be positive"),
+        qty: z.number().positive("Quantity must be positive"),
+      }).parse(req.body);
+
+      const result = auditClaimItem(item, price, qty);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ 
+          error: 'Missing required fields: item, price, qty',
+          details: error.errors
+        });
+      } else {
+        console.error('Audit single item error:', error);
+        res.status(500).json({ error: 'Failed to audit item' });
+      }
+    }
+  });
+
+  // Batch audit (v2.0) - Full claim with multiple items
+  app.post("/api/audit/batch", (req, res) => {
+    try {
+      const { items } = z.object({
+        items: z.array(z.object({
+          name: z.string().min(1),
+          price: z.number(),
+          qty: z.number(),
+        })).min(1, "At least one item is required"),
+      }).parse(req.body);
+
+      const result = auditBatch(items);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ 
+          error: 'Invalid request: items array required',
+          details: error.errors
+        });
+      } else {
+        console.error('Audit batch error:', error);
+        res.status(500).json({ error: 'Failed to audit claim batch' });
+      }
+    }
+  });
+
+  // Get all items for autocomplete (v2.0)
+  app.get("/api/items", (req, res) => {
+    try {
+      const items = getAllItems();
+      res.json({ items });
+    } catch (error: any) {
+      console.error('Get items error:', error);
+      res.status(500).json({ error: 'Failed to get items' });
+    }
+  });
+
+  // Get market data for specific item (v2.0)
+  app.get("/api/items/:itemName", (req, res) => {
+    try {
+      const { itemName } = req.params;
+      const data = getMarketData(decodeURIComponent(itemName));
+      
+      if (!data) {
+        return res.status(404).json({ error: 'Item not found in database' });
+      }
+      
+      res.json({
+        name: itemName,
+        unit: data.UNIT,
+        rrcMin: data.RRC_COST,
+        insMax: data.INS_MAX_COST,
+        avgPrice: data.AVG_PRICE,
+        samples: data.SAMPLES
+      });
+    } catch (error: any) {
+      console.error('Get item data error:', error);
+      res.status(500).json({ error: 'Failed to get item data' });
+    }
+  });
+
+  // Health check endpoint (v2.0)
+  app.get("/health", (req, res) => {
+    const items = getAllItems();
+    res.json({ 
+      status: 'ok', 
+      version: '2.0.0',
+      timestamp: new Date().toISOString(),
+      priceDBItems: items.length
+    });
   });
 
   const httpServer = createServer(app);

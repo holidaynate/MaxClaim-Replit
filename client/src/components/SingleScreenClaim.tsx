@@ -4,12 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Upload, ArrowRight } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { DocumentUpload } from "./DocumentUpload";
-import { auditClaimItem } from "@shared/priceAudit";
+import { auditClaimItem, auditClaimItemLegacy } from "@shared/priceAudit";
 import type { ClaimItem } from "./ItemsStep";
 
 const TRUST_BADGES = [
@@ -39,7 +39,7 @@ interface SingleScreenClaimProps {
   }) => void;
   onAnalysisComplete: (results: any) => void;
   onZipChange?: (zip: string) => void;
-  resetKey?: number; // Used to trigger form reset
+  resetKey?: number;
 }
 
 export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZipChange, resetKey = 0 }: SingleScreenClaimProps) {
@@ -50,9 +50,8 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
   const [items, setItems] = useState<ClaimItem[]>([]);
   const { toast } = useToast();
 
-  // Reset form when resetKey changes (skip initial mount)
   useEffect(() => {
-    if (resetKey === 0) return; // Skip on initial mount
+    if (resetKey === 0) return;
     setZipCode("");
     setPropertyAddress("");
     setDamageType("");
@@ -63,19 +62,18 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
     }
   }, [resetKey, onZipChange]);
 
-  // Helper function to persist price audit results for compliance tracking
   const persistAuditResults = async (itemsToAudit: ClaimItem[], zip: string) => {
     for (const item of itemsToAudit) {
-      if (!item.description || item.quotedPrice <= 0) continue;
+      if (!item.description || item.unitPrice <= 0) continue;
       
-      const audit = auditClaimItem(item.description, item.quotedPrice);
+      const audit = auditClaimItemLegacy(item.description, item.unitPrice);
       if (!audit) continue;
       
       try {
         await apiRequest("POST", "/api/price-audits", {
           itemName: item.description,
           matchedItem: audit.matchedItem,
-          userPrice: item.quotedPrice,
+          userPrice: item.unitPrice,
           marketMin: audit.min,
           marketAvg: audit.avg,
           marketMax: audit.max,
@@ -89,7 +87,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
         });
       } catch (error) {
         console.error("Failed to persist audit result:", error);
-        // Don't fail the whole flow if audit persistence fails
       }
     }
   };
@@ -110,8 +107,14 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
       return await response.json();
     },
     onSuccess: async (data, variables) => {
-      // Persist price audit results for compliance tracking (fire-and-forget)
-      persistAuditResults(variables.items, variables.zipCode);
+      const itemsForAudit: ClaimItem[] = variables.items.map(item => ({
+        category: item.category,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.quotedPrice / item.quantity
+      }));
+      persistAuditResults(itemsForAudit, variables.zipCode);
       
       onAnalysisComplete(data);
       toast({
@@ -130,16 +133,16 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
   });
 
   const handleExtractedItems = (extractedItems: any[]) => {
-    const newItems = extractedItems.map(item => ({
+    const newItems: ClaimItem[] = extractedItems.map(item => ({
       category: item.category || "Other",
       description: item.description,
       quantity: item.quantity || 1,
-      quotedPrice: item.quotedPrice || 0,
+      unitPrice: item.unitPrice || item.quotedPrice || 0,
       unit: item.unit || "EA",
     }));
     setItems([...items, ...newItems]);
     
-    const total = newItems.reduce((sum, item) => sum + (item.quotedPrice || 0), 0);
+    const total = newItems.reduce((sum, item) => sum + ((item.unitPrice || 0) * item.quantity), 0);
     if (total > 0 && !insuranceOffer) {
       setInsuranceOffer(total.toString());
     }
@@ -180,15 +183,14 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
       return;
     }
 
-    const submissionItems = items.length > 0 ? items : [{
+    const submissionItems: ClaimItem[] = items.length > 0 ? items : [{
       category: damageType,
       description: `${damageType} repair`,
       quantity: 1,
-      quotedPrice: parseFloat(insuranceOffer),
-      unit: "EA" as const,
+      unitPrice: parseFloat(insuranceOffer),
+      unit: "EA",
     }];
     
-    // Call the backend API to analyze the claim
     analysisMutation.mutate({
       zipCode,
       propertyAddress: propertyAddress || undefined,
@@ -197,11 +199,10 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
         description: item.description,
         quantity: item.quantity,
         unit: item.unit || "EA",
-        quotedPrice: item.quotedPrice,
+        quotedPrice: item.unitPrice * item.quantity,
       })),
     });
 
-    // Also call the parent handler for state management
     onCalculate({
       zipCode,
       propertyAddress,
@@ -213,7 +214,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 relative">
-      {/* Floating Watermark */}
       <div 
         className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center"
         style={{ 
@@ -227,7 +227,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
         </div>
       </div>
 
-      {/* Trust Badges */}
       <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-muted/30 p-6 rounded-lg">
           {TRUST_BADGES.map((badge, index) => (
@@ -244,7 +243,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
         </p>
       </div>
 
-      {/* Single-Screen Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold">Step 1: Enter Your Information</h1>
@@ -263,11 +261,9 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
 
         <Card>
           <CardContent className="pt-6 space-y-6">
-            {/* Document Upload */}
             <div className="space-y-4">
               <DocumentUpload onItemsExtracted={handleExtractedItems} />
               
-              {/* Verify Button (After Upload) */}
               <Button 
                 type="submit" 
                 className="w-full text-lg h-12"
@@ -277,10 +273,9 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
                 {analysisMutation.isPending ? "Analyzing..." : "Verify Fair Market Value"}
               </Button>
               
-              <p className="text-center text-sm text-muted-foreground">— OR —</p>
+              <p className="text-center text-sm text-muted-foreground">- OR -</p>
             </div>
 
-            {/* ZIP Code */}
             <div className="space-y-2">
               <Label htmlFor="zipCode">ZIP Code</Label>
               <Input
@@ -292,7 +287,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
                   const newZip = e.target.value.replace(/\D/g, '').slice(0, 5);
                   setZipCode(newZip);
                   if (onZipChange) {
-                    // Update immediately if 5 digits, clear if less
                     onZipChange(newZip.length === 5 ? newZip : "");
                   }
                 }}
@@ -302,7 +296,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
               />
             </div>
 
-            {/* Property Address (Optional) */}
             <div className="space-y-2">
               <Label htmlFor="propertyAddress">Property Address (Optional)</Label>
               <Input
@@ -318,7 +311,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
               </p>
             </div>
 
-            {/* Type of Damage */}
             <div className="space-y-2">
               <Label htmlFor="damageType">Type of Damage</Label>
               <Select value={damageType} onValueChange={setDamageType} required>
@@ -335,7 +327,6 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
               </Select>
             </div>
 
-            {/* Insurance Offer Amount */}
             <div className="space-y-2">
               <Label htmlFor="insuranceOffer">Insurance Offer Amount ($)</Label>
               <Input
@@ -353,10 +344,9 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
           </CardContent>
         </Card>
 
-        {/* Bottom CTA Button */}
         <div className="text-center space-y-3">
           <p className="text-sm text-muted-foreground">
-            100% Free • No Credit Card Required • Privacy Protected
+            100% Free - No Credit Card Required - Privacy Protected
           </p>
           <Button 
             type="submit" 

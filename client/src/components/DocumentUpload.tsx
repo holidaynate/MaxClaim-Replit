@@ -9,7 +9,8 @@ interface ParsedClaimItem {
   category: string;
   description: string;
   quantity: number;
-  quotedPrice: number;
+  unitPrice: number;
+  unit?: string;
   confidence: 'high' | 'medium' | 'low';
 }
 
@@ -104,7 +105,17 @@ export function DocumentUpload({ onItemsExtracted }: DocumentUploadProps) {
         }
         
         setStatusMessage(`Successfully extracted ${data.parsedItems.length} item(s) from document!${confidenceNote}`);
-        onItemsExtracted(data.parsedItems);
+        
+        const normalizedItems = data.parsedItems.map((item: any) => ({
+          category: item.category || 'Other',
+          description: item.description,
+          quantity: item.quantity || 1,
+          unitPrice: item.quotedPrice || item.unitPrice || 0,
+          unit: item.unit || 'EA',
+          confidence: item.confidence || 'medium'
+        }));
+        
+        onItemsExtracted(normalizedItems);
         
         toast({
           title: 'Document processed',
@@ -144,7 +155,6 @@ export function DocumentUpload({ onItemsExtracted }: DocumentUploadProps) {
         </p>
       </div>
 
-      {/* OCR Limitations Disclaimer */}
       <Alert data-testid="alert-ocr-disclaimer">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription className="text-xs space-y-1">

@@ -12,7 +12,7 @@ interface ReviewStepProps {
 }
 
 export default function ReviewStep({ zipCode, items, onCalculate, onBack }: ReviewStepProps) {
-  const totalQuoted = items.reduce((sum, item) => sum + item.quotedPrice, 0);
+  const totalClaim = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
   return (
     <Card>
@@ -40,14 +40,16 @@ export default function ReviewStep({ zipCode, items, onCalculate, onBack }: Revi
             <h3 className="text-sm font-medium">Claim Items ({items.length})</h3>
           </div>
           
-          <div className="border rounded-md">
+          <div className="border rounded-md overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Category</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Insurance Offer</TableHead>
+                  <TableHead className="text-right">Unit</TableHead>
+                  <TableHead className="text-right">Unit Price</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -56,15 +58,19 @@ export default function ReviewStep({ zipCode, items, onCalculate, onBack }: Revi
                     <TableCell className="font-medium">{item.category}</TableCell>
                     <TableCell className="text-muted-foreground">{item.description}</TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{item.unit || 'EA'}</TableCell>
+                    <TableCell className="text-right">
+                      ${item.unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
                     <TableCell className="text-right font-medium">
-                      ${item.quotedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ${(item.unitPrice * item.quantity).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </TableCell>
                   </TableRow>
                 ))}
                 <TableRow>
-                  <TableCell colSpan={3} className="font-semibold">Total Insurance Offer</TableCell>
+                  <TableCell colSpan={5} className="font-semibold">Total Claim Value</TableCell>
                   <TableCell className="text-right font-semibold text-lg">
-                    ${totalQuoted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ${totalClaim.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TableCell>
                 </TableRow>
               </TableBody>

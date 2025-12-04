@@ -1,4 +1,4 @@
-import { Plus, Trash2, Package, Info } from "lucide-react";
+import { Plus, Trash2, Package, Info, DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DocumentUpload } from "./DocumentUpload";
 import { UNIT_TYPES } from "@shared/schema";
-import { auditClaimItem } from "@shared/priceAudit";
+import { auditClaimItem, type AuditResult } from "@shared/priceAudit";
 import PriceAuditBadge from "./PriceAuditBadge";
 
 export interface ClaimItem {
@@ -15,7 +15,7 @@ export interface ClaimItem {
   description: string;
   quantity: number;
   unit?: string;
-  quotedPrice: number;
+  unitPrice: number;
 }
 
 interface ItemsStepProps {
@@ -41,7 +41,7 @@ const CATEGORIES = [
 
 export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStepProps) {
   const addItem = () => {
-    onChange([...items, { category: "", description: "", quantity: 1, unit: "EA", quotedPrice: 0 }]);
+    onChange([...items, { category: "", description: "", quantity: 1, unit: "EA", unitPrice: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -59,15 +59,23 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
       category: item.category || "Other",
       description: item.description,
       quantity: item.quantity || 1,
-      quotedPrice: item.quotedPrice || 0
+      unit: item.unit || "EA",
+      unitPrice: item.quotedPrice || item.unitPrice || 0
     }));
     
-    // Append extracted items to existing items (don't replace)
     onChange([...items, ...newItems]);
   };
 
   const isValid = items.length > 0 && items.every(item => 
-    item.category && item.description && item.quantity > 0 && item.quotedPrice > 0
+    item.category && item.description && item.quantity > 0 && item.unitPrice > 0
+  );
+
+  const calculateSubtotal = (item: ClaimItem) => {
+    return (item.unitPrice * item.quantity).toFixed(2);
+  };
+
+  const totalClaimValue = items.reduce((sum, item) => 
+    sum + (item.unitPrice * item.quantity), 0
   );
 
   return (
@@ -81,15 +89,17 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
           Claim Items & Services
         </CardTitle>
         <CardDescription>
-          Add all items and services from your insurance company's settlement offer. We'll show you what you actually deserve.
+          Enter the <strong>unit price</strong> for each item (price per unit, not total). We'll calculate subtotals and audit against fair market values.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-4">
           {items.map((item, index) => {
-            const audit = item.description && item.quotedPrice > 0 
-              ? auditClaimItem(item.description, item.quotedPrice) 
+            const audit: AuditResult | null = item.description && item.unitPrice > 0 && item.quantity > 0
+              ? auditClaimItem(item.description, item.unitPrice, item.quantity)
               : null;
+            
+            const subtotal = calculateSubtotal(item);
             
             return (
               <Card key={index} className="relative">
@@ -112,10 +122,10 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`description-${index}`}>Description</Label>
+                      <Label htmlFor={`description-${index}`}>Item Description</Label>
                       <Input
                         id={`description-${index}`}
-                        placeholder="e.g., Remove 3-Tab, Replace HD"
+                        placeholder="e.g., Remove 3-Tab Asphalt, Ridge Vent"
                         value={item.description}
                         onChange={(e) => updateItem(index, 'description', e.target.value)}
                         data-testid={`input-description-${index}`}
@@ -126,7 +136,8 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
                       <Input
                         id={`quantity-${index}`}
                         type="number"
-                        min="1"
+                        min="0.01"
+                        step="0.01"
                         value={item.quantity}
                         onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
                         data-testid={`input-quantity-${index}`}
@@ -169,20 +180,41 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`price-${index}`}>Insurance Offer ($)</Label>
+                      <div className="flex items-center gap-1">
+                        <Label htmlFor={`price-${index}`}>Unit Price ($)</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs">Enter the price <strong>per unit</strong> (not the line total). We'll calculate the subtotal automatically.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <Input
                         id={`price-${index}`}
                         type="number"
                         min="0"
                         step="0.01"
-                        value={item.quotedPrice}
-                        onChange={(e) => updateItem(index, 'quotedPrice', parseFloat(e.target.value) || 0)}
-                        data-testid={`input-price-${index}`}
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        data-testid={`input-unit-price-${index}`}
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground text-xs flex items-center gap-1">
+                        <DollarSign className="w-3 h-3" />
+                        Line Subtotal
+                      </Label>
+                      <div className="h-9 flex items-center px-3 rounded-md bg-muted text-foreground font-medium" data-testid={`text-subtotal-${index}`}>
+                        ${subtotal}
+                      </div>
                     </div>
                     {audit && (
                       <div className="space-y-2 md:col-span-2">
-                        <Label className="text-muted-foreground text-xs">Market Price Check</Label>
+                        <Label className="text-muted-foreground text-xs">Price Audit</Label>
                         <PriceAuditBadge audit={audit} showDetails={true} />
                       </div>
                     )}
@@ -213,6 +245,15 @@ export default function ItemsStep({ items, onChange, onNext, onBack }: ItemsStep
           <Plus className="w-4 h-4 mr-2" />
           Add Another Item
         </Button>
+
+        {items.length > 0 && (
+          <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+            <span className="text-sm text-muted-foreground">Total Claim Value:</span>
+            <span className="text-lg font-bold" data-testid="text-total-claim-value">
+              ${totalClaimValue.toFixed(2)}
+            </span>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-4">
           <Button variant="outline" onClick={onBack} data-testid="button-back">
