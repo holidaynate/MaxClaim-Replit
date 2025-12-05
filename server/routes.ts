@@ -137,12 +137,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
       
-      // Fetch BLS inflation data and regional context in parallel
+      // Fetch BLS inflation data, regional context, and location in parallel
       const blsApiKey = process.env.BLS_API_KEY; // Optional - works without it but with rate limits
-      const [blsData, regionalContext] = await Promise.all([
+      const [blsData, regionalContext, detectedLocation] = await Promise.all([
         getBLSInflationData(blsApiKey),
-        getRegionalContext(data.zipCode, blsApiKey)
+        getRegionalContext(data.zipCode, blsApiKey),
+        getCoarseLocation(data.zipCode)
       ]);
+
+      // Match partners to user's location
+      const userLocation = {
+        zip: data.zipCode,
+        areaCode: detectedLocation.areaCode,
+        metro: detectedLocation.metro
+      };
+      const matchedPartners = matchPartnersToUser(userLocation, PROMO_PARTNERS, undefined, 3);
 
       // Calculate inflation multiplier from BLS data
       const inflationMultiplier = calculateInflationMultiplier(blsData);
@@ -243,7 +252,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         avgFEMAPayment: regionalContext.avgFEMAPayment,
         inflationAdjustment: Math.round((inflationMultiplier - 1) * 100 * 10) / 10,
         topComplaints: regionalContext.topInsuranceComplaints.slice(0, 3)
-      }
+      },
+      detectedLocation: {
+        areaCode: detectedLocation.areaCode,
+        metro: detectedLocation.metro,
+        description: detectedLocation.description
+      },
+      matchedPartners: matchedPartners.map(partner => ({
+        id: partner.id,
+        companyName: partner.name,
+        type: partner.businessType,
+        tier: partner.tier,
+        phone: partner.phone,
+        website: partner.website,
+        licenseNumber: partner.licenseNumber,
+        score: partner.matchScore,
+        matchReasons: partner.matchReasons
+      }))
     });
   }));
 

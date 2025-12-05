@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Download, Mail, Printer, AlertTriangle, Info, DollarSign } from "lucide-react";
+import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Download, Mail, Printer, AlertTriangle, Info, DollarSign, MapPin, Shield, Building2, Phone, ExternalLink, Award } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,24 @@ interface RegionalContext {
   topComplaints: Array<{ company: string; count: number }>;
 }
 
+interface DetectedLocation {
+  areaCode: string;
+  metro: string;
+  description: string;
+}
+
+interface MatchedPartner {
+  id: string;
+  companyName: string;
+  type: string;
+  tier: string;
+  phone: string;
+  website?: string;
+  licenseNumber?: string;
+  score: number;
+  matchReasons: string[];
+}
+
 interface AnalysisResponse {
   zipCode: string;
   items: ItemResult[];
@@ -46,6 +64,8 @@ interface AnalysisResponse {
     overallIncrease: number;
   };
   regionalContext?: RegionalContext;
+  detectedLocation?: DetectedLocation;
+  matchedPartners?: MatchedPartner[];
 }
 
 export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStepProps) {
@@ -384,6 +404,115 @@ export default function ResultsStep({ zipCode, items, onStartOver }: ResultsStep
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detected Location & Matched Local Partners */}
+      {results.detectedLocation && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-primary" />
+              Your Location & Matched Local Contractors
+            </CardTitle>
+            <CardDescription className="flex items-center gap-2">
+              <Shield className="w-4 h-4" />
+              Privacy-first: We only detect your general area, never your exact address
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-3 rounded-md bg-muted/50 border">
+              <p className="text-sm font-medium mb-1">Detected Area</p>
+              <p className="text-sm text-muted-foreground" data-testid="text-detected-location">
+                {results.detectedLocation.description}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Area Code: {results.detectedLocation.areaCode} • Metro: {results.detectedLocation.metro}
+              </p>
+            </div>
+
+            {results.matchedPartners && results.matchedPartners.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Top Matched Local Contractors</p>
+                <div className="space-y-3">
+                  {results.matchedPartners.map((partner, idx) => (
+                    <div 
+                      key={partner.id} 
+                      className="p-3 rounded-md border hover-elevate"
+                      data-testid={`matched-partner-${idx}`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-semibold">{partner.companyName}</h4>
+                            {partner.tier === 'premium' && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Award className="w-3 h-3 mr-1" />
+                                Premium
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-xs">
+                              Match Score: {Math.round(partner.score)}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                            <Building2 className="w-3 h-3" />
+                            {partner.type}
+                            {partner.licenseNumber && (
+                              <span className="ml-2">License: {partner.licenseNumber}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {partner.matchReasons && partner.matchReasons.length > 0 && (
+                        <div className="text-xs text-muted-foreground mb-2">
+                          <span className="font-medium">Why matched: </span>
+                          {partner.matchReasons.join(' • ')}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {partner.phone && (
+                          <a 
+                            href={`tel:${partner.phone}`}
+                            className="inline-flex items-center gap-1 text-xs hover:underline"
+                            data-testid={`link-phone-${idx}`}
+                          >
+                            <Phone className="w-3 h-3" />
+                            {partner.phone}
+                          </a>
+                        )}
+                        {partner.website && (
+                          <a 
+                            href={partner.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs hover:underline"
+                            data-testid={`link-website-${idx}`}
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            Visit Website
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground italic">
+                  Contractors are ranked by proximity to your area and service quality. MaxClaim may receive referral fees from some partners.
+                </p>
+              </div>
+            )}
+
+            {(!results.matchedPartners || results.matchedPartners.length === 0) && (
+              <div className="text-center p-6 border rounded-md bg-muted/30">
+                <p className="text-sm text-muted-foreground">
+                  No local contractors found in our database for your area yet.
+                </p>
               </div>
             )}
           </CardContent>
