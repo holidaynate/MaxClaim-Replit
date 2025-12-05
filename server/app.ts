@@ -7,8 +7,18 @@ import express, {
   NextFunction,
 } from "express";
 import session from "express-session";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 import { registerRoutes } from "./routes";
+
+// Validate required environment variables on startup
+const requiredSecrets = ['ADMIN_PASSWORD', 'DATABASE_URL', 'SESSION_SECRET'];
+for (const secret of requiredSecrets) {
+  if (!process.env[secret]) {
+    throw new Error(`Missing required secret: ${secret}. Please configure in Replit Secrets.`);
+  }
+}
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -35,9 +45,26 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false }));
 
+// Security middleware - Helmet for HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Allow inline scripts for Vite development
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Rate limiting for API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', apiLimiter);
+
 // Session middleware for admin authentication
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret-change-in-production',
+  secret: process.env.SESSION_SECRET!,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -86,8 +113,14 @@ export default async function runApp(
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Log the full error server-side for debugging
+    console.error('Error:', err);
+
+    // Send appropriate response to client (never expose stack traces)
+    res.status(status).json({ 
+      error: status >= 500 ? 'Something went wrong' : message,
+      ...(process.env.NODE_ENV === 'development' && { details: err.message })
+    });
   });
 
   // importantly run the final setup after setting up all the other routes so

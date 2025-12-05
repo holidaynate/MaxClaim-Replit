@@ -1,5 +1,3 @@
-import priceDB from './priceDB.json';
-
 /**
  * MaxClaim Audit Engine v2.0
  * Dynamic Market Pricing System
@@ -99,6 +97,9 @@ export interface PriceAuditResult {
   sampleSize?: number;
 }
 
+// Import priceDB directly for shared code (browser + server)
+// Note: In Node.js, ES6 imports are already efficiently cached
+import priceDB from './priceDB.json';
 let typedPriceDB = priceDB as Record<string, PriceDBItem>;
 
 function getSimilarItems(searchTerm: string): string[] {

@@ -2,6 +2,11 @@
  * MaxClaim Partner & Monetization System v2.0
  */
 
+export interface ServiceArea {
+  areaCodes: string[];  // 3-digit area codes (e.g., ["210", "830"])
+  zips: string[];       // 5-digit ZIP codes (e.g., ["78201", "78210"])
+}
+
 export interface PromoPartner {
   id: string;
   name: string;
@@ -10,10 +15,17 @@ export interface PromoPartner {
   website: string;
   phone: string;
   email?: string;
-  tier: 'premium' | 'standard';
+  tier: 'free' | 'standard' | 'premium';
+  businessType: 'local' | 'regional' | 'national';
   free: boolean;
   featured?: boolean;
   expiresAt: string;
+  serviceAreas: {
+    primary: ServiceArea;    // Primary service area (highest priority)
+    secondary?: ServiceArea; // Secondary service area (lower priority)
+  };
+  adWeight?: number;          // Ad rotation weight (1.0 = base, higher = more visibility)
+  monthlyBudget?: number;     // Monthly advertising budget
 }
 
 export interface IndustryOrg {
@@ -42,9 +54,22 @@ export const PROMO_PARTNERS: PromoPartner[] = [
     phone: "(512) 555-0100",
     email: "info@royalrc.com",
     tier: "premium",
+    businessType: "local",
     free: true,
     featured: true,
-    expiresAt: "2026-12-31"
+    expiresAt: "2026-12-31",
+    serviceAreas: {
+      primary: {
+        areaCodes: ["512", "737"],
+        zips: ["78701", "78702", "78703", "78704", "78705", "78712", "78717", "78721", "78722", "78723", "78724", "78725", "78726", "78727", "78728", "78729", "78730", "78731", "78732", "78733", "78734", "78735", "78736", "78737", "78738", "78739", "78741", "78742", "78744", "78745", "78746", "78747", "78748", "78749", "78750", "78751", "78752", "78753", "78754", "78755", "78756", "78757", "78758", "78759"]
+      },
+      secondary: {
+        areaCodes: ["830"],
+        zips: []
+      }
+    },
+    adWeight: 1.6,
+    monthlyBudget: 500
   },
   { 
     id: 'paint-pros',
@@ -54,8 +79,17 @@ export const PROMO_PARTNERS: PromoPartner[] = [
     website: "https://paintprosaustin.com",
     phone: "(512) 555-0200",
     tier: "standard",
+    businessType: "local",
     free: true,
-    expiresAt: "2026-06-30"
+    expiresAt: "2026-06-30",
+    serviceAreas: {
+      primary: {
+        areaCodes: ["512"],
+        zips: ["78701", "78704", "78722", "78723", "78751", "78756"]
+      }
+    },
+    adWeight: 1.3,
+    monthlyBudget: 200
   },
   { 
     id: 'green-home',
@@ -65,8 +99,21 @@ export const PROMO_PARTNERS: PromoPartner[] = [
     website: "https://greenhomeexteriors.com",
     phone: "(512) 555-0300",
     tier: "standard",
+    businessType: "regional",
     free: true,
-    expiresAt: "2026-03-31"
+    expiresAt: "2026-03-31",
+    serviceAreas: {
+      primary: {
+        areaCodes: ["512", "737", "210"],
+        zips: []
+      },
+      secondary: {
+        areaCodes: ["830", "254"],
+        zips: []
+      }
+    },
+    adWeight: 1.3,
+    monthlyBudget: 300
   }
 ];
 

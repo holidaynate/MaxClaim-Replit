@@ -6,6 +6,12 @@ import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData }
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
 import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
 import { auditClaimItem, auditBatch, getAllItems, getMarketData, type AuditResult, type BatchAuditResult } from "@shared/priceAudit";
+import { asyncHandler, validateClaimInput, validateFileUpload, validateAdminLogin, sanitizeString } from "./utils/validation";
+import { priceDBCache } from "./utils/priceDBCache";
+import { validateBatchSize } from "./utils/batchProcessor";
+import { getCoarseLocation, getAreaCodeFromZip } from "./utils/location";
+import { matchPartnersToUser, MATCHING_EXPLANATION } from "./controllers/partnerMatching";
+import { PROMO_PARTNERS } from "@shared/partners";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -24,12 +30,14 @@ const claimAnalysisSchema = z.object({
   items: z.array(z.object({
     category: z.string(),
     description: z.string(),
-    quantity: z.number(),
+    quantity: z.number().positive(),
     unit: z.string().default("EA"),
-    quotedPrice: z.number().optional(),
-    unitPrice: z.number().optional(),
-  }).refine(data => data.quotedPrice !== undefined || data.unitPrice !== undefined, {
-    message: "Either quotedPrice or unitPrice must be provided"
+    quotedPrice: z.number().positive().optional(),
+    unitPrice: z.number().positive().optional(),
+  }).refine(data => 
+    (data.quotedPrice !== undefined && data.quotedPrice > 0) || 
+    (data.unitPrice !== undefined && data.unitPrice > 0), {
+    message: "Either quotedPrice or unitPrice must be provided and must be greater than zero"
   }))
 });
 
@@ -43,29 +51,23 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Admin login endpoint
-  app.post("/api/admin/login", async (req, res) => {
-    try {
-      const { password } = z.object({
-        password: z.string(),
-      }).parse(req.body);
+  app.post("/api/admin/login", validateAdminLogin, asyncHandler(async (req, res) => {
+    const { password } = req.body;
 
-      const adminPassword = process.env.ADMIN_PASSWORD;
-      
-      if (!adminPassword) {
-        res.status(500).json({ error: "Server configuration error: ADMIN_PASSWORD not set" });
-        return;
-      }
-
-      if (password === adminPassword) {
-        req.session.isAdmin = true;
-        res.json({ success: true, message: "Logged in successfully" });
-      } else {
-        res.status(401).json({ error: "Invalid password" });
-      }
-    } catch (error: any) {
-      res.status(400).json({ error: "Invalid request", details: error.message });
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!adminPassword) {
+      res.status(500).json({ error: "Server configuration error: ADMIN_PASSWORD not set" });
+      return;
     }
-  });
+
+    if (password === adminPassword) {
+      req.session.isAdmin = true;
+      res.json({ success: true, message: "Logged in successfully" });
+    } else {
+      res.status(401).json({ error: "Invalid password" });
+    }
+  }));
 
   // Admin logout endpoint
   app.post("/api/admin/logout", (req, res) => {
@@ -104,8 +106,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subtotal = item.quotedPrice;
       unitPrice = subtotal / qty;
     } else {
-      unitPrice = 0;
-      subtotal = 0;
+      throw new Error(`Invalid pricing for item "${item.description}": either unitPrice or quotedPrice must be provided and must be greater than zero`);
     }
     
     return {
@@ -119,20 +120,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Analyze claim and calculate FMV with external API enrichment
-  app.post("/api/claims/analyze", async (req, res) => {
-    try {
-      const data = claimAnalysisSchema.parse(req.body);
+  app.post("/api/claims/analyze", validateClaimInput, asyncHandler(async (req, res) => {
+    const data = claimAnalysisSchema.parse(req.body);
       
-      // Normalize items to consistent format - will throw on invalid quantities
-      let normalizedItems: Array<ReturnType<typeof normalizeClaimItem>>;
-      try {
-        normalizedItems = data.items.map(normalizeClaimItem);
-      } catch (normError: any) {
-        return res.status(400).json({ 
-          error: "Invalid item data", 
-          details: normError.message 
-        });
-      }
+    // Validate batch size to prevent DoS
+    validateBatchSize(data.items.length, 100);
+      
+    // Normalize items to consistent format - will throw on invalid quantities
+    let normalizedItems: Array<ReturnType<typeof normalizeClaimItem>>;
+    try {
+      normalizedItems = data.items.map(normalizeClaimItem);
+    } catch (normError: any) {
+      return res.status(400).json({ 
+        error: "Invalid item data", 
+        details: normError.message 
+      });
+    }
       
       // Fetch BLS inflation data and regional context in parallel
       const blsApiKey = process.env.BLS_API_KEY; // Optional - works without it but with rate limits
@@ -177,7 +180,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalInsuranceOffer = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
       const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
       const totalAdditional = totalFMV - totalInsuranceOffer;
-      const overallIncrease = (totalAdditional / totalInsuranceOffer) * 100;
+      // Guard against divide-by-zero
+      const overallIncrease = totalInsuranceOffer > 0 
+        ? (totalAdditional / totalInsuranceOffer) * 100 
+        : 0;
 
       // Create a session to track this analysis
       const session = await storage.createSession({
@@ -223,31 +229,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }));
 
-      res.json({
-        zipCode: data.zipCode,
-        items: results,
-        summary: {
-          totalInsuranceOffer: Math.round(totalInsuranceOffer * 100) / 100,
-          totalFMV: Math.round(totalFMV * 100) / 100,
-          totalAdditional: Math.round(totalAdditional * 100) / 100,
-          overallIncrease: Math.round(overallIncrease * 10) / 10
-        },
-        regionalContext: {
-          femaClaimCount: regionalContext.femaClaimCount,
-          avgFEMAPayment: regionalContext.avgFEMAPayment,
-          inflationAdjustment: Math.round((inflationMultiplier - 1) * 100 * 10) / 10,
-          topComplaints: regionalContext.topInsuranceComplaints.slice(0, 3)
-        }
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({ error: "Invalid request data", details: error.errors });
-      } else {
-        console.error("Error analyzing claim:", error);
-        res.status(500).json({ error: "Failed to analyze claim" });
+    res.json({
+      zipCode: data.zipCode,
+      items: results,
+      summary: {
+        totalInsuranceOffer: Math.round(totalInsuranceOffer * 100) / 100,
+        totalFMV: Math.round(totalFMV * 100) / 100,
+        totalAdditional: Math.round(totalAdditional * 100) / 100,
+        overallIncrease: Math.round(overallIncrease * 10) / 10
+      },
+      regionalContext: {
+        femaClaimCount: regionalContext.femaClaimCount,
+        avgFEMAPayment: regionalContext.avgFEMAPayment,
+        inflationAdjustment: Math.round((inflationMultiplier - 1) * 100 * 10) / 10,
+        topComplaints: regionalContext.topInsuranceComplaints.slice(0, 3)
       }
-    }
-  });
+    });
+  }));
 
   // Get regional statistics (for future analytics dashboard)
   app.get("/api/stats/regional", async (req, res) => {
@@ -563,6 +561,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Match partners to user location (Geo-Targeting API)
+  app.post("/api/partners/match", asyncHandler(async (req, res) => {
+    const { zip, areaCode, category, maxResults } = z.object({
+      zip: z.string().regex(/^\d{5}$/).optional(),
+      areaCode: z.string().regex(/^\d{3}$/).optional(),
+      category: z.string().optional(),
+      maxResults: z.number().min(1).max(20).default(5),
+    }).parse(req.body);
+
+    // If no location provided, detect from IP
+    let userLocation;
+    if (zip || areaCode) {
+      const areaCodes = areaCode ? [areaCode] : (zip ? getAreaCodeFromZip(zip) : []);
+      userLocation = {
+        zip,
+        areaCode: areaCodes[0],
+      };
+    } else {
+      userLocation = getCoarseLocation(req);
+    }
+
+    // Get matched partners
+    const matchedPartners = matchPartnersToUser(
+      userLocation,
+      PROMO_PARTNERS,
+      category,
+      maxResults
+    );
+
+    res.json({
+      location: {
+        zip: userLocation.zip,
+        areaCode: userLocation.areaCode,
+        metro: userLocation.metro,
+      },
+      partners: matchedPartners,
+      matchingInfo: MATCHING_EXPLANATION,
+      totalMatches: matchedPartners.length,
+    });
+  }));
+
   // Get partners with filters
   app.get("/api/partners", async (req, res) => {
     try {
@@ -856,14 +895,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Health check endpoint (v2.0)
+  // Health check endpoint with memory monitoring
   app.get("/health", (req, res) => {
+    const memUsage = process.memoryUsage();
+    const cacheStats = priceDBCache.getStats();
     const items = getAllItems();
+    
     res.json({ 
       status: 'ok', 
       version: '2.0.0',
       timestamp: new Date().toISOString(),
-      priceDBItems: items.length
+      uptime: Math.floor(process.uptime()),
+      memory: {
+        rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+        heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+        external: `${Math.round(memUsage.external / 1024 / 1024)}MB`
+      },
+      priceDB: {
+        items: items.length,
+        cacheHits: cacheStats.cacheHits,
+        cacheMisses: cacheStats.cacheMisses,
+        cacheSize: `${cacheStats.memorySizeKB}KB`,
+        cacheAge: `${priceDBCache.getCacheAge()}min`,
+        lastLoaded: cacheStats.lastLoaded
+      }
     });
   });
 
