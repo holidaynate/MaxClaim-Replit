@@ -11,6 +11,7 @@ export interface CoarseLocation {
   metro?: string;        // Metro area (e.g., "San Antonio")
   areaCode?: string;     // Phone area code (e.g., "210")
   zipPrefix?: string;    // First 3 digits of ZIP (e.g., "782")
+  description?: string;  // Human-readable description (e.g., "San Antonio area (210 area code)")
 }
 
 /**
@@ -40,49 +41,27 @@ const AREA_CODE_MAP: Record<string, CoarseLocation> = {
 };
 
 /**
- * Get coarse location from request IP address
+ * Get coarse location from ZIP code
  * Returns metro-level location WITHOUT exposing exact user location
  * 
- * @param req Express request object
+ * @param zip ZIP code string
  * @returns Coarse location data
  */
-export function getCoarseLocation(req: Request): CoarseLocation {
-  const ip = getClientIP(req);
+export function getCoarseLocation(zip: string): CoarseLocation {
+  // Map ZIP code to metro area
+  const areaCodeData = getAreaCodeFromZip(zip);
+  const metro = getMetroFromZip(zip);
   
-  // For beta/development: Default to San Antonio area
-  // In production: Use GeoIP lookup service (e.g., ipapi.co, maxmind)
+  // Default to San Antonio for unknown ZIPs
   const defaultLocation: CoarseLocation = {
     state: 'TX',
-    metro: 'San Antonio',
-    areaCode: '210',
-    zipPrefix: '782'
+    metro: metro || 'San Antonio',
+    areaCode: areaCodeData[0] || '210',
+    zipPrefix: zip.substring(0, 3),
+    description: metro ? `${metro} area (${areaCodeData[0] || 'unknown'} area code)` : 'San Antonio area (210 area code)'
   };
 
-  // In production, you would:
-  // 1. Use a GeoIP service to get city/region from IP
-  // 2. Map city to area code
-  // 3. Return coarse location
-  
-  // For now, return default
   return defaultLocation;
-}
-
-/**
- * Get client IP address from request
- * Handles proxies and load balancers
- */
-function getClientIP(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  
-  if (forwarded) {
-    // x-forwarded-for may contain multiple IPs, first is the client
-    const ips = typeof forwarded === 'string' 
-      ? forwarded.split(',') 
-      : forwarded;
-    return ips[0].trim();
-  }
-  
-  return req.socket.remoteAddress || '127.0.0.1';
 }
 
 /**

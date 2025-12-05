@@ -33,6 +33,9 @@ export function log(message: string, source = "express") {
 
 export const app = express();
 
+// Trust proxy for rate limiting and IP detection in proxied environments
+app.set('trust proxy', true);
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown

@@ -38,7 +38,7 @@ const claimAnalysisSchema = z.object({
     (data.quotedPrice !== undefined && data.quotedPrice > 0) || 
     (data.unitPrice !== undefined && data.unitPrice > 0), {
     message: "Either quotedPrice or unitPrice must be provided and must be greater than zero"
-  }))
+  })).min(1, "At least one claim item is required")
 });
 
 // Middleware to verify admin authentication
