@@ -88,6 +88,24 @@ Privacy-first location mapping using user-provided ZIP codes.
 - **Texas DOI Complaints**: Offers public complaint data for insurance companies.
 - **jsPDF**: Client-side PDF generation library.
 
+## Environment Secrets
+
+### Required Secrets (App fails without these)
+The server validates these at startup and throws an error if missing:
+- **SESSION_SECRET**: Session encryption key for admin authentication
+- **DATABASE_URL**: PostgreSQL connection string (Neon)
+- **ADMIN_PASSWORD**: Password for admin dashboard access
+
+### Optional Secrets (App works without these, with limitations)
+- **BLS_API_KEY**: Bureau of Labor Statistics API key (improves rate limits for inflation data)
+- **OCR_SPACE_API_KEY**: OCR.space API key (defaults to free tier 'helloworld' key if missing)
+- **SOCRATA_APP_TOKEN**: Texas Open Data portal token (improves rate limits for DOI complaint data)
+
+### Auto-Provisioned by Replit
+These are automatically managed by Replit and should not be manually set:
+- **PGDATABASE**, **PGHOST**, **PGPORT**, **PGUSER**, **PGPASSWORD**: PostgreSQL connection details
+- **REPLIT_DOMAINS**, **REPLIT_DEV_DOMAIN**, **REPL_ID**: Replit environment info
+
 ## Beta Checklist Status
 
 ### Completed
