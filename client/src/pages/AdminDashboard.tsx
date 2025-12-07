@@ -37,8 +37,13 @@ interface SalesAgent {
   phone: string | null;
   status: string;
   region: string | null;
+  agentRefCode: string | null;
+  birthYear: number | null;
   commissionTierId: string | null;
-  stripeConnectAccountId: string | null;
+  stripeConnectId: string | null;
+  totalEarned: number;
+  ytdEarnings: number;
+  joinedAt: string;
   createdAt: string;
 }
 
@@ -563,7 +568,25 @@ export default function AdminDashboard() {
                       </div>
                       <CardDescription>{agent.email}</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-3">
+                      {agent.agentRefCode && (
+                        <div className="bg-sky-500/10 border border-sky-500/30 rounded-md p-2">
+                          <p className="text-xs text-slate-400 mb-1">Reference Code</p>
+                          <p className="text-sky-400 font-mono font-bold text-lg" data-testid={`text-refcode-${agent.id}`}>
+                            {agent.agentRefCode}
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p className="text-slate-400">YTD Earnings</p>
+                          <p className="font-semibold text-green-400">{formatCurrency(Number(agent.ytdEarnings) || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400">Total Earned</p>
+                          <p className="font-semibold">{formatCurrency(Number(agent.totalEarned) || 0)}</p>
+                        </div>
+                      </div>
                       {agent.phone && (
                         <div className="flex items-center gap-2 text-sm">
                           <Phone className="h-4 w-4 text-slate-400" />
@@ -578,9 +601,9 @@ export default function AdminDashboard() {
                       )}
                       <div className="flex items-center gap-2 text-sm">
                         <Calendar className="h-4 w-4 text-slate-400" />
-                        <span>Joined {formatDate(agent.createdAt)}</span>
+                        <span>Joined {formatDate(agent.joinedAt || agent.createdAt)}</span>
                       </div>
-                      {agent.stripeConnectAccountId && (
+                      {agent.stripeConnectId && (
                         <div className="flex items-center gap-2 text-sm">
                           <CreditCard className="h-4 w-4 text-green-500" />
                           <span className="text-green-500">Stripe Connected</span>

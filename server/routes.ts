@@ -14,6 +14,7 @@ import { getCoarseLocation, getAreaCodeFromZip } from "./utils/location";
 import { matchPartnersToUser, MATCHING_EXPLANATION } from "./controllers/partnerMatching";
 import { PROMO_PARTNERS } from "@shared/partners";
 import { seedDefaultCommissionTiers } from "./services/commissionEngine";
+import { generateAgentRefCode, isValidAgentRefCodeFormat, generateUniqueAgentRefCode } from "./utils/agentRefCode";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -509,6 +510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: z.string().optional(),
         licenseNumber: z.string().optional(),
         zipCodes: z.array(z.string()).min(1),
+        agentRefCode: z.string().optional(), // Agent reference code for attribution
         pricingPreferences: z.object({
           cpc: z.object({
             enabled: z.boolean(),
@@ -530,6 +532,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }),
         notes: z.string().optional(),
       }).parse(req.body);
+
+      // Validate agent reference code if provided
+      let signingAgentId: string | null = null;
+      if (loiData.agentRefCode) {
+        if (!isValidAgentRefCodeFormat(loiData.agentRefCode)) {
+          return res.status(400).json({ error: "Invalid agent reference code format" });
+        }
+        const agent = await storage.getSalesAgentByRefCode(loiData.agentRefCode);
+        if (!agent) {
+          return res.status(400).json({ error: "Agent reference code not found" });
+        }
+        if (agent.status !== 'active') {
+          return res.status(400).json({ error: "Agent is not active" });
+        }
+        signingAgentId = agent.id;
+      }
 
       // Filter out disabled pricing options before storing
       const sanitizedPrefs = { ...loiData.pricingPreferences };
@@ -554,6 +572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: loiData.website,
         licenseNumber: loiData.licenseNumber,
         status: "pending",
+        signingAgentId, // Link to signing agent if provided
       });
 
       const loi = await storage.createPartnershipLOI({
@@ -561,6 +580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pricingPreferences: sanitizedPrefs,
         notes: loiData.notes,
         status: "pending",
+        agentId: signingAgentId, // Store agent ID in LOI for commission tracking
       }, loiData.zipCodes);
 
       // Auto-approve if enabled (for beta/testing)
@@ -589,11 +609,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Match partners to user location (Geo-Targeting API)
   app.post("/api/partners/match", asyncHandler(async (req, res) => {
-    const { zip, areaCode, category, maxResults } = z.object({
+    const { zip, areaCode, category, maxResults, sessionId, trackImpressions } = z.object({
       zip: z.string().regex(/^\d{5}$/).optional(),
       areaCode: z.string().regex(/^\d{3}$/).optional(),
       category: z.string().optional(),
       maxResults: z.number().min(1).max(20).default(5),
+      sessionId: z.string().optional(), // For tracking impressions
+      trackImpressions: z.boolean().default(true), // Enable/disable impression tracking
     }).parse(req.body);
 
     // If no location provided, use default San Antonio
@@ -623,6 +645,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       maxResults
     );
 
+    // Track ad impressions for each matched partner (non-blocking)
+    const impressionIds: Record<string, string> = {};
+    if (trackImpressions && zip) {
+      for (const partner of matchedPartners) {
+        try {
+          const impression = await storage.createAdImpression({
+            partnerId: partner.id,
+            zipCode: zip,
+            sessionId: sessionId || null,
+            referralType: 'match',
+            clickthrough: false,
+          });
+          impressionIds[partner.id] = impression.id;
+        } catch (error) {
+          console.error(`Failed to track impression for partner ${partner.id}:`, error);
+        }
+      }
+    }
+
     res.json({
       location: {
         zip: userLocation.zip,
@@ -630,6 +671,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metro: userLocation.metro,
       },
       partners: matchedPartners,
+      impressionIds, // Include impression IDs so frontend can track clickthroughs
       matchingInfo: MATCHING_EXPLANATION,
       totalMatches: matchedPartners.length,
     });
@@ -1123,17 +1165,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== SALES AGENT MANAGEMENT ROUTES =====
 
-  // Create a new sales agent
+  // Validate agent reference code (public endpoint for partner signup)
+  app.get("/api/agents/validate-code/:code", asyncHandler(async (req, res) => {
+    const { code } = req.params;
+    
+    if (!isValidAgentRefCodeFormat(code)) {
+      return res.json({ valid: false, error: "Invalid code format" });
+    }
+    
+    const agent = await storage.getSalesAgentByRefCode(code);
+    if (!agent) {
+      return res.json({ valid: false, error: "Agent not found" });
+    }
+    
+    if (agent.status !== 'active') {
+      return res.json({ valid: false, error: "Agent is not active" });
+    }
+    
+    res.json({ 
+      valid: true, 
+      agent: { 
+        name: agent.name, 
+        region: agent.region,
+        refCode: agent.agentRefCode,
+      } 
+    });
+  }));
+
+  // Create a new sales agent (with auto-generated ref code)
   app.post("/api/admin/agents", requireAdmin, asyncHandler(async (req, res) => {
     const agentData = z.object({
       name: z.string().min(2),
       email: z.string().email(),
       phone: z.string().optional(),
       region: z.string().optional(),
+      birthYear: z.number().min(1940).max(2010).optional(),
+      commissionTierId: z.string().optional(),
     }).parse(req.body);
 
+    // Create the agent first
     const agent = await storage.createSalesAgent(agentData);
+    
+    // Generate unique ref code if birthYear provided
+    if (agentData.birthYear) {
+      const nameParts = agentData.name.split(' ');
+      const firstName = nameParts[0] || 'xxx';
+      const lastName = nameParts.slice(1).join(' ') || nameParts[0] || 'xxx';
+      const joinYear = new Date().getFullYear();
+      
+      const existingCodes = await storage.getAllAgentRefCodes();
+      const refCode = await generateUniqueAgentRefCode(
+        firstName, 
+        lastName, 
+        agentData.birthYear, 
+        joinYear, 
+        existingCodes
+      );
+      
+      await storage.updateSalesAgentRefCode(agent.id, refCode);
+      
+      // Return agent with ref code
+      const updatedAgent = await storage.getSalesAgent(agent.id);
+      return res.status(201).json(updatedAgent);
+    }
+    
     res.status(201).json(agent);
+  }));
+  
+  // Generate/regenerate agent reference code
+  app.post("/api/admin/agents/:id/generate-code", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { birthYear } = z.object({
+      birthYear: z.number().min(1940).max(2010),
+    }).parse(req.body);
+    
+    const agent = await storage.getSalesAgent(id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    
+    const nameParts = agent.name.split(' ');
+    const firstName = nameParts[0] || 'xxx';
+    const lastName = nameParts.slice(1).join(' ') || nameParts[0] || 'xxx';
+    const joinYear = agent.joinedAt ? new Date(agent.joinedAt).getFullYear() : new Date().getFullYear();
+    
+    const existingCodes = await storage.getAllAgentRefCodes();
+    const refCode = await generateUniqueAgentRefCode(firstName, lastName, birthYear, joinYear, existingCodes);
+    
+    await storage.updateSalesAgentRefCode(id, refCode);
+    
+    res.json({ success: true, refCode });
   }));
 
   // Get all sales agents
@@ -1487,6 +1608,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
         pending: pendingPayouts.length,
         totalPending: pendingPayouts.reduce((sum: number, p: { amount: any }) => sum + Number(p.amount), 0),
       },
+    });
+  }));
+
+  // ===== AD IMPRESSION TRACKING ROUTES =====
+
+  // Record a partner impression (when partner is shown to user)
+  app.post("/api/impressions", asyncHandler(async (req, res) => {
+    const data = z.object({
+      partnerId: z.string(),
+      contractId: z.string().optional(),
+      rotationId: z.string().optional(),
+      zipCode: z.string(),
+      sessionId: z.string().optional(),
+      referralType: z.string().optional(),
+    }).parse(req.body);
+
+    const impression = await storage.createAdImpression({
+      ...data,
+      clickthrough: false,
+    });
+
+    res.status(201).json({ id: impression.id });
+  }));
+
+  // Record a clickthrough
+  app.post("/api/impressions/:id/click", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await storage.recordClickthrough(id);
+    res.json({ success: true });
+  }));
+
+  // Get impression stats for a partner (admin only)
+  app.get("/api/admin/impressions/stats/:partnerId", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId } = req.params;
+    const days = parseInt(req.query.days as string) || 30;
+    
+    const stats = await storage.getImpressionStats(partnerId, days);
+    res.json(stats);
+  }));
+
+  // Get all impressions (admin only)
+  app.get("/api/admin/impressions", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId, zipCode } = req.query;
+    const impressions = await storage.getAdImpressions({
+      partnerId: partnerId as string,
+      zipCode: zipCode as string,
+    });
+    res.json({ impressions, total: impressions.length });
+  }));
+
+  // ===== AD ROTATION ROUTES =====
+
+  // Get ad rotations for a ZIP code (public - used for displaying partners)
+  app.get("/api/ad-rotations/:zipCode", asyncHandler(async (req, res) => {
+    const { zipCode } = req.params;
+    const rotations = await storage.getAdRotationsByZip(zipCode);
+    res.json({ rotations });
+  }));
+
+  // Admin: Create ad rotation
+  app.post("/api/admin/ad-rotations", requireAdmin, asyncHandler(async (req, res) => {
+    const data = z.object({
+      partnerId: z.string(),
+      contractId: z.string().optional(),
+      zipCode: z.string(),
+      weight: z.number().min(0.1).max(10).default(1.0),
+      rotationOrder: z.number().default(0),
+    }).parse(req.body);
+
+    const rotation = await storage.createAdRotation(data);
+    res.status(201).json(rotation);
+  }));
+
+  // Admin: Get all ad rotations
+  app.get("/api/admin/ad-rotations", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId, zipCode, status } = req.query;
+    const rotations = await storage.getAdRotations({
+      partnerId: partnerId as string,
+      zipCode: zipCode as string,
+      status: status as string,
+    });
+    res.json({ rotations, total: rotations.length });
+  }));
+
+  // Admin: Delete ad rotation
+  app.delete("/api/admin/ad-rotations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await storage.deleteAdRotation(id);
+    res.json({ success: true });
+  }));
+
+  // ===== RENEWAL PROCESSING ROUTE =====
+
+  // Process pending renewals (could be triggered by cron)
+  app.post("/api/admin/renewals/process", requireAdmin, asyncHandler(async (req, res) => {
+    const daysAhead = parseInt(req.query.days as string) || 7;
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    
+    const pendingRenewals = await storage.getPendingRenewals(futureDate);
+    const processed = [];
+    const failed = [];
+    
+    for (const renewal of pendingRenewals) {
+      try {
+        // Get the contract for pricing info
+        const contract = await storage.getPartnerContract(renewal.contractId);
+        if (!contract) {
+          failed.push({ id: renewal.id, error: "Contract not found" });
+          continue;
+        }
+        
+        // Create invoice for renewal
+        const invoice = await storage.createPartnerInvoice({
+          contractId: renewal.contractId,
+          partnerId: renewal.partnerId,
+          amount: contract.baseMonthly || 0,
+          dueDate: new Date(renewal.renewalDate),
+          status: "unpaid",
+          notes: `Auto-renewal for contract ${contract.id}`,
+        });
+        
+        // Create commission for the agent if assigned
+        if (renewal.agentId) {
+          await storage.createAgentCommission({
+            agentId: renewal.agentId,
+            partnerId: renewal.partnerId,
+            contractId: renewal.contractId,
+            invoiceId: invoice.id,
+            commissionType: "renewal",
+            rate: contract.commissionRate || 0.15,
+            baseAmount: contract.baseMonthly || 0,
+            commissionAmount: (contract.baseMonthly || 0) * (contract.commissionRate || 0.15) * 0.75, // 75% of deal close rate for renewals
+            status: "pending",
+            dateEarned: new Date(),
+          });
+        }
+        
+        // Mark renewal as confirmed
+        await storage.updatePartnerRenewalStatus(renewal.id, "confirmed");
+        
+        processed.push({ id: renewal.id, invoiceId: invoice.id });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        failed.push({ id: renewal.id, error: message });
+        await storage.updatePartnerRenewalStatus(renewal.id, "failed");
+      }
+    }
+    
+    res.json({
+      processed: processed.length,
+      failed: failed.length,
+      details: { processed, failed },
     });
   }));
 

@@ -44,6 +44,10 @@ import {
   type InsertPartnerRenewal,
   type BogoOrganization,
   type InsertBogoOrganization,
+  type AdRotation,
+  type InsertAdRotation,
+  type AdImpression,
+  type InsertAdImpression,
   users,
   replitUsers,
   userClaims,
@@ -68,9 +72,11 @@ import {
   agentPayouts,
   partnerRenewals,
   bogoOrganizations,
+  adRotations,
+  adImpressions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, inArray, like } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, like, gte, lte } from "drizzle-orm";
 
 // Analytics data (no PII - only ZIP codes and aggregate data)
 interface ClaimAnalysis {
@@ -212,6 +218,24 @@ export interface IStorage {
   createBogoOrganization(data: InsertBogoOrganization): Promise<BogoOrganization>;
   getBogoOrganizations(filters?: { category?: string; region?: string; status?: string }): Promise<BogoOrganization[]>;
   updateBogoOrganization(id: string, data: Partial<InsertBogoOrganization>): Promise<void>;
+  
+  // Agent Reference Code
+  getSalesAgentByRefCode(refCode: string): Promise<SalesAgent | undefined>;
+  getAllAgentRefCodes(): Promise<string[]>;
+  updateSalesAgentRefCode(id: string, refCode: string): Promise<void>;
+  
+  // Ad Rotations
+  createAdRotation(data: InsertAdRotation): Promise<AdRotation>;
+  getAdRotations(filters?: { partnerId?: string; zipCode?: string; status?: string }): Promise<AdRotation[]>;
+  getAdRotationsByZip(zipCode: string): Promise<AdRotation[]>;
+  updateAdRotation(id: string, data: Partial<InsertAdRotation>): Promise<void>;
+  deleteAdRotation(id: string): Promise<void>;
+  
+  // Ad Impressions
+  createAdImpression(data: InsertAdImpression): Promise<AdImpression>;
+  getAdImpressions(filters?: { partnerId?: string; zipCode?: string; startDate?: Date; endDate?: Date }): Promise<AdImpression[]>;
+  recordClickthrough(id: string): Promise<void>;
+  getImpressionStats(partnerId: string, days?: number): Promise<{ impressions: number; clicks: number; ctr: number }>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -1091,6 +1115,161 @@ export class DatabaseStorage implements IStorage {
       .update(bogoOrganizations)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(bogoOrganizations.id, id));
+  }
+
+  // Agent Reference Code methods
+  async getSalesAgentByRefCode(refCode: string): Promise<SalesAgent | undefined> {
+    const [agent] = await db
+      .select()
+      .from(salesAgents)
+      .where(eq(salesAgents.agentRefCode, refCode.toLowerCase()));
+    return agent || undefined;
+  }
+
+  async getAllAgentRefCodes(): Promise<string[]> {
+    const agents = await db
+      .select({ refCode: salesAgents.agentRefCode })
+      .from(salesAgents)
+      .where(sql`${salesAgents.agentRefCode} IS NOT NULL`);
+    return agents.map(a => a.refCode).filter((code): code is string => code !== null);
+  }
+
+  async updateSalesAgentRefCode(id: string, refCode: string): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({ agentRefCode: refCode.toLowerCase(), updatedAt: new Date() })
+      .where(eq(salesAgents.id, id));
+  }
+
+  // Ad Rotation methods
+  async createAdRotation(data: InsertAdRotation): Promise<AdRotation> {
+    const [rotation] = await db.insert(adRotations).values(data).returning();
+    return rotation;
+  }
+
+  async getAdRotations(filters?: { 
+    partnerId?: string; 
+    zipCode?: string; 
+    status?: string 
+  }): Promise<AdRotation[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(adRotations.partnerId, filters.partnerId));
+    }
+    if (filters?.zipCode) {
+      conditions.push(eq(adRotations.zipCode, filters.zipCode));
+    }
+    if (filters?.status) {
+      conditions.push(eq(adRotations.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(adRotations).orderBy(desc(adRotations.weight));
+    }
+    
+    return await db
+      .select()
+      .from(adRotations)
+      .where(and(...conditions))
+      .orderBy(desc(adRotations.weight));
+  }
+
+  async getAdRotationsByZip(zipCode: string): Promise<AdRotation[]> {
+    return await db
+      .select()
+      .from(adRotations)
+      .where(
+        and(
+          eq(adRotations.zipCode, zipCode),
+          eq(adRotations.status, 'active' as any)
+        )
+      )
+      .orderBy(desc(adRotations.weight));
+  }
+
+  async updateAdRotation(id: string, data: Partial<InsertAdRotation>): Promise<void> {
+    await db
+      .update(adRotations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(adRotations.id, id));
+  }
+
+  async deleteAdRotation(id: string): Promise<void> {
+    await db.delete(adRotations).where(eq(adRotations.id, id));
+  }
+
+  // Ad Impression methods
+  async createAdImpression(data: InsertAdImpression): Promise<AdImpression> {
+    const [impression] = await db.insert(adImpressions).values(data).returning();
+    return impression;
+  }
+
+  async getAdImpressions(filters?: { 
+    partnerId?: string; 
+    zipCode?: string; 
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<AdImpression[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(adImpressions.partnerId, filters.partnerId));
+    }
+    if (filters?.zipCode) {
+      conditions.push(eq(adImpressions.zipCode, filters.zipCode));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(adImpressions.timestamp, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(adImpressions.timestamp, filters.endDate));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(adImpressions).orderBy(desc(adImpressions.timestamp)).limit(1000);
+    }
+    
+    return await db
+      .select()
+      .from(adImpressions)
+      .where(and(...conditions))
+      .orderBy(desc(adImpressions.timestamp))
+      .limit(1000);
+  }
+
+  async recordClickthrough(id: string): Promise<void> {
+    await db
+      .update(adImpressions)
+      .set({ clickthrough: true as any })
+      .where(eq(adImpressions.id, id));
+  }
+
+  async getImpressionStats(partnerId: string, days: number = 30): Promise<{ 
+    impressions: number; 
+    clicks: number; 
+    ctr: number 
+  }> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    const impressions = await db
+      .select()
+      .from(adImpressions)
+      .where(
+        and(
+          eq(adImpressions.partnerId, partnerId),
+          gte(adImpressions.timestamp, startDate)
+        )
+      );
+    
+    const totalImpressions = impressions.length;
+    const clicks = impressions.filter(i => i.clickthrough).length;
+    const ctr = totalImpressions > 0 ? (clicks / totalImpressions) * 100 : 0;
+    
+    return {
+      impressions: totalImpressions,
+      clicks,
+      ctr: parseFloat(ctr.toFixed(2)),
+    };
   }
 }
 

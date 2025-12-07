@@ -384,6 +384,7 @@ export const partners = pgTable("partners", {
   phone: text("phone").notNull(),
   website: text("website"),
   licenseNumber: text("license_number"),
+  signingAgentId: varchar("signing_agent_id"), // Sales agent who signed this partner
   status: partnerStatus("status").default("pending").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -391,6 +392,7 @@ export const partners = pgTable("partners", {
   emailIdx: index("partners_email_idx").on(table.email),
   statusIdx: index("partners_status_idx").on(table.status),
   typeIdx: index("partners_type_idx").on(table.type),
+  agentIdx: index("partners_agent_idx").on(table.signingAgentId),
 }));
 
 export const insertPartnerSchema = createInsertSchema(partners).omit({
@@ -406,6 +408,7 @@ export type Partner = typeof partners.$inferSelect;
 export const partnershipLOIs = pgTable("partnership_lois", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  agentId: varchar("agent_id"), // Sales agent who signed this partner for commission tracking
   pricingPreferences: jsonb("pricing_preferences").notNull().$type<{
     cpc?: { enabled: boolean; amount: number; budgetPeriod: "daily" | "monthly"; budgetCap: number };
     affiliate?: { enabled: boolean; commissionPct: number; paymentTerms: string };
@@ -419,6 +422,7 @@ export const partnershipLOIs = pgTable("partnership_lois", {
 }, (table) => ({
   partnerIdx: index("partnership_lois_partner_idx").on(table.partnerId),
   statusIdx: index("partnership_lois_status_idx").on(table.status),
+  agentIdx: index("partnership_lois_agent_idx").on(table.agentId),
 }));
 
 const pricingPreferencesSchema = z.object({
@@ -645,10 +649,12 @@ export type AgentCommissionTier = typeof agentCommissionTiers.$inferSelect;
 // Sales Agents - Track sales/development team members
 export const salesAgents = pgTable("sales_agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentRefCode: text("agent_ref_code").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   phone: text("phone"),
   region: text("region"),
+  birthYear: integer("birth_year"),
   commissionTierId: varchar("commission_tier_id").references(() => agentCommissionTiers.id),
   stripeConnectId: text("stripe_connect_id").unique(),
   status: agentStatus("status").default("active").notNull(),
@@ -662,6 +668,7 @@ export const salesAgents = pgTable("sales_agents", {
   emailIdx: index("sales_agents_email_idx").on(table.email),
   statusIdx: index("sales_agents_status_idx").on(table.status),
   regionIdx: index("sales_agents_region_idx").on(table.region),
+  refCodeIdx: index("sales_agents_ref_code_idx").on(table.agentRefCode),
 }));
 
 export const insertSalesAgentSchema = createInsertSchema(salesAgents).omit({
@@ -955,6 +962,86 @@ export const partnerRenewalsRelations = relations(partnerRenewals, ({ one }) => 
   commission: one(agentCommissions, {
     fields: [partnerRenewals.commissionId],
     references: [agentCommissions.id],
+  }),
+}));
+
+// Ad Rotation - Track which partners show in which ZIP codes
+export const adRotations = pgTable("ad_rotations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  contractId: varchar("contract_id").references(() => partnerContracts.id, { onDelete: "set null" }),
+  zipCode: text("zip_code").notNull(),
+  weight: numeric("weight", { precision: 4, scale: 2 }).default("1.0").$type<number>(),
+  rotationOrder: integer("rotation_order").default(0),
+  status: agentStatus("status").default("active").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("ad_rotations_partner_idx").on(table.partnerId),
+  zipIdx: index("ad_rotations_zip_idx").on(table.zipCode),
+  weightIdx: index("ad_rotations_weight_idx").on(table.weight),
+}));
+
+export const insertAdRotationSchema = createInsertSchema(adRotations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAdRotation = z.infer<typeof insertAdRotationSchema>;
+export type AdRotation = typeof adRotations.$inferSelect;
+
+// Ad Impressions - Track every time a partner is shown to users
+export const adImpressions = pgTable("ad_impressions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  contractId: varchar("contract_id").references(() => partnerContracts.id, { onDelete: "set null" }),
+  rotationId: varchar("rotation_id").references(() => adRotations.id, { onDelete: "set null" }),
+  zipCode: text("zip_code").notNull(),
+  sessionId: varchar("session_id"),
+  clickthrough: integer("clickthrough").default(0).$type<boolean>(),
+  referralType: text("referral_type"),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("ad_impressions_partner_idx").on(table.partnerId),
+  zipIdx: index("ad_impressions_zip_idx").on(table.zipCode),
+  timestampIdx: index("ad_impressions_timestamp_idx").on(table.timestamp),
+  clickthroughIdx: index("ad_impressions_clickthrough_idx").on(table.clickthrough),
+}));
+
+export const insertAdImpressionSchema = createInsertSchema(adImpressions).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertAdImpression = z.infer<typeof insertAdImpressionSchema>;
+export type AdImpression = typeof adImpressions.$inferSelect;
+
+// Ad Rotation Relations
+export const adRotationsRelations = relations(adRotations, ({ one, many }) => ({
+  partner: one(partners, {
+    fields: [adRotations.partnerId],
+    references: [partners.id],
+  }),
+  contract: one(partnerContracts, {
+    fields: [adRotations.contractId],
+    references: [partnerContracts.id],
+  }),
+  impressions: many(adImpressions),
+}));
+
+export const adImpressionsRelations = relations(adImpressions, ({ one }) => ({
+  partner: one(partners, {
+    fields: [adImpressions.partnerId],
+    references: [partners.id],
+  }),
+  contract: one(partnerContracts, {
+    fields: [adImpressions.contractId],
+    references: [partnerContracts.id],
+  }),
+  rotation: one(adRotations, {
+    fields: [adImpressions.rotationId],
+    references: [adRotations.id],
   }),
 }));
 
