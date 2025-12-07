@@ -12,7 +12,7 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 The application features a modern dark slate-950 theme with sky-blue (sky-500) accents. The homepage includes a Hero Section with branding, a "How It Works" visual flow, a two-column desktop layout (claim form on left, contractor matching/resources on right), and a Partner Section. A preserved single-screen Claim Wizard uses trust badges and a triple CTA strategy to guide users. Accessibility is prioritized with WCAG AA compliance, keyboard navigation, and mobile responsiveness.
 
 ### Technical Implementations
-Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeScript + Vite**, with **Wouter** for routing, **TanStack Query** for server state, **Shadcn/ui** and **Tailwind CSS** for UI, and **React Hook Form + Zod** for form validation. The backend is built with **Node.js + Express + TypeScript**, incorporating a regional FMV pricing engine, OCR service, and text parsing engine. A **PostgreSQL database** with **Drizzle ORM** handles persistent storage. The pricing analytics system continuously refines FMV accuracy.
+Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeScript + Vite**, with **Wouter** for routing, **TanStack Query** for server state, **Shadcn/ui** and **Tailwind CSS** for UI, and **React Hook Form + Zod** for form validation. The backend is built with **Node.js + Express + TypeScript**, incorporating a regional FMV pricing engine, dual OCR service (OCR.space + Tesseract.js), and text parsing engine. A **PostgreSQL database** (Neon) with **Drizzle ORM** handles persistent storage. Pricing data is collected for future analytics refinement.
 
 ### Feature Specifications
 - **Single-Screen Claim Wizard**: Streamlined flow for document upload, ZIP code, damage type, and insurance offer amount.
@@ -21,21 +21,21 @@ Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeSc
 - **v2.0 Audit Engine** (shared/priceAudit.ts): Unit-price based audit comparing entered prices against RRC_COST (contractor minimum) and INS_MAX_COST (insurer maximum) ranges. Flags items as LOW_FLAG (underpaid), HIGH_FLAG (overpaid), PASS (fair), MISSING_ITEM (not in database), or INVALID_QUANTITY. Auto-calculates subtotals from unit price × quantity. Batch audit provides summary with total claim value, expected market value, variance, and potential underpayment calculations.
 - **Document Upload & OCR**: Supports JPG, PNG, PDF with dual OCR engine (**OCR.space API** and **Tesseract.js** fallback).
 - **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data sources for real-time FMV adjustments.
-- **Continuous Learning System**: Refines FMV calculations using historical user submission data (70% user data + 30% baseline).
+- **Pricing Data Collection**: Stores user submission data for future FMV refinement (infrastructure ready, active refinement pending).
 - **Disaster Relief Resources**: Provides links to FEMA, 211 Services, SBA Loans, HUD, and local DOI.
 - **PDF Export**: Client-side PDF generation of comprehensive reports.
 - **Email Report**: Allows users to email report summaries via mailto: links.
 - **Comprehensive Accessibility**: Text size toggle, high contrast mode, bilingual support infrastructure, ARIA labels, keyboard navigation.
 - **Legal Compliance**: Persistent footer with disclaimers and modal dialogs for legal information.
 - **Privacy Architecture**: Collects only anonymous data (ZIP codes, optional property addresses, item categories, units, quantities, pricing comparisons). No PII stored.
-- **Monetization Infrastructure**: Includes a partnership system for contractors/adjusters with various pricing models (CPC, Affiliate, Banner ads), ZIP targeting, weighted rotation, click tracking, and an admin dashboard for partner management.
+- **Monetization Infrastructure**: Partnership system for contractors/adjusters with pricing models (CPC, Affiliate, Banner ads), ZIP targeting, weighted rotation, lead/click tracking, and password-protected admin dashboard for partner approval. Payment processing not yet integrated.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
 - **Backend Stack**: Node.js, Express, TypeScript, PostgreSQL, Drizzle ORM.
 - **Database Schema**: Normalized PostgreSQL for sessions, claims, line items, pricing data, sources, and session usage.
 - **OCR Service**: Utilizes both cloud-based and local engines for robustness.
-- **Pricing Engine**: PostgreSQL-backed with regional multipliers and continuous learning.
+- **Pricing Engine**: PostgreSQL-backed with regional multipliers and data collection for future refinement.
 - **Data Flow**: Document upload triggers OCR and text parsing for auto-population; user input and external data drive FMV calculation, results are displayed, and pricing data points stored.
 - **Supported Categories**: Roofing, Flooring, Drywall, Painting, Plumbing, Electrical, HVAC, Windows & Doors, Appliances, Cabinets, and 'Other'.
 
