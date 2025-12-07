@@ -1120,6 +1120,375 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ===== SALES AGENT MANAGEMENT ROUTES =====
+
+  // Create a new sales agent
+  app.post("/api/admin/agents", requireAdmin, asyncHandler(async (req, res) => {
+    const agentData = z.object({
+      name: z.string().min(2),
+      email: z.string().email(),
+      phone: z.string().optional(),
+      region: z.string().optional(),
+    }).parse(req.body);
+
+    const agent = await storage.createSalesAgent(agentData);
+    res.status(201).json(agent);
+  }));
+
+  // Get all sales agents
+  app.get("/api/admin/agents", requireAdmin, asyncHandler(async (req, res) => {
+    const { status, region } = req.query;
+    const agents = await storage.getSalesAgents({
+      status: status as string,
+      region: region as string,
+    });
+    res.json({ agents, total: agents.length });
+  }));
+
+  // Get a specific sales agent
+  app.get("/api/admin/agents/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const agents = await storage.getSalesAgents({});
+    const agent = agents.find(a => a.id === id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    res.json(agent);
+  }));
+
+  // Get agent's commission summary
+  app.get("/api/admin/agents/:id/commissions", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.query;
+
+    const agents = await storage.getSalesAgents({});
+    const agent = agents.find(a => a.id === id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const commissions = await storage.getAgentCommissions({
+      agentId: id,
+      status: status as string,
+    });
+
+    const summary = commissions.reduce((acc: { total: number; pending: number; paid: number }, c) => {
+      acc.total += Number(c.commissionAmount);
+      acc.pending += c.status === 'pending' ? Number(c.commissionAmount) : 0;
+      acc.paid += c.status === 'paid' ? Number(c.commissionAmount) : 0;
+      return acc;
+    }, { total: 0, pending: 0, paid: 0 });
+
+    res.json({
+      agent: { id: agent.id, name: agent.name, tier: agent.commissionTierId },
+      commissions,
+      summary,
+    });
+  }));
+
+  // ===== PARTNER CONTRACT ROUTES =====
+
+  // Create a partner contract
+  app.post("/api/admin/contracts", requireAdmin, asyncHandler(async (req, res) => {
+    const contractData = z.object({
+      partnerId: z.string(),
+      agentId: z.string().optional(),
+      monetizationTier: z.enum(["free_bogo", "standard", "premium"]),
+      monthlyFee: z.number().min(0),
+      billingPeriod: z.enum(["monthly", "quarterly", "annual"]).default("monthly"),
+      rotationWeight: z.number().min(0.1).max(10).default(1.0),
+      autoRenew: z.boolean().default(true),
+      renewalPeriodDays: z.number().default(30),
+      bogoOrganizationId: z.string().optional(),
+    }).parse(req.body);
+
+    const contract = await storage.createPartnerContract(contractData);
+    res.status(201).json(contract);
+  }));
+
+  // Get all contracts
+  app.get("/api/admin/contracts", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId, agentId, status, tier } = req.query;
+    const contracts = await storage.getPartnerContracts({
+      partnerId: partnerId as string,
+      agentId: agentId as string,
+      status: status as string,
+      monetizationTier: tier as string,
+    });
+    res.json({ contracts, total: contracts.length });
+  }));
+
+  // Get a specific contract
+  app.get("/api/admin/contracts/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const contracts = await storage.getPartnerContracts({});
+    const contract = contracts.find(c => c.id === id);
+    if (!contract) {
+      return res.status(404).json({ error: "Contract not found" });
+    }
+    res.json(contract);
+  }));
+
+  // ===== COMMISSION TRACKING ROUTES =====
+
+  // Get all commissions with filters
+  app.get("/api/admin/commissions", requireAdmin, asyncHandler(async (req, res) => {
+    const { agentId, status } = req.query;
+
+    const commissions = await storage.getAgentCommissions({
+      agentId: agentId as string,
+      status: status as string,
+    });
+
+    const summary = commissions.reduce((acc: { total: number; count: number }, c) => {
+      acc.total += Number(c.commissionAmount);
+      acc.count += 1;
+      return acc;
+    }, { total: 0, count: 0 });
+
+    res.json({ commissions, summary, total: commissions.length });
+  }));
+
+  // Create a manual commission entry
+  app.post("/api/admin/commissions", requireAdmin, asyncHandler(async (req, res) => {
+    const commissionData = z.object({
+      agentId: z.string(),
+      partnerId: z.string(),
+      contractId: z.string().optional(),
+      commissionType: z.enum(["deal_close", "renewal", "bonus", "manual"]),
+      baseAmount: z.number().positive(),
+      rate: z.number().min(0).max(100).default(15),
+      commissionAmount: z.number().positive(),
+      notes: z.string().optional(),
+    }).parse(req.body);
+
+    const commission = await storage.createAgentCommission({
+      ...commissionData,
+      status: "pending",
+    });
+
+    res.status(201).json(commission);
+  }));
+
+  // Approve/pay a commission
+  app.post("/api/admin/commissions/:id/pay", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const commissions = await storage.getAgentCommissions({});
+    const commission = commissions.find(c => c.id === id);
+    if (!commission) {
+      return res.status(404).json({ error: "Commission not found" });
+    }
+
+    if (commission.status !== 'pending') {
+      return res.status(400).json({ error: "Commission is not in pending status" });
+    }
+
+    await storage.updateAgentCommissionStatus(id, 'paid');
+    res.json({ success: true, message: "Commission marked as paid" });
+  }));
+
+  // ===== PAYOUT ROUTES =====
+
+  // Get agent payouts
+  app.get("/api/admin/payouts", requireAdmin, asyncHandler(async (req, res) => {
+    const { agentId, status } = req.query;
+    const payouts = await storage.getAgentPayouts({
+      agentId: agentId as string,
+      status: status as string,
+    });
+    res.json({ payouts, total: payouts.length });
+  }));
+
+  // Create a payout for an agent
+  app.post("/api/admin/payouts", requireAdmin, asyncHandler(async (req, res) => {
+    const payoutData = z.object({
+      agentId: z.string(),
+      amount: z.number().positive(),
+      method: z.enum(["stripe_connect", "bank_transfer", "check"]).default("stripe_connect"),
+    }).parse(req.body);
+
+    const agents = await storage.getSalesAgents({});
+    const agent = agents.find(a => a.id === payoutData.agentId);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+
+    const payout = await storage.createAgentPayout({
+      ...payoutData,
+      status: "pending",
+    });
+
+    res.status(201).json(payout);
+  }));
+
+  // Process a payout
+  app.post("/api/admin/payouts/:id/process", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const payouts = await storage.getAgentPayouts({});
+    const payout = payouts.find(p => p.id === id);
+    if (!payout) {
+      return res.status(404).json({ error: "Payout not found" });
+    }
+
+    if (payout.status !== 'pending') {
+      return res.status(400).json({ error: "Payout is not in pending status" });
+    }
+
+    await storage.updateAgentPayoutStatus(id, 'processing');
+    res.json({ success: true, message: "Payout is now processing" });
+  }));
+
+  // ===== BOGO ORGANIZATION ROUTES =====
+
+  // Create a BOGO organization
+  app.post("/api/admin/bogo-organizations", requireAdmin, asyncHandler(async (req, res) => {
+    const orgData = z.object({
+      name: z.string().min(2),
+      category: z.string(),
+      contactEmail: z.string().email().optional(),
+      contactPhone: z.string().optional(),
+      membersCount: z.number().optional(),
+      maxFreeListings: z.number().default(10),
+    }).parse(req.body);
+
+    const org = await storage.createBogoOrganization(orgData);
+    res.status(201).json(org);
+  }));
+
+  // Get all BOGO organizations
+  app.get("/api/admin/bogo-organizations", requireAdmin, asyncHandler(async (req, res) => {
+    const { status, category } = req.query;
+    const orgs = await storage.getBogoOrganizations({
+      status: status as string,
+      category: category as string,
+    });
+    res.json({ organizations: orgs, total: orgs.length });
+  }));
+
+  // Get a specific BOGO organization
+  app.get("/api/admin/bogo-organizations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const orgs = await storage.getBogoOrganizations({});
+    const org = orgs.find(o => o.id === id);
+    if (!org) {
+      return res.status(404).json({ error: "Organization not found" });
+    }
+    res.json(org);
+  }));
+
+  // Update a BOGO organization
+  app.patch("/api/admin/bogo-organizations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updates = z.object({
+      name: z.string().min(2).optional(),
+      status: z.enum(["active", "inactive", "suspended"]).optional(),
+      contactEmail: z.string().email().optional(),
+      contactPhone: z.string().optional(),
+      membersCount: z.number().optional(),
+      maxFreeListings: z.number().optional(),
+    }).parse(req.body);
+
+    await storage.updateBogoOrganization(id, updates);
+    const orgs = await storage.getBogoOrganizations({});
+    const org = orgs.find(o => o.id === id);
+    res.json(org);
+  }));
+
+  // ===== INVOICE ROUTES =====
+
+  // Get all invoices
+  app.get("/api/admin/invoices", requireAdmin, asyncHandler(async (req, res) => {
+    const { contractId, status } = req.query;
+    const invoices = await storage.getPartnerInvoices({
+      contractId: contractId as string,
+      status: status as string,
+    });
+    res.json({ invoices, total: invoices.length });
+  }));
+
+  // Create an invoice
+  app.post("/api/admin/invoices", requireAdmin, asyncHandler(async (req, res) => {
+    const invoiceData = z.object({
+      partnerId: z.string(),
+      contractId: z.string(),
+      amount: z.number().positive(),
+      dueDate: z.string(),
+      notes: z.string().optional(),
+    }).parse(req.body);
+
+    const invoice = await storage.createPartnerInvoice({
+      ...invoiceData,
+      dueDate: new Date(invoiceData.dueDate),
+      status: "unpaid",
+    });
+
+    res.status(201).json(invoice);
+  }));
+
+  // ===== RENEWAL TRACKING ROUTES =====
+
+  // Get upcoming renewals
+  app.get("/api/admin/renewals", requireAdmin, asyncHandler(async (req, res) => {
+    const daysAhead = parseInt(req.query.days as string) || 30;
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysAhead);
+    const renewals = await storage.getPendingRenewals(futureDate);
+    res.json({ renewals, total: renewals.length });
+  }));
+
+  // ===== DASHBOARD STATS ROUTES =====
+
+  // Get monetization dashboard stats
+  app.get("/api/admin/dashboard/stats", requireAdmin, asyncHandler(async (req, res) => {
+    const [
+      agents,
+      contracts,
+      commissions,
+      payouts,
+    ] = await Promise.all([
+      storage.getSalesAgents({}),
+      storage.getPartnerContracts({}),
+      storage.getAgentCommissions({}),
+      storage.getAgentPayouts({}),
+    ]);
+
+    const activeContracts = contracts.filter((c: { status: string }) => c.status === 'approved');
+    const pendingCommissions = commissions.filter((c: { status: string }) => c.status === 'pending');
+    const totalRevenue = activeContracts.reduce((sum: number, c: { baseMonthly: any }) => sum + Number(c.baseMonthly || 0), 0);
+    const pendingPayouts = payouts.filter((p: { status: string }) => p.status === 'pending');
+
+    res.json({
+      agents: {
+        total: agents.length,
+        active: agents.filter((a: { status: string }) => a.status === 'active').length,
+      },
+      contracts: {
+        total: contracts.length,
+        active: activeContracts.length,
+        byTier: {
+          free_bogo: activeContracts.filter((c: { monetizationTier: string }) => c.monetizationTier === 'free_bogo').length,
+          standard: activeContracts.filter((c: { monetizationTier: string }) => c.monetizationTier === 'standard').length,
+          premium: activeContracts.filter((c: { monetizationTier: string }) => c.monetizationTier === 'premium').length,
+        },
+      },
+      commissions: {
+        total: commissions.reduce((sum: number, c: { commissionAmount: any }) => sum + Number(c.commissionAmount), 0),
+        pending: pendingCommissions.reduce((sum: number, c: { commissionAmount: any }) => sum + Number(c.commissionAmount), 0),
+        count: pendingCommissions.length,
+      },
+      revenue: {
+        monthlyRecurring: totalRevenue,
+        activeSubscriptions: activeContracts.length,
+      },
+      payouts: {
+        pending: pendingPayouts.length,
+        totalPending: pendingPayouts.reduce((sum: number, p: { amount: any }) => sum + Number(p.amount), 0),
+      },
+    });
+  }));
+
   // Health check endpoint with memory monitoring
   app.get("/health", (req, res) => {
     const memUsage = process.memoryUsage();
