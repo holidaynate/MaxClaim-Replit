@@ -33,7 +33,7 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
 - **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth, storing session and user data in PostgreSQL.
 - **User Claims Dashboard**: Authenticated users can view their claim history and access stored PDF reports.
 - **Protected File Access**: Ensures ownership verification for file access.
-- **Monetization System (Pending)**: Comprehensive partner monetization with sales agent tracking, commission management, Stripe integration for payments and payouts, and ad impression analytics.
+- **Monetization System**: Complete partner monetization with sales agent reference codes for lead tracking, commission management (15-40% sliding scale), Stripe integration for payments and payouts, ad impression analytics, and renewal automation.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
