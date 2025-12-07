@@ -105,4 +105,3 @@ integrations = ["javascript_mem_db:1.0.0", "javascript_database:1.0.0"]
 
 [userenv.shared]
 AUTO_APPROVE_PARTNERS = "true"
-ADMIN_PASSWORD = "maxclaim2025beta"
