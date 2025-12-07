@@ -13,6 +13,7 @@ import { validateBatchSize } from "./utils/batchProcessor";
 import { getCoarseLocation, getAreaCodeFromZip } from "./utils/location";
 import { matchPartnersToUser, MATCHING_EXPLANATION } from "./controllers/partnerMatching";
 import { PROMO_PARTNERS } from "@shared/partners";
+import { seedDefaultCommissionTiers } from "./services/commissionEngine";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -1516,6 +1517,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   });
+
+  // Seed default commission tiers on startup
+  try {
+    await seedDefaultCommissionTiers();
+  } catch (error) {
+    console.error("[CommissionEngine] Failed to seed commission tiers:", error);
+  }
 
   const httpServer = createServer(app);
   return httpServer;

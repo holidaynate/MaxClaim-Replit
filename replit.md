@@ -54,10 +54,10 @@ Fair geo-targeting algorithm that prioritizes local contractors while maintainin
 - Featured partner bonus: +10 points
 
 **Multipliers (applied after local scoring):**
-- Free tier: 1.0x
-- Standard tier: 1.3x
-- Premium tier: 1.6x
-- Ad weight: Custom multiplier per partner
+- BOGO Free tier: 0.5x (community partners with reduced visibility)
+- Standard tier: 1.0x (normal rotation weight)
+- Premium tier: 2.0x (featured with double priority)
+- Ad weight: Custom multiplier per partner from contract rotation_weight
 
 **Key Principle:** Local contractors always rank higher than non-local, regardless of payment tier. Payment tier only affects ranking among contractors with similar coverage.
 
@@ -138,6 +138,50 @@ These are automatically managed by Replit and should not be manually set:
 - IP-based coarse location detection from request headers
 - Optional ZIP refinement after IP detection
 
+### Monetization System (Dec 2024)
+Complete partner monetization system with sales agent tracking and commission management.
+
+**Database Schema (shared/schema.ts):**
+- `sales_agents`: Sales team members with commission tier assignments and YTD earnings
+- `agent_commission_tiers`: Bronze/Silver/Gold/Platinum tiers with 15-40% base rates
+- `partner_contracts`: Contracts linking partners to tiers, agents, and payment terms
+- `partner_invoices`: Invoice tracking with Stripe integration
+- `agent_commissions`: Commission records for deal closes, renewals, bonuses
+- `agent_payouts`: Payout tracking with Stripe Connect support
+- `partner_renewals`: Auto-renewal tracking
+- `bogo_organizations`: Organizations eligible for BOGO free listings
+
+**Commission Engine (server/services/commissionEngine.ts):**
+- 15-40% sliding scale based on agent tier (Bronze 15%, Silver 20%, Gold 30%, Platinum 40%)
+- Performance bonuses based on YTD revenue thresholds
+- Renewal commissions at 50% of deal close rate
+- Auto-seeds default commission tiers on server startup
+
+**Stripe Integration (server/services/):**
+- `stripeClient.ts`: Stripe API wrapper for customers, subscriptions, invoices
+- `stripePayments.ts`: Business logic for processing payments and agent payouts
+- `webhookHandlers.ts`: Webhook handling for invoice.paid, subscription events
+- Stripe Connect for agent payouts
+
+**API Routes (server/routes.ts):**
+- `/api/admin/agents`: CRUD for sales agents
+- `/api/admin/agents/:id/commissions`: Agent commission history
+- `/api/admin/contracts`: Partner contract management
+- `/api/admin/commissions`: Commission tracking and approval
+- `/api/admin/payouts`: Agent payout processing
+- `/api/admin/bogo-organizations`: BOGO organization management
+- `/api/admin/invoices`: Invoice management
+- `/api/admin/renewals`: Renewal tracking
+- `/api/admin/dashboard/stats`: Dashboard statistics
+
+**Admin Dashboard (client/src/pages/AdminDashboard.tsx):**
+- Overview tab with revenue, contracts, commissions, and agent stats
+- Partners tab for application review
+- Agents tab for sales team management
+- Contracts tab for viewing partner contracts
+- Commissions tab for tracking and paying commissions
+- Payouts tab for processing agent payouts
+
 ### Recent Additions (Dec 2024)
 - **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth
   - Session storage in PostgreSQL (auth_sessions table)
@@ -157,6 +201,7 @@ These are automatically managed by Replit and should not be manually set:
 
 ### Known Beta Limitations
 - IP geolocation is coarse (metro area only)
-- Partner payment processing not implemented (placeholders only)
+- Partner payment processing implemented via Stripe (requires STRIPE_SECRET_KEY)
 - Email sending requires SendGrid API key configuration
 - Scheduled tasks (pricing refresh) need external cron trigger
+- Stripe Connect for agent payouts requires additional setup (connected accounts)
