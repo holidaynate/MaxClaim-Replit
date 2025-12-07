@@ -1,7 +1,7 @@
 # Max-Claim - Insurance Claim Fair Market Value Tool
 
 ## Overview
-Max-Claim is a free consumer advocacy web application that helps homeowners and property owners receive fair compensation for underpaid insurance claims. It compares insurance settlement offers against real-time fair market values (FMV) to highlight potential additional compensation. The application focuses on user privacy by only collecting ZIP codes for regional pricing analysis and does not store personally identifiable information. Its core purpose is to empower consumers to negotiate effectively with insurance companies and bridge the gap between low-ball offers and actual market values.
+Max-Claim is a free consumer advocacy web application designed to help homeowners and property owners achieve fair compensation for underpaid insurance claims. It compares insurance settlement offers against real-time fair market values (FMV) to identify potential additional compensation. The application prioritizes user privacy by collecting only ZIP codes for regional pricing analysis and does not store personally identifiable information. Its core mission is to empower consumers to negotiate effectively with insurance companies.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language suitable for non-technical users.
@@ -9,26 +9,31 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 ## System Architecture
 
 ### UI/UX Decisions
-The application features a modern dark slate-950 theme with sky-blue (sky-500) accents. The homepage includes a Hero Section with branding, a "How It Works" visual flow, a two-column desktop layout (claim form on left, contractor matching/resources on right), and a Partner Section. A preserved single-screen Claim Wizard uses trust badges and a triple CTA strategy to guide users. Accessibility is prioritized with WCAG AA compliance, keyboard navigation, and mobile responsiveness.
+The application utilizes a dark slate-950 theme with sky-blue (sky-500) accents. Key UI elements include a Hero Section, a "How It Works" visual flow, a two-column desktop layout for claim forms and resources, and a Partner Section. A single-screen Claim Wizard guides users with trust badges and a triple CTA strategy. Accessibility is a priority, adhering to WCAG AA compliance, offering keyboard navigation, and ensuring mobile responsiveness.
 
 ### Technical Implementations
-Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeScript + Vite**, with **Wouter** for routing, **TanStack Query** for server state, **Shadcn/ui** and **Tailwind CSS** for UI, and **React Hook Form + Zod** for form validation. The backend is built with **Node.js + Express + TypeScript**, incorporating a regional FMV pricing engine, dual OCR service (OCR.space + Tesseract.js), and text parsing engine. A **PostgreSQL database** (Neon) with **Drizzle ORM** handles persistent storage. Pricing data is collected for future analytics refinement.
+Max-Claim is a full-stack web application. The frontend is built with React 18, TypeScript, Vite, Wouter for routing, TanStack Query for server state, Shadcn/ui and Tailwind CSS for UI, and React Hook Form with Zod for form validation. The backend uses Node.js, Express, and TypeScript, incorporating a regional FMV pricing engine, a dual OCR service (OCR.space + Tesseract.js), and a text parsing engine. A PostgreSQL database (Neon) with Drizzle ORM manages persistent storage, and pricing data is collected for future analytics.
 
 ### Feature Specifications
-- **Single-Screen Claim Wizard**: Streamlined flow for document upload, ZIP code, damage type, and insurance offer amount.
-- **ZIP-Aware Contractor Matching**: Filters local contractors based on user ZIP code, with CTAs and referral tracking for monetization.
+- **Single-Screen Claim Wizard**: Streamlined process for document upload, ZIP code, damage type, and insurance offer.
+- **ZIP-Aware Contractor Matching**: Filters local contractors based on ZIP code, with CTAs and referral tracking.
 - **Unit-Aware Pricing**: Supports 5 unit types (LF, SF, SQ, CT, EA) with descriptive tooltips.
-- **v2.0 Audit Engine** (shared/priceAudit.ts): Unit-price based audit comparing entered prices against RRC_COST (contractor minimum) and INS_MAX_COST (insurer maximum) ranges. Flags items as LOW_FLAG (underpaid), HIGH_FLAG (overpaid), PASS (fair), MISSING_ITEM (not in database), or INVALID_QUANTITY. Auto-calculates subtotals from unit price × quantity. Batch audit provides summary with total claim value, expected market value, variance, and potential underpayment calculations.
-- **Document Upload & OCR**: Supports JPG, PNG, PDF with dual OCR engine (**OCR.space API** and **Tesseract.js** fallback).
-- **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data sources for real-time FMV adjustments.
-- **Pricing Data Collection**: Stores user submission data for future FMV refinement (infrastructure ready, active refinement pending).
-- **Disaster Relief Resources**: Provides links to FEMA, 211 Services, SBA Loans, HUD, and local DOI.
+- **v2.0 Audit Engine**: Compares entered prices against RRC_COST and INS_MAX_COST ranges, flagging items as underpaid, overpaid, fair, missing, or invalid. Provides batch audit summaries including total claim value, market value, variance, and potential underpayment.
+- **Document Upload & OCR**: Supports JPG, PNG, PDF with dual OCR engine (OCR.space API and Tesseract.js fallback).
+- **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data for FMV adjustments.
+- **Disaster Relief Resources**: Provides links to relevant organizations.
 - **PDF Export**: Client-side PDF generation of comprehensive reports.
-- **Email Report**: Allows users to email report summaries via mailto: links.
-- **Comprehensive Accessibility**: Text size toggle, high contrast mode, bilingual support infrastructure, ARIA labels, keyboard navigation.
+- **Email Report**: Allows emailing report summaries via mailto: links.
+- **Comprehensive Accessibility**: Includes text size toggle, high contrast mode, bilingual support infrastructure, ARIA labels, and keyboard navigation.
 - **Legal Compliance**: Persistent footer with disclaimers and modal dialogs for legal information.
-- **Privacy Architecture**: Collects only anonymous data (ZIP codes, optional property addresses, item categories, units, quantities, pricing comparisons). No PII stored.
-- **Monetization Infrastructure**: Partnership system for contractors/adjusters with pricing models (CPC, Affiliate, Banner ads), ZIP targeting, weighted rotation, lead/click tracking, and password-protected admin dashboard for partner approval. Payment processing not yet integrated.
+- **Privacy Architecture**: Collects only anonymous data (ZIP codes, item categories, units, quantities, pricing comparisons). No PII stored.
+- **Monetization Infrastructure**: Partnership system for contractors/adjusters with various pricing models, ZIP targeting, weighted rotation, and lead/click tracking.
+- **Partner Matching Algorithm**: Prioritizes local contractors with scoring based on ZIP/area code matches, local business bonuses, and payment tier multipliers.
+- **Location Utilities**: Privacy-first, ZIP-based location mapping for coarse metro area detection.
+- **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth, storing session and user data in PostgreSQL.
+- **User Claims Dashboard**: Authenticated users can view their claim history and access stored PDF reports.
+- **Protected File Access**: Ensures ownership verification for file access.
+- **Monetization System (Pending)**: Comprehensive partner monetization with sales agent tracking, commission management, Stripe integration for payments and payouts, and ad impression analytics.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
@@ -36,172 +41,15 @@ Max-Claim is a full-stack web application. The frontend uses **React 18 + TypeSc
 - **Database Schema**: Normalized PostgreSQL for sessions, claims, line items, pricing data, sources, and session usage.
 - **OCR Service**: Utilizes both cloud-based and local engines for robustness.
 - **Pricing Engine**: PostgreSQL-backed with regional multipliers and data collection for future refinement.
-- **Data Flow**: Document upload triggers OCR and text parsing for auto-population; user input and external data drive FMV calculation, results are displayed, and pricing data points stored.
+- **Data Flow**: Document upload triggers OCR and text parsing; user input and external data drive FMV calculation; results are displayed, and pricing data points stored.
 - **Supported Categories**: Roofing, Flooring, Drywall, Painting, Plumbing, Electrical, HVAC, Windows & Doors, Appliances, Cabinets, and 'Other'.
 
-## Core Algorithms
-
-### Partner Matching Algorithm (server/controllers/partnerMatching.ts)
-Fair geo-targeting algorithm that prioritizes local contractors while maintaining monetization fairness.
-
-**Scoring System:**
-- Primary ZIP match: +100 points
-- Primary area code match: +80 points
-- Secondary ZIP match: +50 points
-- Secondary area code match: +40 points
-- Local business bonus: +30 points
-- Regional business bonus: +15 points
-- Featured partner bonus: +10 points
-
-**Multipliers (applied after local scoring):**
-- BOGO Free tier: 0.5x (community partners with reduced visibility)
-- Standard tier: 1.0x (normal rotation weight)
-- Premium tier: 2.0x (featured with double priority)
-- Ad weight: Custom multiplier per partner from contract rotation_weight
-
-**Key Principle:** Local contractors always rank higher than non-local, regardless of payment tier. Payment tier only affects ranking among contractors with similar coverage.
-
-### Location Utilities (server/utils/location.ts)
-Privacy-first location mapping using user-provided ZIP codes.
-
-**Current Implementation (ZIP-based):**
-- ZIP prefix → area code mapping (Texas metros: San Antonio, Austin, Houston, Dallas)
-- ZIP prefix → metro area lookup
-- Coarse location detection (metro level, not precise)
-- No PII storage - only anonymous regional data
-
-**Future Enhancement (not yet implemented):**
-- IP-based coarse location detection from request headers
-- Auto-detection with optional ZIP refinement
-
-**Covered Metros:**
-- San Antonio (782xx, area codes 210/726)
-- Austin (786xx-787xx, area codes 512/737)
-- Houston (770xx-777xx, area codes 713/281/832/346)
-- Dallas (750xx-753xx, area codes 214/469/972/945)
-
 ## External Dependencies
-- **OCR.space API**: Primary OCR service for document text extraction.
-- **Tesseract.js**: Local OCR library, fallback for document text extraction.
-- **FEMA NFIP Claims API**: Provides historical flood insurance claims data.
-- **BLS Construction PPI**: Used for construction cost inflation adjustments.
-- **Texas DOI Complaints**: Offers public complaint data for insurance companies.
-- **jsPDF**: Client-side PDF generation library.
-
-## Environment Secrets
-
-### Required Secrets (App fails without these)
-The server validates these at startup and throws an error if missing:
-- **SESSION_SECRET**: Session encryption key for admin authentication
-- **DATABASE_URL**: PostgreSQL connection string (Neon)
-- **ADMIN_PASSWORD**: Password for admin dashboard access
-
-### Optional Secrets (App works without these, with limitations)
-- **BLS_API_KEY**: Bureau of Labor Statistics API key (improves rate limits for inflation data)
-- **OCR_SPACE_API_KEY**: OCR.space API key (defaults to free tier 'helloworld' key if missing)
-- **SOCRATA_APP_TOKEN**: Texas Open Data portal token (improves rate limits for DOI complaint data)
-
-### Auto-Provisioned by Replit
-These are automatically managed by Replit and should not be manually set:
-- **PGDATABASE**, **PGHOST**, **PGPORT**, **PGUSER**, **PGPASSWORD**: PostgreSQL connection details
-- **REPLIT_DOMAINS**, **REPLIT_DEV_DOMAIN**, **REPL_ID**: Replit environment info
-
-## Beta Checklist Status
-
-### Completed
-- All secrets in Replit environment variables
-- Helmet security headers added
-- Rate limiting on /api/* routes
-- Input validation on all forms and APIs
-- Global error handler (no stack traces to users)
-- priceDB loaded once and cached with TTL
-- Batch processing (10 items at a time)
-- Memory usage monitored (target <250MB)
-- /health endpoint added
-- ZIP code → metro/area code mapping (user-provided ZIP)
-- Partner service area configuration
-- Fair matching algorithm (local priority)
-- Clear landing page with "How It Works"
-- Disclaimer about informational use only
-- Step-by-step form with placeholders and units
-- Results page with clear range and next steps
-- partners.json schema with serviceAreas
-- matchPartnersToUser() algorithm
-- Top 5 partners displayed per user
-- Payment tier is multiplier, not override
-- Tested with 55 item claims (batch audit successful)
-- Verified local partners rank first (563.2 score for Austin ZIP vs 102.4 for out-of-area)
-- Confirmed free tier partners appear in results
-- Memory stable under load (150MB heap after 50 concurrent batch audits)
-
-### Pending Implementation
-- IP-based coarse location detection from request headers
-- Optional ZIP refinement after IP detection
-
-### Monetization System (Dec 2024)
-Complete partner monetization system with sales agent tracking and commission management.
-
-**Database Schema (shared/schema.ts):**
-- `sales_agents`: Sales team members with commission tier assignments and YTD earnings
-- `agent_commission_tiers`: Bronze/Silver/Gold/Platinum tiers with 15-40% base rates
-- `partner_contracts`: Contracts linking partners to tiers, agents, and payment terms
-- `partner_invoices`: Invoice tracking with Stripe integration
-- `agent_commissions`: Commission records for deal closes, renewals, bonuses
-- `agent_payouts`: Payout tracking with Stripe Connect support
-- `partner_renewals`: Auto-renewal tracking
-- `bogo_organizations`: Organizations eligible for BOGO free listings
-
-**Commission Engine (server/services/commissionEngine.ts):**
-- 15-40% sliding scale based on agent tier (Bronze 15%, Silver 20%, Gold 30%, Platinum 40%)
-- Performance bonuses based on YTD revenue thresholds
-- Renewal commissions at 50% of deal close rate
-- Auto-seeds default commission tiers on server startup
-
-**Stripe Integration (server/services/):**
-- `stripeClient.ts`: Stripe API wrapper for customers, subscriptions, invoices
-- `stripePayments.ts`: Business logic for processing payments and agent payouts
-- `webhookHandlers.ts`: Webhook handling for invoice.paid, subscription events
-- Stripe Connect for agent payouts
-
-**API Routes (server/routes.ts):**
-- `/api/admin/agents`: CRUD for sales agents
-- `/api/admin/agents/:id/commissions`: Agent commission history
-- `/api/admin/contracts`: Partner contract management
-- `/api/admin/commissions`: Commission tracking and approval
-- `/api/admin/payouts`: Agent payout processing
-- `/api/admin/bogo-organizations`: BOGO organization management
-- `/api/admin/invoices`: Invoice management
-- `/api/admin/renewals`: Renewal tracking
-- `/api/admin/dashboard/stats`: Dashboard statistics
-
-**Admin Dashboard (client/src/pages/AdminDashboard.tsx):**
-- Overview tab with revenue, contracts, commissions, and agent stats
-- Partners tab for application review
-- Agents tab for sales team management
-- Contracts tab for viewing partner contracts
-- Commissions tab for tracking and paying commissions
-- Payouts tab for processing agent payouts
-
-### Recent Additions (Dec 2024)
-- **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth
-  - Session storage in PostgreSQL (auth_sessions table)
-  - User data in replit_users table with auto-upsert on login
-  - Protected routes with isAuthenticated middleware
-  - Frontend AuthButton component in header
-- **User Claims Dashboard**: /my-claims page for authenticated users
-  - Links claims to users via user_claims table
-  - View claim history with line items and audit results
-  - Access stored PDF reports
-- **Protected File Access**: /files/:claimId/:filename with ownership verification
-- **Object Storage Utilities**: server/utils/objectStorage.ts for Replit Object Storage
-- **Email Utilities**: server/utils/email.ts for SendGrid integration (ready)
-- **PDF Utilities**: server/utils/pdf.ts for server-side PDF generation (ready)
-- **Pricing Refresh Script**: scripts/refreshPricing.ts for scheduled cache updates
-- **Numeric Field Handling**: PostgreSQL numeric columns properly converted to JS numbers
-
-### Known Beta Limitations
-- IP geolocation is coarse (metro area only)
-- Partner payment processing implemented via Stripe (requires STRIPE_SECRET_KEY)
-- Email sending requires SendGrid API key configuration
-- Scheduled tasks (pricing refresh) need external cron trigger
-- Stripe Connect for agent payouts requires additional setup (connected accounts)
+- **OCR.space API**: Primary OCR service.
+- **Tesseract.js**: Local OCR library fallback.
+- **FEMA NFIP Claims API**: Historical flood insurance claims data.
+- **BLS Construction PPI**: Construction cost inflation adjustments.
+- **Texas DOI Complaints**: Public complaint data for insurance companies.
+- **jsPDF**: Client-side PDF generation.
+- **SendGrid**: Email sending (requires API key).
+- **Stripe**: Payment processing and agent payouts (requires STRIPE_SECRET_KEY).
