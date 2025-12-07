@@ -607,3 +607,367 @@ export const UNIT_TYPES = {
   CT: { label: "Count/Units", abbr: "CT", description: "Individual items (e.g., windows, doors, appliances)" },
   EA: { label: "Each", abbr: "EA", description: "Single units or items" },
 } as const;
+
+// ============================================
+// MONETIZATION SYSTEM - Sales Force & Commissions
+// ============================================
+
+// Monetization Enums
+export const monetizationTier = pgEnum("monetization_tier", ["free_bogo", "standard", "premium"]);
+export const agentStatus = pgEnum("agent_status", ["active", "inactive", "suspended"]);
+export const commissionType = pgEnum("commission_type", ["deal_close", "renewal", "bonus", "manual"]);
+export const commissionStatus = pgEnum("commission_status", ["pending", "approved", "paid", "disputed"]);
+export const payoutStatus = pgEnum("payout_status", ["pending", "processing", "completed", "failed"]);
+export const payoutMethod = pgEnum("payout_method", ["stripe_connect", "bank_transfer", "check"]);
+export const renewalStatus = pgEnum("renewal_status", ["pending", "confirmed", "failed", "cancelled"]);
+export const invoiceStatus = pgEnum("invoice_status", ["unpaid", "paid", "overdue", "failed", "cancelled"]);
+
+// Agent Commission Tiers - Defines commission rate structures
+export const agentCommissionTiers = pgTable("agent_commission_tiers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  baseRate: numeric("base_rate", { precision: 4, scale: 2 }).notNull().$type<number>(),
+  bonusThresholds: jsonb("bonus_thresholds").$type<Array<{
+    annualRevenue: number;
+    bonusRate: number;
+  }>>().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertAgentCommissionTierSchema = createInsertSchema(agentCommissionTiers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAgentCommissionTier = z.infer<typeof insertAgentCommissionTierSchema>;
+export type AgentCommissionTier = typeof agentCommissionTiers.$inferSelect;
+
+// Sales Agents - Track sales/development team members
+export const salesAgents = pgTable("sales_agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  region: text("region"),
+  commissionTierId: varchar("commission_tier_id").references(() => agentCommissionTiers.id),
+  stripeConnectId: text("stripe_connect_id").unique(),
+  status: agentStatus("status").default("active").notNull(),
+  totalEarned: numeric("total_earned", { precision: 12, scale: 2 }).default("0").$type<number>(),
+  ytdEarnings: numeric("ytd_earnings", { precision: 12, scale: 2 }).default("0").$type<number>(),
+  notes: text("notes"),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  emailIdx: index("sales_agents_email_idx").on(table.email),
+  statusIdx: index("sales_agents_status_idx").on(table.status),
+  regionIdx: index("sales_agents_region_idx").on(table.region),
+}));
+
+export const insertSalesAgentSchema = createInsertSchema(salesAgents).omit({
+  id: true,
+  totalEarned: true,
+  ytdEarnings: true,
+  createdAt: true,
+  updatedAt: true,
+  joinedAt: true,
+});
+
+export type InsertSalesAgent = z.infer<typeof insertSalesAgentSchema>;
+export type SalesAgent = typeof salesAgents.$inferSelect;
+
+// Partner Contracts - Links partners to monetization tier, pricing, and agent
+export const partnerContracts = pgTable("partner_contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  agentId: varchar("agent_id").references(() => salesAgents.id, { onDelete: "set null" }),
+  monetizationTier: monetizationTier("monetization_tier").default("free_bogo").notNull(),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  baseMonthly: numeric("base_monthly", { precision: 10, scale: 2 }).default("0").$type<number>(),
+  setupFee: numeric("setup_fee", { precision: 10, scale: 2 }).default("0").$type<number>(),
+  upfrontDiscount: numeric("upfront_discount", { precision: 4, scale: 2 }).default("0").$type<number>(),
+  rotationWeight: numeric("rotation_weight", { precision: 4, scale: 2 }).default("1.0").$type<number>(),
+  adSlots: integer("ad_slots").default(1),
+  impressionsGuaranteed: integer("impressions_guaranteed"),
+  durationMonths: integer("duration_months").default(12),
+  commissionRate: numeric("commission_rate", { precision: 4, scale: 2 }).default("0.20").$type<number>(),
+  isBogo: integer("is_bogo").default(0).$type<boolean>(),
+  bogoFreeMonth: integer("bogo_free_month").default(0).$type<boolean>(),
+  autoRenew: integer("auto_renew").default(1).$type<boolean>(),
+  contractStart: timestamp("contract_start", { withTimezone: true }),
+  contractEnd: timestamp("contract_end", { withTimezone: true }),
+  renewalDate: timestamp("renewal_date", { withTimezone: true }),
+  status: partnerStatus("status").default("pending").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("partner_contracts_partner_idx").on(table.partnerId),
+  agentIdx: index("partner_contracts_agent_idx").on(table.agentId),
+  tierIdx: index("partner_contracts_tier_idx").on(table.monetizationTier),
+  statusIdx: index("partner_contracts_status_idx").on(table.status),
+  renewalIdx: index("partner_contracts_renewal_idx").on(table.renewalDate),
+}));
+
+export const insertPartnerContractSchema = createInsertSchema(partnerContracts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPartnerContract = z.infer<typeof insertPartnerContractSchema>;
+export type PartnerContract = typeof partnerContracts.$inferSelect;
+
+// Partner Invoices - Billing history for partner payments
+export const partnerInvoices = pgTable("partner_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => partnerContracts.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  invoiceDate: timestamp("invoice_date", { withTimezone: true }).defaultNow().notNull(),
+  dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+  status: invoiceStatus("status").default("unpaid").notNull(),
+  stripeInvoiceId: text("stripe_invoice_id").unique(),
+  stripeChargeId: text("stripe_charge_id").unique(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+}, (table) => ({
+  contractIdx: index("partner_invoices_contract_idx").on(table.contractId),
+  partnerIdx: index("partner_invoices_partner_idx").on(table.partnerId),
+  statusIdx: index("partner_invoices_status_idx").on(table.status),
+  dueDateIdx: index("partner_invoices_due_date_idx").on(table.dueDate),
+}));
+
+export const insertPartnerInvoiceSchema = createInsertSchema(partnerInvoices).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+});
+
+export type InsertPartnerInvoice = z.infer<typeof insertPartnerInvoiceSchema>;
+export type PartnerInvoice = typeof partnerInvoices.$inferSelect;
+
+// Agent Commissions - Track commissions earned by agents
+export const agentCommissions = pgTable("agent_commissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => salesAgents.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  contractId: varchar("contract_id").references(() => partnerContracts.id, { onDelete: "set null" }),
+  invoiceId: varchar("invoice_id").references(() => partnerInvoices.id, { onDelete: "set null" }),
+  commissionType: commissionType("commission_type").notNull(),
+  rate: numeric("rate", { precision: 4, scale: 2 }).notNull().$type<number>(),
+  baseAmount: numeric("base_amount", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  commissionAmount: numeric("commission_amount", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  status: commissionStatus("status").default("pending").notNull(),
+  dateEarned: timestamp("date_earned", { withTimezone: true }).defaultNow().notNull(),
+  datePaid: timestamp("date_paid", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentIdx: index("agent_commissions_agent_idx").on(table.agentId),
+  partnerIdx: index("agent_commissions_partner_idx").on(table.partnerId),
+  typeIdx: index("agent_commissions_type_idx").on(table.commissionType),
+  statusIdx: index("agent_commissions_status_idx").on(table.status),
+  dateEarnedIdx: index("agent_commissions_date_earned_idx").on(table.dateEarned),
+}));
+
+export const insertAgentCommissionSchema = createInsertSchema(agentCommissions).omit({
+  id: true,
+  createdAt: true,
+  datePaid: true,
+});
+
+export type InsertAgentCommission = z.infer<typeof insertAgentCommissionSchema>;
+export type AgentCommission = typeof agentCommissions.$inferSelect;
+
+// Agent Payouts - Track payments to agents via Stripe Connect
+export const agentPayouts = pgTable("agent_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").notNull().references(() => salesAgents.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 10, scale: 2 }).notNull().$type<number>(),
+  payoutMethod: payoutMethod("payout_method").default("stripe_connect").notNull(),
+  stripePayoutId: text("stripe_payout_id").unique(),
+  stripeTransferId: text("stripe_transfer_id").unique(),
+  status: payoutStatus("status").default("pending").notNull(),
+  notes: text("notes"),
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  agentIdx: index("agent_payouts_agent_idx").on(table.agentId),
+  statusIdx: index("agent_payouts_status_idx").on(table.status),
+  scheduledIdx: index("agent_payouts_scheduled_idx").on(table.scheduledAt),
+}));
+
+export const insertAgentPayoutSchema = createInsertSchema(agentPayouts).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export type InsertAgentPayout = z.infer<typeof insertAgentPayoutSchema>;
+export type AgentPayout = typeof agentPayouts.$inferSelect;
+
+// Partner Renewals - Track auto-renewal workflow (insurance-style)
+export const partnerRenewals = pgTable("partner_renewals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id").notNull().references(() => partnerContracts.id, { onDelete: "cascade" }),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  agentId: varchar("agent_id").references(() => salesAgents.id, { onDelete: "set null" }),
+  renewalDate: timestamp("renewal_date", { withTimezone: true }).notNull(),
+  newContractStart: timestamp("new_contract_start", { withTimezone: true }),
+  newContractEnd: timestamp("new_contract_end", { withTimezone: true }),
+  status: renewalStatus("status").default("pending").notNull(),
+  invoiceId: varchar("invoice_id").references(() => partnerInvoices.id, { onDelete: "set null" }),
+  commissionId: varchar("commission_id").references(() => agentCommissions.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+}, (table) => ({
+  contractIdx: index("partner_renewals_contract_idx").on(table.contractId),
+  partnerIdx: index("partner_renewals_partner_idx").on(table.partnerId),
+  agentIdx: index("partner_renewals_agent_idx").on(table.agentId),
+  statusIdx: index("partner_renewals_status_idx").on(table.status),
+  renewalDateIdx: index("partner_renewals_renewal_date_idx").on(table.renewalDate),
+}));
+
+export const insertPartnerRenewalSchema = createInsertSchema(partnerRenewals).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+});
+
+export type InsertPartnerRenewal = z.infer<typeof insertPartnerRenewalSchema>;
+export type PartnerRenewal = typeof partnerRenewals.$inferSelect;
+
+// BOGO Member Organizations - Free tier from public org membership lists
+export const bogoOrganizations = pgTable("bogo_organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  category: text("category").notNull(),
+  region: text("region"),
+  website: text("website"),
+  memberListUrl: text("member_list_url"),
+  membersCount: integer("members_count").default(0),
+  rotationWeight: numeric("rotation_weight", { precision: 4, scale: 2 }).default("0.5").$type<number>(),
+  status: agentStatus("status").default("active").notNull(),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("bogo_orgs_category_idx").on(table.category),
+  regionIdx: index("bogo_orgs_region_idx").on(table.region),
+  statusIdx: index("bogo_orgs_status_idx").on(table.status),
+}));
+
+export const insertBogoOrganizationSchema = createInsertSchema(bogoOrganizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSyncAt: true,
+});
+
+export type InsertBogoOrganization = z.infer<typeof insertBogoOrganizationSchema>;
+export type BogoOrganization = typeof bogoOrganizations.$inferSelect;
+
+// Monetization Relations
+export const salesAgentsRelations = relations(salesAgents, ({ one, many }) => ({
+  commissionTier: one(agentCommissionTiers, {
+    fields: [salesAgents.commissionTierId],
+    references: [agentCommissionTiers.id],
+  }),
+  contracts: many(partnerContracts),
+  commissions: many(agentCommissions),
+  payouts: many(agentPayouts),
+  renewals: many(partnerRenewals),
+}));
+
+export const partnerContractsRelations = relations(partnerContracts, ({ one, many }) => ({
+  partner: one(partners, {
+    fields: [partnerContracts.partnerId],
+    references: [partners.id],
+  }),
+  agent: one(salesAgents, {
+    fields: [partnerContracts.agentId],
+    references: [salesAgents.id],
+  }),
+  invoices: many(partnerInvoices),
+  renewals: many(partnerRenewals),
+}));
+
+export const partnerInvoicesRelations = relations(partnerInvoices, ({ one }) => ({
+  contract: one(partnerContracts, {
+    fields: [partnerInvoices.contractId],
+    references: [partnerContracts.id],
+  }),
+  partner: one(partners, {
+    fields: [partnerInvoices.partnerId],
+    references: [partners.id],
+  }),
+}));
+
+export const agentCommissionsRelations = relations(agentCommissions, ({ one }) => ({
+  agent: one(salesAgents, {
+    fields: [agentCommissions.agentId],
+    references: [salesAgents.id],
+  }),
+  partner: one(partners, {
+    fields: [agentCommissions.partnerId],
+    references: [partners.id],
+  }),
+  contract: one(partnerContracts, {
+    fields: [agentCommissions.contractId],
+    references: [partnerContracts.id],
+  }),
+  invoice: one(partnerInvoices, {
+    fields: [agentCommissions.invoiceId],
+    references: [partnerInvoices.id],
+  }),
+}));
+
+export const agentPayoutsRelations = relations(agentPayouts, ({ one }) => ({
+  agent: one(salesAgents, {
+    fields: [agentPayouts.agentId],
+    references: [salesAgents.id],
+  }),
+}));
+
+export const partnerRenewalsRelations = relations(partnerRenewals, ({ one }) => ({
+  contract: one(partnerContracts, {
+    fields: [partnerRenewals.contractId],
+    references: [partnerContracts.id],
+  }),
+  partner: one(partners, {
+    fields: [partnerRenewals.partnerId],
+    references: [partners.id],
+  }),
+  agent: one(salesAgents, {
+    fields: [partnerRenewals.agentId],
+    references: [salesAgents.id],
+  }),
+  invoice: one(partnerInvoices, {
+    fields: [partnerRenewals.invoiceId],
+    references: [partnerInvoices.id],
+  }),
+  commission: one(agentCommissions, {
+    fields: [partnerRenewals.commissionId],
+    references: [agentCommissions.id],
+  }),
+}));
+
+// Commission rate helper constants
+export const COMMISSION_RATES = {
+  starter: { base: 0.15, thresholds: [{ annual: 50000, rate: 0.17 }, { annual: 100000, rate: 0.20 }] },
+  standard: { base: 0.20, thresholds: [{ annual: 100000, rate: 0.25 }, { annual: 200000, rate: 0.30 }] },
+  elite: { base: 0.30, thresholds: [{ annual: 200000, rate: 0.35 }, { annual: 500000, rate: 0.40 }] },
+} as const;
+
+// Monetization tier weight constants
+export const MONETIZATION_WEIGHTS = {
+  free_bogo: 0.5,
+  standard: 1.0,
+  premium: 2.0,
+} as const;
