@@ -1,5 +1,7 @@
 import type { PromoPartner } from '@shared/partners';
+import type { Partner, PartnerContract } from '@shared/schema';
 import { getAreaCodeFromZip, getMetroFromZip } from '../utils/location';
+import { storage } from '../storage';
 
 /**
  * Fair Geo-Matching Algorithm for Partner Display
@@ -153,16 +155,31 @@ export function matchPartnersToUser(
 }
 
 /**
- * Get payment tier multiplier
- * Lower multipliers maintain local priority
+ * Get payment tier multiplier based on monetization tier
+ * Updated for new BOGO system:
+ * - free_bogo: 0.5x (lower priority for free BOGO listings)
+ * - standard: 1.0x (normal rotation weight)
+ * - premium: 2.0x (high priority featured listings)
  */
-function getTierMultiplier(tier: 'free' | 'standard' | 'premium'): number {
-  const multipliers = {
-    free: 1.0,
-    standard: 1.3,
-    premium: 1.6
+function getTierMultiplier(tier: 'free' | 'standard' | 'premium' | 'free_bogo'): number {
+  const multipliers: Record<string, number> = {
+    free: 0.5,       // Legacy free tier maps to BOGO weight
+    free_bogo: 0.5,  // BOGO free listings have lower priority
+    standard: 1.0,   // Standard tier has normal weight
+    premium: 2.0     // Premium tier has double priority
   };
-  return multipliers[tier];
+  return multipliers[tier] ?? 1.0;
+}
+
+/**
+ * Get tier multiplier from a partner contract rotation weight
+ * Uses the contract's configured rotation weight if available
+ */
+export function getContractRotationWeight(rotationWeight?: number | null): number {
+  if (rotationWeight !== undefined && rotationWeight !== null) {
+    return Number(rotationWeight);
+  }
+  return 1.0; // Default weight
 }
 
 /**
@@ -190,4 +207,95 @@ export const MATCHING_EXPLANATION = {
     "We never show contractors who don't serve your area"
   ],
   fairness: "Local contractors always rank higher than non-local, regardless of advertising spend."
+};
+
+export interface DatabasePartnerWithContract {
+  partner: Partner;
+  contract?: PartnerContract;
+}
+
+export interface ScoredDatabasePartner {
+  partner: Partner;
+  contract?: PartnerContract;
+  matchScore: number;
+  matchReasons: string[];
+}
+
+/**
+ * Match database-backed partners to user's location
+ * Uses live tier weights from contracts table
+ */
+export async function matchDatabasePartnersToUser(
+  userZip: string,
+  partnerType?: string,
+  maxResults: number = 5
+): Promise<ScoredDatabasePartner[]> {
+  const partners = await storage.getPartnersByZipCode(userZip, { status: 'approved' });
+  
+  if (partners.length === 0) {
+    return [];
+  }
+
+  const results: (ScoredDatabasePartner | null)[] = await Promise.all(
+    partners.map(async (partnerWithPriority) => {
+      const partner = partnerWithPriority as Partner & { priority: number };
+      const contract = await storage.getPartnerContractByPartnerId(partner.id);
+      
+      if (partnerType && partner.type !== partnerType) {
+        return null;
+      }
+
+      let score = 0;
+      const matchReasons: string[] = [];
+
+      score += partner.priority * 10;
+      matchReasons.push('Serves your area');
+
+      if (partner.tier === 'partner') {
+        score += 30;
+        matchReasons.push('Verified partner');
+      } else if (partner.tier === 'affiliate') {
+        score += 15;
+        matchReasons.push('Affiliate partner');
+      }
+
+      let tierMultiplier = 1.0;
+      if (contract) {
+        tierMultiplier = getContractRotationWeight(contract.rotationWeight);
+        
+        const tierName = contract.monetizationTier;
+        if (tierName === 'premium') {
+          score += 10;
+          matchReasons.push('Premium partner');
+        } else if (tierName === 'free_bogo') {
+          matchReasons.push('Community partner');
+        }
+      } else {
+        tierMultiplier = 1.0;
+      }
+      
+      score *= tierMultiplier;
+
+      return {
+        partner,
+        contract: contract || undefined,
+        matchScore: Math.round(score * 10) / 10,
+        matchReasons,
+      };
+    })
+  );
+
+  const validPartners = results.filter((p): p is ScoredDatabasePartner => p !== null);
+  validPartners.sort((a, b) => b.matchScore - a.matchScore);
+
+  return validPartners.slice(0, maxResults);
+}
+
+/**
+ * Get the rotation weight multipliers for display
+ */
+export const TIER_WEIGHTS = {
+  free_bogo: { weight: 0.5, label: 'Community (BOGO)', description: 'Free listing for organization members' },
+  standard: { weight: 1.0, label: 'Standard', description: 'Normal rotation priority' },
+  premium: { weight: 2.0, label: 'Premium', description: 'Featured with 2x rotation priority' },
 };
