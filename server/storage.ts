@@ -28,6 +28,22 @@ import {
   type InsertZipTargeting,
   type PriceAuditResult,
   type InsertPriceAuditResult,
+  type AgentCommissionTier,
+  type InsertAgentCommissionTier,
+  type SalesAgent,
+  type InsertSalesAgent,
+  type PartnerContract,
+  type InsertPartnerContract,
+  type PartnerInvoice,
+  type InsertPartnerInvoice,
+  type AgentCommission,
+  type InsertAgentCommission,
+  type AgentPayout,
+  type InsertAgentPayout,
+  type PartnerRenewal,
+  type InsertPartnerRenewal,
+  type BogoOrganization,
+  type InsertBogoOrganization,
   users,
   replitUsers,
   userClaims,
@@ -44,6 +60,14 @@ import {
   partnerLeads,
   zipTargeting,
   priceAuditResults,
+  agentCommissionTiers,
+  salesAgents,
+  partnerContracts,
+  partnerInvoices,
+  agentCommissions,
+  agentPayouts,
+  partnerRenewals,
+  bogoOrganizations,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, inArray, like } from "drizzle-orm";
@@ -137,6 +161,57 @@ export interface IStorage {
   createPriceAuditResult(data: InsertPriceAuditResult): Promise<PriceAuditResult>;
   getPriceAuditResults(filters?: { sessionId?: string; flag?: string; startDate?: Date; endDate?: Date }): Promise<PriceAuditResult[]>;
   getPriceAuditStats(): Promise<{ totalAudits: number; byFlag: Record<string, number>; avgPercentFromAvg: number }>;
+  
+  // ============================================
+  // MONETIZATION SYSTEM - Sales Force & Commissions
+  // ============================================
+  
+  // Agent Commission Tiers
+  createAgentCommissionTier(data: InsertAgentCommissionTier): Promise<AgentCommissionTier>;
+  getAgentCommissionTiers(): Promise<AgentCommissionTier[]>;
+  getAgentCommissionTier(id: string): Promise<AgentCommissionTier | undefined>;
+  
+  // Sales Agents
+  createSalesAgent(data: InsertSalesAgent): Promise<SalesAgent>;
+  getSalesAgents(filters?: { status?: string; region?: string }): Promise<SalesAgent[]>;
+  getSalesAgent(id: string): Promise<SalesAgent | undefined>;
+  getSalesAgentByEmail(email: string): Promise<SalesAgent | undefined>;
+  updateSalesAgentEarnings(id: string, amount: number): Promise<void>;
+  updateSalesAgentStripeConnect(id: string, stripeConnectId: string): Promise<void>;
+  
+  // Partner Contracts
+  createPartnerContract(data: InsertPartnerContract): Promise<PartnerContract>;
+  getPartnerContracts(filters?: { partnerId?: string; agentId?: string; status?: string; monetizationTier?: string }): Promise<PartnerContract[]>;
+  getPartnerContract(id: string): Promise<PartnerContract | undefined>;
+  getPartnerContractByPartnerId(partnerId: string): Promise<PartnerContract | undefined>;
+  updatePartnerContractStatus(id: string, status: string): Promise<void>;
+  
+  // Partner Invoices
+  createPartnerInvoice(data: InsertPartnerInvoice): Promise<PartnerInvoice>;
+  getPartnerInvoices(filters?: { partnerId?: string; contractId?: string; status?: string }): Promise<PartnerInvoice[]>;
+  updatePartnerInvoiceStatus(id: string, status: string, stripeChargeId?: string): Promise<void>;
+  
+  // Agent Commissions
+  createAgentCommission(data: InsertAgentCommission): Promise<AgentCommission>;
+  getAgentCommissions(filters?: { agentId?: string; partnerId?: string; status?: string }): Promise<AgentCommission[]>;
+  updateAgentCommissionStatus(id: string, status: string): Promise<void>;
+  markCommissionPaid(id: string): Promise<void>;
+  
+  // Agent Payouts
+  createAgentPayout(data: InsertAgentPayout): Promise<AgentPayout>;
+  getAgentPayouts(filters?: { agentId?: string; status?: string }): Promise<AgentPayout[]>;
+  updateAgentPayoutStatus(id: string, status: string, stripePayoutId?: string): Promise<void>;
+  
+  // Partner Renewals
+  createPartnerRenewal(data: InsertPartnerRenewal): Promise<PartnerRenewal>;
+  getPartnerRenewals(filters?: { partnerId?: string; agentId?: string; status?: string }): Promise<PartnerRenewal[]>;
+  getPendingRenewals(beforeDate: Date): Promise<PartnerRenewal[]>;
+  updatePartnerRenewalStatus(id: string, status: string): Promise<void>;
+  
+  // BOGO Organizations
+  createBogoOrganization(data: InsertBogoOrganization): Promise<BogoOrganization>;
+  getBogoOrganizations(filters?: { category?: string; region?: string; status?: string }): Promise<BogoOrganization[]>;
+  updateBogoOrganization(id: string, data: Partial<InsertBogoOrganization>): Promise<void>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -662,6 +737,360 @@ export class DatabaseStorage implements IStorage {
       byFlag,
       avgPercentFromAvg: countWithPercent > 0 ? totalPercentFromAvg / countWithPercent : 0,
     };
+  }
+
+  // ============================================
+  // MONETIZATION SYSTEM - Sales Force & Commissions
+  // ============================================
+
+  // Agent Commission Tiers
+  async createAgentCommissionTier(data: InsertAgentCommissionTier): Promise<AgentCommissionTier> {
+    const [tier] = await db.insert(agentCommissionTiers).values(data).returning();
+    return tier;
+  }
+
+  async getAgentCommissionTiers(): Promise<AgentCommissionTier[]> {
+    return await db.select().from(agentCommissionTiers);
+  }
+
+  async getAgentCommissionTier(id: string): Promise<AgentCommissionTier | undefined> {
+    const [tier] = await db.select().from(agentCommissionTiers).where(eq(agentCommissionTiers.id, id));
+    return tier || undefined;
+  }
+
+  // Sales Agents
+  async createSalesAgent(data: InsertSalesAgent): Promise<SalesAgent> {
+    const [agent] = await db.insert(salesAgents).values(data).returning();
+    return agent;
+  }
+
+  async getSalesAgents(filters?: { status?: string; region?: string }): Promise<SalesAgent[]> {
+    const conditions = [];
+    if (filters?.status) {
+      conditions.push(eq(salesAgents.status, filters.status as any));
+    }
+    if (filters?.region) {
+      conditions.push(eq(salesAgents.region, filters.region));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(salesAgents).orderBy(desc(salesAgents.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(salesAgents)
+      .where(and(...conditions))
+      .orderBy(desc(salesAgents.createdAt));
+  }
+
+  async getSalesAgent(id: string): Promise<SalesAgent | undefined> {
+    const [agent] = await db.select().from(salesAgents).where(eq(salesAgents.id, id));
+    return agent || undefined;
+  }
+
+  async getSalesAgentByEmail(email: string): Promise<SalesAgent | undefined> {
+    const [agent] = await db.select().from(salesAgents).where(eq(salesAgents.email, email));
+    return agent || undefined;
+  }
+
+  async updateSalesAgentEarnings(id: string, amount: number): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({
+        totalEarned: sql`${salesAgents.totalEarned} + ${amount}`,
+        ytdEarnings: sql`${salesAgents.ytdEarnings} + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(salesAgents.id, id));
+  }
+
+  async updateSalesAgentStripeConnect(id: string, stripeConnectId: string): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({ stripeConnectId, updatedAt: new Date() })
+      .where(eq(salesAgents.id, id));
+  }
+
+  // Partner Contracts
+  async createPartnerContract(data: InsertPartnerContract): Promise<PartnerContract> {
+    const [contract] = await db.insert(partnerContracts).values(data).returning();
+    return contract;
+  }
+
+  async getPartnerContracts(filters?: { 
+    partnerId?: string; 
+    agentId?: string; 
+    status?: string; 
+    monetizationTier?: string 
+  }): Promise<PartnerContract[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(partnerContracts.partnerId, filters.partnerId));
+    }
+    if (filters?.agentId) {
+      conditions.push(eq(partnerContracts.agentId, filters.agentId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(partnerContracts.status, filters.status as any));
+    }
+    if (filters?.monetizationTier) {
+      conditions.push(eq(partnerContracts.monetizationTier, filters.monetizationTier as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(partnerContracts).orderBy(desc(partnerContracts.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(partnerContracts)
+      .where(and(...conditions))
+      .orderBy(desc(partnerContracts.createdAt));
+  }
+
+  async getPartnerContract(id: string): Promise<PartnerContract | undefined> {
+    const [contract] = await db.select().from(partnerContracts).where(eq(partnerContracts.id, id));
+    return contract || undefined;
+  }
+
+  async getPartnerContractByPartnerId(partnerId: string): Promise<PartnerContract | undefined> {
+    const [contract] = await db
+      .select()
+      .from(partnerContracts)
+      .where(eq(partnerContracts.partnerId, partnerId))
+      .orderBy(desc(partnerContracts.createdAt))
+      .limit(1);
+    return contract || undefined;
+  }
+
+  async updatePartnerContractStatus(id: string, status: string): Promise<void> {
+    await db
+      .update(partnerContracts)
+      .set({ status: status as any, updatedAt: new Date() })
+      .where(eq(partnerContracts.id, id));
+  }
+
+  // Partner Invoices
+  async createPartnerInvoice(data: InsertPartnerInvoice): Promise<PartnerInvoice> {
+    const [invoice] = await db.insert(partnerInvoices).values(data).returning();
+    return invoice;
+  }
+
+  async getPartnerInvoices(filters?: { 
+    partnerId?: string; 
+    contractId?: string; 
+    status?: string 
+  }): Promise<PartnerInvoice[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(partnerInvoices.partnerId, filters.partnerId));
+    }
+    if (filters?.contractId) {
+      conditions.push(eq(partnerInvoices.contractId, filters.contractId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(partnerInvoices.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(partnerInvoices).orderBy(desc(partnerInvoices.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(partnerInvoices)
+      .where(and(...conditions))
+      .orderBy(desc(partnerInvoices.createdAt));
+  }
+
+  async updatePartnerInvoiceStatus(id: string, status: string, stripeChargeId?: string): Promise<void> {
+    const updateData: any = { status: status as any };
+    if (stripeChargeId) {
+      updateData.stripeChargeId = stripeChargeId;
+    }
+    if (status === 'paid') {
+      updateData.paidAt = new Date();
+    }
+    await db.update(partnerInvoices).set(updateData).where(eq(partnerInvoices.id, id));
+  }
+
+  // Agent Commissions
+  async createAgentCommission(data: InsertAgentCommission): Promise<AgentCommission> {
+    const [commission] = await db.insert(agentCommissions).values(data).returning();
+    return commission;
+  }
+
+  async getAgentCommissions(filters?: { 
+    agentId?: string; 
+    partnerId?: string; 
+    status?: string 
+  }): Promise<AgentCommission[]> {
+    const conditions = [];
+    if (filters?.agentId) {
+      conditions.push(eq(agentCommissions.agentId, filters.agentId));
+    }
+    if (filters?.partnerId) {
+      conditions.push(eq(agentCommissions.partnerId, filters.partnerId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(agentCommissions.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(agentCommissions).orderBy(desc(agentCommissions.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(agentCommissions)
+      .where(and(...conditions))
+      .orderBy(desc(agentCommissions.createdAt));
+  }
+
+  async updateAgentCommissionStatus(id: string, status: string): Promise<void> {
+    await db
+      .update(agentCommissions)
+      .set({ status: status as any })
+      .where(eq(agentCommissions.id, id));
+  }
+
+  async markCommissionPaid(id: string): Promise<void> {
+    await db
+      .update(agentCommissions)
+      .set({ status: 'paid' as any, datePaid: new Date() })
+      .where(eq(agentCommissions.id, id));
+  }
+
+  // Agent Payouts
+  async createAgentPayout(data: InsertAgentPayout): Promise<AgentPayout> {
+    const [payout] = await db.insert(agentPayouts).values(data).returning();
+    return payout;
+  }
+
+  async getAgentPayouts(filters?: { agentId?: string; status?: string }): Promise<AgentPayout[]> {
+    const conditions = [];
+    if (filters?.agentId) {
+      conditions.push(eq(agentPayouts.agentId, filters.agentId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(agentPayouts.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(agentPayouts).orderBy(desc(agentPayouts.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(agentPayouts)
+      .where(and(...conditions))
+      .orderBy(desc(agentPayouts.createdAt));
+  }
+
+  async updateAgentPayoutStatus(id: string, status: string, stripePayoutId?: string): Promise<void> {
+    const updateData: any = { status: status as any };
+    if (stripePayoutId) {
+      updateData.stripePayoutId = stripePayoutId;
+    }
+    if (status === 'completed') {
+      updateData.completedAt = new Date();
+    }
+    await db.update(agentPayouts).set(updateData).where(eq(agentPayouts.id, id));
+  }
+
+  // Partner Renewals
+  async createPartnerRenewal(data: InsertPartnerRenewal): Promise<PartnerRenewal> {
+    const [renewal] = await db.insert(partnerRenewals).values(data).returning();
+    return renewal;
+  }
+
+  async getPartnerRenewals(filters?: { 
+    partnerId?: string; 
+    agentId?: string; 
+    status?: string 
+  }): Promise<PartnerRenewal[]> {
+    const conditions = [];
+    if (filters?.partnerId) {
+      conditions.push(eq(partnerRenewals.partnerId, filters.partnerId));
+    }
+    if (filters?.agentId) {
+      conditions.push(eq(partnerRenewals.agentId, filters.agentId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(partnerRenewals.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(partnerRenewals).orderBy(desc(partnerRenewals.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(partnerRenewals)
+      .where(and(...conditions))
+      .orderBy(desc(partnerRenewals.createdAt));
+  }
+
+  async getPendingRenewals(beforeDate: Date): Promise<PartnerRenewal[]> {
+    return await db
+      .select()
+      .from(partnerRenewals)
+      .where(
+        and(
+          eq(partnerRenewals.status, 'pending' as any),
+          sql`${partnerRenewals.renewalDate} <= ${beforeDate}`
+        )
+      )
+      .orderBy(partnerRenewals.renewalDate);
+  }
+
+  async updatePartnerRenewalStatus(id: string, status: string): Promise<void> {
+    const updateData: any = { status: status as any };
+    if (status !== 'pending') {
+      updateData.processedAt = new Date();
+    }
+    await db.update(partnerRenewals).set(updateData).where(eq(partnerRenewals.id, id));
+  }
+
+  // BOGO Organizations
+  async createBogoOrganization(data: InsertBogoOrganization): Promise<BogoOrganization> {
+    const [org] = await db.insert(bogoOrganizations).values(data).returning();
+    return org;
+  }
+
+  async getBogoOrganizations(filters?: { 
+    category?: string; 
+    region?: string; 
+    status?: string 
+  }): Promise<BogoOrganization[]> {
+    const conditions = [];
+    if (filters?.category) {
+      conditions.push(eq(bogoOrganizations.category, filters.category));
+    }
+    if (filters?.region) {
+      conditions.push(eq(bogoOrganizations.region, filters.region));
+    }
+    if (filters?.status) {
+      conditions.push(eq(bogoOrganizations.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(bogoOrganizations).orderBy(desc(bogoOrganizations.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(bogoOrganizations)
+      .where(and(...conditions))
+      .orderBy(desc(bogoOrganizations.createdAt));
+  }
+
+  async updateBogoOrganization(id: string, data: Partial<InsertBogoOrganization>): Promise<void> {
+    await db
+      .update(bogoOrganizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(bogoOrganizations.id, id));
   }
 }
 
