@@ -14,6 +14,7 @@ import { getCoarseLocation, getAreaCodeFromZip } from "./utils/location";
 import { matchPartnersToUser, MATCHING_EXPLANATION } from "./controllers/partnerMatching";
 import { PROMO_PARTNERS } from "@shared/partners";
 import { seedDefaultCommissionTiers } from "./services/commissionEngine";
+import { seedProOrgsAndTemplates } from "./seeds/proOrgsAndTemplates";
 import { generateAgentRefCode, isValidAgentRefCodeFormat, generateUniqueAgentRefCode } from "./utils/agentRefCode";
 import { z } from "zod";
 import multer from "multer";
@@ -1764,6 +1765,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ===== PRO ORGANIZATIONS DATABASE ROUTES =====
+
+  // Get all pro organizations (with optional filters)
+  app.get("/api/pro-organizations", asyncHandler(async (req, res) => {
+    const { category, state, scope } = req.query;
+    const orgs = await storage.getProOrganizations({
+      category: category as string,
+      state: state as string,
+      scope: scope as string,
+    });
+    res.json({ organizations: orgs, total: orgs.length });
+  }));
+
+  // Get single pro organization
+  app.get("/api/pro-organizations/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const org = await storage.getProOrganization(id);
+    if (!org) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+    res.json(org);
+  }));
+
+  // Admin: Create pro organization
+  app.post("/api/admin/pro-organizations", requireAdmin, asyncHandler(async (req, res) => {
+    const data = z.object({
+      name: z.string().min(1),
+      category: z.enum(["general_contractors", "remodelers", "roofers", "public_adjusters", "attorneys", "disaster_recovery"]),
+      scope: z.enum(["national", "regional", "state", "local"]),
+      state: z.string().length(2).optional(),
+      city: z.string().optional(),
+      website: z.string().url().optional(),
+      memberDirectoryUrl: z.string().url().optional(),
+      contactEmail: z.string().email().optional(),
+      contactPhone: z.string().optional(),
+      notes: z.string().optional(),
+    }).parse(req.body);
+
+    const org = await storage.createProOrganization(data);
+    res.status(201).json(org);
+  }));
+
+  // Admin: Update pro organization
+  app.patch("/api/admin/pro-organizations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const existing = await storage.getProOrganization(id);
+    if (!existing) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+    
+    await storage.updateProOrganization(id, req.body);
+    res.json({ success: true });
+  }));
+
+  // Admin: Delete pro organization
+  app.delete("/api/admin/pro-organizations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await storage.deleteProOrganization(id);
+    res.json({ success: true });
+  }));
+
+  // ===== EMAIL TEMPLATES ROUTES =====
+
+  // Get all email templates (with optional filters)
+  app.get("/api/email-templates", asyncHandler(async (req, res) => {
+    const { category } = req.query;
+    const isActive = req.query.isActive === "true" ? true : req.query.isActive === "false" ? false : undefined;
+    const templates = await storage.getEmailTemplates({
+      category: category as string,
+      isActive,
+    });
+    res.json({ templates, total: templates.length });
+  }));
+
+  // Get single email template
+  app.get("/api/email-templates/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const template = await storage.getEmailTemplate(id);
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    res.json(template);
+  }));
+
+  // Admin: Create email template
+  app.post("/api/admin/email-templates", requireAdmin, asyncHandler(async (req, res) => {
+    const data = z.object({
+      name: z.string().min(1),
+      category: z.string().min(1),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+      placeholders: z.array(z.string()).optional(),
+      isActive: z.boolean().default(true),
+    }).parse(req.body);
+
+    const template = await storage.createEmailTemplate(data as any);
+    res.status(201).json(template);
+  }));
+
+  // Admin: Update email template
+  app.patch("/api/admin/email-templates/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const existing = await storage.getEmailTemplate(id);
+    if (!existing) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    
+    await storage.updateEmailTemplate(id, req.body);
+    res.json({ success: true });
+  }));
+
+  // Admin: Delete email template
+  app.delete("/api/admin/email-templates/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    await storage.deleteEmailTemplate(id);
+    res.json({ success: true });
+  }));
+
   // Health check endpoint with memory monitoring
   app.get("/health", (req, res) => {
     const memUsage = process.memoryUsage();
@@ -1797,6 +1920,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     await seedDefaultCommissionTiers();
   } catch (error) {
     console.error("[CommissionEngine] Failed to seed commission tiers:", error);
+  }
+
+  // Seed pro organizations and email templates on startup
+  try {
+    await seedProOrgsAndTemplates();
+  } catch (error) {
+    console.error("[ProOrgsDB] Failed to seed pro organizations/templates:", error);
   }
 
   const httpServer = createServer(app);

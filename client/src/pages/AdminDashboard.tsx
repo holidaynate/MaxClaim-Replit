@@ -12,7 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   CheckCircle2, XCircle, Clock, Building2, Mail, Phone, MapPin, 
   Users, DollarSign, FileText, CreditCard, TrendingUp, LayoutDashboard,
-  UserPlus, Briefcase, Calendar, Award
+  UserPlus, Briefcase, Calendar, Award, Globe, Copy, ExternalLink,
+  Library, FileEdit
 } from "lucide-react";
 
 interface Partner {
@@ -90,12 +91,41 @@ interface DashboardStats {
   payouts: { pending: number; totalPending: number };
 }
 
+interface ProOrganization {
+  id: string;
+  name: string;
+  category: string;
+  scope: string;
+  state: string | null;
+  city: string | null;
+  website: string | null;
+  memberDirectoryUrl: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+interface EmailTemplate {
+  id: string;
+  name: string;
+  category: string;
+  subject: string;
+  body: string;
+  placeholders: string[] | null;
+  isActive: number; // 1 or 0 from database
+  createdAt: string;
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [password, setPassword] = useState("");
   const [mainTab, setMainTab] = useState("overview");
   const [partnerStatus, setPartnerStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [proOrgCategory, setProOrgCategory] = useState<string>("all");
+  const [proOrgState, setProOrgState] = useState<string>("all");
+  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -148,11 +178,64 @@ export default function AdminDashboard() {
     enabled: isAuthenticated,
   });
 
+  const { data: proOrgsData, isLoading: proOrgsLoading } = useQuery<{ organizations: ProOrganization[]; total: number }>({
+    queryKey: ["/api/pro-organizations", proOrgCategory, proOrgState],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (proOrgCategory !== "all") params.append("category", proOrgCategory);
+      if (proOrgState !== "all") params.append("state", proOrgState);
+      const queryString = params.toString();
+      const url = queryString ? `/api/pro-organizations?${queryString}` : "/api/pro-organizations";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch pro organizations");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: templatesData, isLoading: templatesLoading } = useQuery<{ templates: EmailTemplate[]; total: number }>({
+    queryKey: ["/api/email-templates"],
+    enabled: isAuthenticated,
+  });
+
   const partners = partnersData?.partners || [];
   const agents = agentsData?.agents || [];
   const contracts = contractsData?.contracts || [];
   const commissions = commissionsData?.commissions || [];
   const payouts = payoutsData?.payouts || [];
+  const proOrgs = proOrgsData?.organizations || [];
+  const emailTemplates = templatesData?.templates || [];
+
+  // Get unique states from pro organizations for filter
+  const uniqueStates = Array.from(new Set(proOrgs.filter(o => o.state).map(o => o.state as string))).sort();
+
+  // Copy template to clipboard with fallback
+  const copyToClipboard = async (text: string) => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-HTTPS or unsupported browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      toast({ title: "Copied!", description: "Template copied to clipboard" });
+    } catch {
+      toast({ title: "Error", description: "Failed to copy to clipboard", variant: "destructive" });
+    }
+  };
+
+  // Format category for display
+  const formatCategory = (cat: string) => {
+    return cat.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  };
 
   const approveMutation = useMutation({
     mutationFn: async (partnerId: number) => {
@@ -315,6 +398,14 @@ export default function AdminDashboard() {
             <TabsTrigger value="payouts" data-testid="tab-payouts">
               <CreditCard className="h-4 w-4 mr-2" />
               Payouts
+            </TabsTrigger>
+            <TabsTrigger value="pro-orgs" data-testid="tab-pro-orgs">
+              <Library className="h-4 w-4 mr-2" />
+              Pro Orgs
+            </TabsTrigger>
+            <TabsTrigger value="templates" data-testid="tab-templates">
+              <FileEdit className="h-4 w-4 mr-2" />
+              Templates
             </TabsTrigger>
           </TabsList>
 
@@ -801,6 +892,241 @@ export default function AdminDashboard() {
                           Process Payout
                         </Button>
                       )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pro-orgs">
+            <div className="mb-4 flex flex-wrap gap-4">
+              <Select value={proOrgCategory} onValueChange={setProOrgCategory}>
+                <SelectTrigger className="w-48" data-testid="select-pro-org-category">
+                  <SelectValue placeholder="Filter by category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="general_contractors">General Contractors</SelectItem>
+                  <SelectItem value="remodelers">Remodelers</SelectItem>
+                  <SelectItem value="roofers">Roofers</SelectItem>
+                  <SelectItem value="public_adjusters">Public Adjusters</SelectItem>
+                  <SelectItem value="attorneys">Attorneys</SelectItem>
+                  <SelectItem value="disaster_recovery">Disaster Recovery</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={proOrgState} onValueChange={setProOrgState}>
+                <SelectTrigger className="w-40" data-testid="select-pro-org-state">
+                  <SelectValue placeholder="Filter by state" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All States</SelectItem>
+                  {uniqueStates.map(state => (
+                    <SelectItem key={state} value={state}>{state}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {proOrgsLoading ? (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-center text-slate-400">Loading organizations...</p>
+                </CardContent>
+              </Card>
+            ) : proOrgs.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <Library className="h-12 w-12 mx-auto text-slate-400 mb-4" />
+                  <p className="text-slate-400">No organizations found</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {proOrgs.map((org) => (
+                  <Card key={org.id} data-testid={`card-pro-org-${org.id}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base">{org.name}</CardTitle>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {formatCategory(org.category)}
+                        </Badge>
+                      </div>
+                      <CardDescription className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {org.scope.charAt(0).toUpperCase() + org.scope.slice(1)}
+                        {org.state && ` • ${org.state}`}
+                        {org.city && ` • ${org.city}`}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {org.website && (
+                        <a 
+                          href={org.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-sky-500 hover:underline"
+                          data-testid={`link-website-${org.id}`}
+                        >
+                          <Globe className="h-4 w-4" />
+                          Website
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {org.memberDirectoryUrl && (
+                        <a 
+                          href={org.memberDirectoryUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-sky-500 hover:underline"
+                          data-testid={`link-directory-${org.id}`}
+                        >
+                          <Users className="h-4 w-4" />
+                          Member Directory
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {org.notes && (
+                        <p className="text-xs text-slate-400 mt-2">{org.notes}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="templates">
+            {templatesLoading ? (
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-center text-slate-400">Loading templates...</p>
+                </CardContent>
+              </Card>
+            ) : emailTemplates.length === 0 ? (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <FileEdit className="h-12 w-12 mx-auto text-slate-400 mb-4" />
+                  <p className="text-slate-400">No templates found</p>
+                </CardContent>
+              </Card>
+            ) : selectedTemplate ? (
+              <div className="space-y-4">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => setSelectedTemplate(null)}
+                  data-testid="button-back-templates"
+                >
+                  &larr; Back to Templates
+                </Button>
+                
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <CardTitle>{selectedTemplate.name}</CardTitle>
+                        <CardDescription>
+                          Category: {formatCategory(selectedTemplate.category)}
+                        </CardDescription>
+                      </div>
+                      <Badge variant={selectedTemplate.isActive === 1 ? "default" : "secondary"}>
+                        {selectedTemplate.isActive === 1 ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className="text-sm font-medium">Subject Line</Label>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Input 
+                          readOnly 
+                          value={selectedTemplate.subject} 
+                          className="font-mono text-sm"
+                          data-testid="input-template-subject"
+                        />
+                        <Button 
+                          size="icon" 
+                          variant="outline"
+                          onClick={() => copyToClipboard(selectedTemplate.subject)}
+                          data-testid="button-copy-subject"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium">Email Body</Label>
+                      <div className="mt-1 space-y-2">
+                        <div className="relative">
+                          <pre className="p-4 bg-slate-900 rounded-lg text-sm text-slate-300 whitespace-pre-wrap font-mono overflow-x-auto max-h-96">
+                            {selectedTemplate.body}
+                          </pre>
+                          <Button 
+                            size="sm" 
+                            className="absolute top-2 right-2"
+                            onClick={() => copyToClipboard(selectedTemplate.body)}
+                            data-testid="button-copy-body"
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy Body
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedTemplate.placeholders && selectedTemplate.placeholders.length > 0 && (
+                      <div>
+                        <Label className="text-sm font-medium">Placeholders to Replace</Label>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedTemplate.placeholders.map((p, i) => (
+                            <Badge key={i} variant="outline" className="font-mono">
+                              [{p}]
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <Button 
+                      className="w-full mt-4"
+                      onClick={() => copyToClipboard(`Subject: ${selectedTemplate.subject}\n\n${selectedTemplate.body}`)}
+                      data-testid="button-copy-full-template"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Full Template
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {emailTemplates.map((template) => (
+                  <Card 
+                    key={template.id} 
+                    className="cursor-pointer hover-elevate transition-all"
+                    onClick={() => setSelectedTemplate(template)}
+                    data-testid={`card-template-${template.id}`}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base">{template.name}</CardTitle>
+                        <Badge variant={template.isActive === 1 ? "default" : "secondary"}>
+                          {template.isActive === 1 ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        {formatCategory(template.category)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-slate-400 line-clamp-2">
+                        {template.subject}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Click to view full template
+                      </p>
                     </CardContent>
                   </Card>
                 ))}

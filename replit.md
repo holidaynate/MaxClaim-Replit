@@ -34,6 +34,8 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
 - **User Claims Dashboard**: Authenticated users can view their claim history and access stored PDF reports.
 - **Protected File Access**: Ensures ownership verification for file access.
 - **Monetization System**: Complete partner monetization with sales agent reference codes for lead tracking, commission management (15-40% sliding scale), Stripe integration for payments and payouts, ad impression analytics, and renewal automation.
+- **Pro Organizations Database**: Lead prospecting tool with 21 seeded professional associations across 6 categories (General Contractors, Remodelers, Roofers, Public Adjusters, Insurance Attorneys, Disaster Recovery). Organizations include website links, member directory URLs, and scope (national/regional/state/local). Admin dashboard tab with category/state filters.
+- **Email Templates System**: 4 vendor outreach email templates (Property Management, Public Adjuster, Roofing Contractor, Insurance Attorney) with placeholder support for personalization. Admin dashboard tab with view/copy functionality for easy agent use. Placeholders include [YOUR_NAME], [COMPANY_NAME], [ADJUSTER_NAME], etc.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
