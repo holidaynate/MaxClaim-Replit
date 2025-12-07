@@ -1058,3 +1058,80 @@ export const MONETIZATION_WEIGHTS = {
   standard: 1.0,
   premium: 2.0,
 } as const;
+
+// ============================================
+// PRO ORGANIZATIONS DATABASE - Sales Lead Sources
+// ============================================
+
+// Pro Organization Categories
+export const proOrgCategory = pgEnum("pro_org_category", [
+  "general_contractors",
+  "remodelers", 
+  "roofers",
+  "public_adjusters",
+  "attorneys",
+  "disaster_recovery"
+]);
+
+// Pro Organization Scope (geographic coverage)
+export const proOrgScope = pgEnum("pro_org_scope", [
+  "national",
+  "regional",
+  "state",
+  "local"
+]);
+
+// Pro Organizations - Professional associations for agent lead prospecting
+export const proOrganizations = pgTable("pro_organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  category: proOrgCategory("category").notNull(),
+  scope: proOrgScope("scope").notNull(),
+  state: varchar("state", { length: 2 }),
+  city: text("city"),
+  website: text("website"),
+  memberDirectoryUrl: text("member_directory_url"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("pro_orgs_category_idx").on(table.category),
+  stateIdx: index("pro_orgs_state_idx").on(table.state),
+  scopeIdx: index("pro_orgs_scope_idx").on(table.scope),
+}));
+
+export const insertProOrganizationSchema = createInsertSchema(proOrganizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProOrganization = z.infer<typeof insertProOrganizationSchema>;
+export type ProOrganization = typeof proOrganizations.$inferSelect;
+
+// Email Templates - Outreach templates for sales agents
+export const emailTemplates = pgTable("email_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  placeholders: text("placeholders").array(),
+  isActive: integer("is_active").default(1).$type<boolean>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  categoryIdx: index("email_templates_category_idx").on(table.category),
+  activeIdx: index("email_templates_active_idx").on(table.isActive),
+}));
+
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+export type EmailTemplate = typeof emailTemplates.$inferSelect;

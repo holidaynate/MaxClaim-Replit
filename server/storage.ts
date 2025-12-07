@@ -48,6 +48,10 @@ import {
   type InsertAdRotation,
   type AdImpression,
   type InsertAdImpression,
+  type ProOrganization,
+  type InsertProOrganization,
+  type EmailTemplate,
+  type InsertEmailTemplate,
   users,
   replitUsers,
   userClaims,
@@ -74,6 +78,8 @@ import {
   bogoOrganizations,
   adRotations,
   adImpressions,
+  proOrganizations,
+  emailTemplates,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, inArray, like, gte, lte } from "drizzle-orm";
@@ -236,6 +242,24 @@ export interface IStorage {
   getAdImpressions(filters?: { partnerId?: string; zipCode?: string; startDate?: Date; endDate?: Date }): Promise<AdImpression[]>;
   recordClickthrough(id: string): Promise<void>;
   getImpressionStats(partnerId: string, days?: number): Promise<{ impressions: number; clicks: number; ctr: number }>;
+  
+  // ============================================
+  // PRO ORGANIZATIONS DATABASE - Sales Lead Sources
+  // ============================================
+  
+  // Pro Organizations
+  createProOrganization(data: InsertProOrganization): Promise<ProOrganization>;
+  getProOrganizations(filters?: { category?: string; state?: string; scope?: string }): Promise<ProOrganization[]>;
+  getProOrganization(id: string): Promise<ProOrganization | undefined>;
+  updateProOrganization(id: string, data: Partial<InsertProOrganization>): Promise<void>;
+  deleteProOrganization(id: string): Promise<void>;
+  
+  // Email Templates
+  createEmailTemplate(data: InsertEmailTemplate): Promise<EmailTemplate>;
+  getEmailTemplates(filters?: { category?: string; isActive?: boolean }): Promise<EmailTemplate[]>;
+  getEmailTemplate(id: string): Promise<EmailTemplate | undefined>;
+  updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<void>;
+  deleteEmailTemplate(id: string): Promise<void>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -1270,6 +1294,104 @@ export class DatabaseStorage implements IStorage {
       clicks,
       ctr: parseFloat(ctr.toFixed(2)),
     };
+  }
+
+  // ============================================
+  // PRO ORGANIZATIONS DATABASE - Sales Lead Sources
+  // ============================================
+
+  // Pro Organizations
+  async createProOrganization(data: InsertProOrganization): Promise<ProOrganization> {
+    const [org] = await db.insert(proOrganizations).values(data).returning();
+    return org;
+  }
+
+  async getProOrganizations(filters?: { 
+    category?: string; 
+    state?: string; 
+    scope?: string 
+  }): Promise<ProOrganization[]> {
+    const conditions = [];
+    if (filters?.category) {
+      conditions.push(eq(proOrganizations.category, filters.category as any));
+    }
+    if (filters?.state) {
+      conditions.push(eq(proOrganizations.state, filters.state));
+    }
+    if (filters?.scope) {
+      conditions.push(eq(proOrganizations.scope, filters.scope as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(proOrganizations).orderBy(proOrganizations.category, proOrganizations.name);
+    }
+    
+    return await db
+      .select()
+      .from(proOrganizations)
+      .where(and(...conditions))
+      .orderBy(proOrganizations.category, proOrganizations.name);
+  }
+
+  async getProOrganization(id: string): Promise<ProOrganization | undefined> {
+    const [org] = await db.select().from(proOrganizations).where(eq(proOrganizations.id, id));
+    return org || undefined;
+  }
+
+  async updateProOrganization(id: string, data: Partial<InsertProOrganization>): Promise<void> {
+    await db
+      .update(proOrganizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(proOrganizations.id, id));
+  }
+
+  async deleteProOrganization(id: string): Promise<void> {
+    await db.delete(proOrganizations).where(eq(proOrganizations.id, id));
+  }
+
+  // Email Templates
+  async createEmailTemplate(data: InsertEmailTemplate): Promise<EmailTemplate> {
+    const [template] = await db.insert(emailTemplates).values(data).returning();
+    return template;
+  }
+
+  async getEmailTemplates(filters?: { 
+    category?: string; 
+    isActive?: boolean 
+  }): Promise<EmailTemplate[]> {
+    const conditions = [];
+    if (filters?.category) {
+      conditions.push(eq(emailTemplates.category, filters.category));
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(emailTemplates.isActive, filters.isActive as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(emailTemplates).orderBy(emailTemplates.category, emailTemplates.name);
+    }
+    
+    return await db
+      .select()
+      .from(emailTemplates)
+      .where(and(...conditions))
+      .orderBy(emailTemplates.category, emailTemplates.name);
+  }
+
+  async getEmailTemplate(id: string): Promise<EmailTemplate | undefined> {
+    const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, id));
+    return template || undefined;
+  }
+
+  async updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<void> {
+    await db
+      .update(emailTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(emailTemplates.id, id));
+  }
+
+  async deleteEmailTemplate(id: string): Promise<void> {
+    await db.delete(emailTemplates).where(eq(emailTemplates.id, id));
   }
 }
 
