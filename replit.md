@@ -62,13 +62,17 @@ Fair geo-targeting algorithm that prioritizes local contractors while maintainin
 **Key Principle:** Local contractors always rank higher than non-local, regardless of payment tier. Payment tier only affects ranking among contractors with similar coverage.
 
 ### Location Utilities (server/utils/location.ts)
-Privacy-first location detection using ZIP code → metro area mapping.
+Privacy-first location mapping using user-provided ZIP codes.
 
-**Features:**
+**Current Implementation (ZIP-based):**
 - ZIP prefix → area code mapping (Texas metros: San Antonio, Austin, Houston, Dallas)
 - ZIP prefix → metro area lookup
 - Coarse location detection (metro level, not precise)
 - No PII storage - only anonymous regional data
+
+**Future Enhancement (not yet implemented):**
+- IP-based coarse location detection from request headers
+- Auto-detection with optional ZIP refinement
 
 **Covered Metros:**
 - San Antonio (782xx, area codes 210/726)
@@ -96,8 +100,7 @@ Privacy-first location detection using ZIP code → metro area mapping.
 - Batch processing (10 items at a time)
 - Memory usage monitored (target <250MB)
 - /health endpoint added
-- Location detection (coarse area code from request)
-- Optional ZIP refinement
+- ZIP code → metro/area code mapping (user-provided ZIP)
 - Partner service area configuration
 - Fair matching algorithm (local priority)
 - Clear landing page with "How It Works"
@@ -108,6 +111,10 @@ Privacy-first location detection using ZIP code → metro area mapping.
 - matchPartnersToUser() algorithm
 - Top 5 partners displayed per user
 - Payment tier is multiplier, not override
+
+### Pending Implementation
+- IP-based coarse location detection from request headers
+- Optional ZIP refinement after IP detection
 
 ### Pending Testing
 - Test with 50+ item claims
