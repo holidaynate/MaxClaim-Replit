@@ -1,6 +1,10 @@
 import { 
   type User, 
   type InsertUser,
+  type ReplitUser,
+  type UpsertReplitUser,
+  type UserClaim,
+  type InsertUserClaim,
   type Session,
   type InsertSession,
   type SessionEvent,
@@ -25,6 +29,8 @@ import {
   type PriceAuditResult,
   type InsertPriceAuditResult,
   users,
+  replitUsers,
+  userClaims,
   sessions,
   sessionEvents,
   claims,
@@ -61,10 +67,21 @@ interface RegionalStats {
 }
 
 export interface IStorage {
-  // User management
+  // Admin user management (legacy)
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  
+  // Replit Auth user management
+  // Reference: javascript_log_in_with_replit integration blueprint
+  getReplitUser(id: string): Promise<ReplitUser | undefined>;
+  upsertReplitUser(user: UpsertReplitUser): Promise<ReplitUser>;
+  
+  // User Claims - for "My Claims" dashboard
+  createUserClaim(data: InsertUserClaim): Promise<UserClaim>;
+  getUserClaims(userId: string, limit?: number): Promise<Array<UserClaim & { claim: Claim }>>;
+  getUserClaim(id: string): Promise<UserClaim | undefined>;
+  updateUserClaimReportUrl(id: string, reportUrl: string): Promise<void>;
   
   // Session management
   createSession(data: InsertSession): Promise<Session>;
@@ -138,6 +155,61 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+
+  // Replit Auth user management
+  // Reference: javascript_log_in_with_replit integration blueprint
+  async getReplitUser(id: string): Promise<ReplitUser | undefined> {
+    const [user] = await db.select().from(replitUsers).where(eq(replitUsers.id, id));
+    return user || undefined;
+  }
+
+  async upsertReplitUser(userData: UpsertReplitUser): Promise<ReplitUser> {
+    const [user] = await db
+      .insert(replitUsers)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: replitUsers.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  // User Claims - for "My Claims" dashboard
+  async createUserClaim(data: InsertUserClaim): Promise<UserClaim> {
+    const [userClaim] = await db.insert(userClaims).values(data).returning();
+    return userClaim;
+  }
+
+  async getUserClaims(userId: string, limit: number = 10): Promise<Array<UserClaim & { claim: Claim }>> {
+    const results = await db
+      .select()
+      .from(userClaims)
+      .innerJoin(claims, eq(userClaims.claimId, claims.id))
+      .where(eq(userClaims.userId, userId))
+      .orderBy(desc(userClaims.createdAt))
+      .limit(limit);
+
+    return results.map(r => ({
+      ...r.user_claims,
+      claim: r.claims,
+    }));
+  }
+
+  async getUserClaim(id: string): Promise<UserClaim | undefined> {
+    const [userClaim] = await db.select().from(userClaims).where(eq(userClaims.id, id));
+    return userClaim || undefined;
+  }
+
+  async updateUserClaimReportUrl(id: string, reportUrl: string): Promise<void> {
+    await db
+      .update(userClaims)
+      .set({ reportUrl })
+      .where(eq(userClaims.id, id));
   }
 
   // Session management

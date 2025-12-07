@@ -6,11 +6,11 @@ import express, {
   Response,
   NextFunction,
 } from "express";
-import session from "express-session";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 
 import { registerRoutes } from "./routes";
+import { setupAuth } from "./replitAuth";
 
 // Validate required environment variables on startup
 const requiredSecrets = ['ADMIN_PASSWORD', 'DATABASE_URL', 'SESSION_SECRET'];
@@ -65,18 +65,6 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// Session middleware for admin authentication
-app.use(session({
-  secret: process.env.SESSION_SECRET!,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-  },
-}));
-
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -110,6 +98,9 @@ app.use((req, res, next) => {
 export default async function runApp(
   setup: (app: Express, server: Server) => Promise<void>,
 ) {
+  // Set up Replit Auth with session middleware (uses PostgreSQL store)
+  await setupAuth(app);
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

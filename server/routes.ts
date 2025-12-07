@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { isAuthenticated } from "./replitAuth";
 import { analyzeClaimItem } from "./pricing-data";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
@@ -217,7 +218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category: item.category,
           description: item.description,
           quantity: item.quantity,
-          unit: item.unit,
+          unit: item.unit as "LF" | "SF" | "SQ" | "CT" | "EA",
           quotedPrice: item.insuranceOffer,
           fmvPrice: item.fmvPrice,
           variancePct: item.percentageIncrease,
@@ -227,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Track pricing data point for continuous improvement
         await storage.addPricingDataPoint({
           category: item.category,
-          unit: item.unit,
+          unit: item.unit as "LF" | "SF" | "SQ" | "CT" | "EA",
           zipCode: data.zipCode,
           propertyAddress: data.propertyAddress,
           quotedPrice: item.insuranceOffer,
@@ -265,7 +266,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tier: partner.tier,
         phone: partner.phone,
         website: partner.website,
-        licenseNumber: partner.licenseNumber,
         score: partner.matchScore,
         matchReasons: partner.matchReasons
       }))
@@ -595,16 +595,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       maxResults: z.number().min(1).max(20).default(5),
     }).parse(req.body);
 
-    // If no location provided, detect from IP
-    let userLocation;
+    // If no location provided, use default San Antonio
+    let userLocation: { zip?: string; areaCode?: string; metro?: string };
     if (zip || areaCode) {
       const areaCodes = areaCode ? [areaCode] : (zip ? getAreaCodeFromZip(zip) : []);
+      const detectedLocation = zip ? getCoarseLocation(zip) : undefined;
       userLocation = {
         zip,
         areaCode: areaCodes[0],
+        metro: detectedLocation?.metro,
       };
     } else {
-      userLocation = getCoarseLocation(req);
+      // Default to San Antonio area for unspecified locations
+      userLocation = {
+        zip: undefined,
+        areaCode: '210',
+        metro: 'San Antonio',
+      };
     }
 
     // Get matched partners
@@ -909,9 +916,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         name: itemName,
         unit: data.UNIT,
-        rrcMin: data.RRC_COST,
-        insMax: data.INS_MAX_COST,
-        avgPrice: data.AVG_PRICE,
+        unitPrice: data.UNIT_PRICE,
+        fmvPrice: data.FMV_PRICE,
+        avgPrice: data.AVERAGE_PRICE,
         samples: data.SAMPLES
       });
     } catch (error: any) {
@@ -919,6 +926,199 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: 'Failed to get item data' });
     }
   });
+
+  // ============================================
+  // FILE SERVING ROUTES - Object Storage
+  // ============================================
+
+  // Serve stored objects (PDFs, documents) - requires auth and ownership check
+  app.get("/files/:claimId/:filename", isAuthenticated, asyncHandler(async (req, res) => {
+    const user = req.user as any;
+    const userId = user.claims?.sub;
+    const { claimId, filename } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    // Verify user owns this claim
+    const userClaimsData = await storage.getUserClaims(userId, 100);
+    const userOwnsClaim = userClaimsData.some(uc => uc.claimId === claimId);
+    
+    if (!userOwnsClaim) {
+      return res.status(403).json({ error: "Access denied - not your claim" });
+    }
+    
+    try {
+      const { getObjectStorageService, ObjectNotFoundError } = await import('./utils/objectStorage');
+      const storageService = getObjectStorageService();
+      
+      const file = await storageService.getClaimFile(claimId, filename);
+      await storageService.downloadObject(file, res);
+    } catch (error: any) {
+      if (error.name === 'ObjectNotFoundError') {
+        return res.status(404).json({ error: 'File not found' });
+      }
+      console.error('File serving error:', error);
+      res.status(500).json({ error: 'Failed to serve file' });
+    }
+  }));
+
+  // ============================================
+  // PROTECTED USER ROUTES - Replit Auth Required
+  // ============================================
+
+  // Get current authenticated user
+  app.get("/api/user/me", isAuthenticated, asyncHandler(async (req, res) => {
+    const user = req.user as any;
+    const userId = user.claims?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    const replitUser = await storage.getReplitUser(userId);
+    if (!replitUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      id: replitUser.id,
+      email: replitUser.email,
+      firstName: replitUser.firstName,
+      lastName: replitUser.lastName,
+      profileImageUrl: replitUser.profileImageUrl,
+    });
+  }));
+
+  // Get user's saved claims (My Claims dashboard)
+  app.get("/api/user/claims", isAuthenticated, asyncHandler(async (req, res) => {
+    const user = req.user as any;
+    const userId = user.claims?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 10;
+    const userClaims = await storage.getUserClaims(userId, limit);
+
+    res.json({
+      claims: userClaims.map(uc => ({
+        id: uc.id,
+        claimId: uc.claimId,
+        createdAt: uc.createdAt,
+        reportUrl: uc.reportUrl,
+        inputs: uc.inputs,
+        claim: {
+          id: uc.claim.id,
+          status: uc.claim.status,
+          totalQuoted: Number(uc.claim.totalQuoted),
+          totalFmv: Number(uc.claim.totalFmv),
+          additionalAmount: Number(uc.claim.additionalAmount),
+          variancePct: Number(uc.claim.variancePct),
+        }
+      })),
+      total: userClaims.length,
+    });
+  }));
+
+  // Get a specific user claim with full details
+  app.get("/api/user/claims/:id", isAuthenticated, asyncHandler(async (req, res) => {
+    const user = req.user as any;
+    const userId = user.claims?.sub;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    const userClaim = await storage.getUserClaim(id);
+    if (!userClaim || userClaim.userId !== userId) {
+      return res.status(404).json({ error: "Claim not found" });
+    }
+
+    const claim = await storage.getClaim(userClaim.claimId);
+    if (!claim) {
+      return res.status(404).json({ error: "Claim details not found" });
+    }
+
+    const lineItems = await storage.getClaimLineItems(userClaim.claimId);
+
+    res.json({
+      id: userClaim.id,
+      claimId: userClaim.claimId,
+      createdAt: userClaim.createdAt,
+      reportUrl: userClaim.reportUrl,
+      inputs: userClaim.inputs,
+      claim: {
+        id: claim.id,
+        status: claim.status,
+        totalQuoted: Number(claim.totalQuoted),
+        totalFmv: Number(claim.totalFmv),
+        additionalAmount: Number(claim.additionalAmount),
+        variancePct: Number(claim.variancePct),
+        completedAt: claim.completedAt,
+      },
+      lineItems: lineItems.map(item => ({
+        id: item.id,
+        category: item.category,
+        description: item.description,
+        quantity: Number(item.quantity),
+        unit: item.unit,
+        quotedPrice: Number(item.quotedPrice),
+        fmvPrice: Number(item.fmvPrice),
+        variancePct: Number(item.variancePct),
+      })),
+    });
+  }));
+
+  // Save a claim to user's history (called after audit)
+  app.post("/api/user/claims", isAuthenticated, asyncHandler(async (req, res) => {
+    const user = req.user as any;
+    const userId = user.claims?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    const { claimId, inputs, reportUrl } = z.object({
+      claimId: z.string(),
+      inputs: z.object({
+        zipCode: z.string(),
+        propertyAddress: z.string().optional(),
+        items: z.array(z.object({
+          category: z.string(),
+          description: z.string(),
+          quantity: z.number(),
+          unit: z.string(),
+          quotedPrice: z.number().optional(),
+          unitPrice: z.number().optional(),
+        })),
+        email: z.string().email().optional(),
+      }).optional(),
+      reportUrl: z.string().url().optional(),
+    }).parse(req.body);
+
+    // Verify the claim exists
+    const claim = await storage.getClaim(claimId);
+    if (!claim) {
+      return res.status(404).json({ error: "Claim not found" });
+    }
+
+    // Create user claim record
+    const userClaim = await storage.createUserClaim({
+      userId,
+      claimId,
+      inputs,
+      reportUrl,
+    });
+
+    res.status(201).json({
+      id: userClaim.id,
+      message: "Claim saved to your history",
+    });
+  }));
 
   // Health check endpoint with memory monitoring
   app.get("/health", (req, res) => {

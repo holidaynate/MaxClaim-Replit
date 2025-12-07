@@ -31,7 +31,7 @@ export const auditFlag = pgEnum("audit_flag", [
 ]);
 export const auditSeverity = pgEnum("audit_severity", ["success", "warning", "error", "info"]);
 
-// Users table (keep existing structure)
+// Admin Users table (legacy - for admin dashboard)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -45,6 +45,33 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Replit Auth Session storage table
+// Reference: javascript_log_in_with_replit integration blueprint
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_auth_session_expire").on(table.expire)],
+);
+
+// Replit Users table - for authenticated users via Replit Auth
+// Reference: javascript_log_in_with_replit integration blueprint
+export const replitUsers = pgTable("replit_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type UpsertReplitUser = typeof replitUsers.$inferInsert;
+export type ReplitUser = typeof replitUsers.$inferSelect;
 
 // Sessions - Anonymous tracking with ZIP code and settings
 export const sessions = pgTable("sessions", {
@@ -138,6 +165,58 @@ export const insertClaimLineItemSchema = createInsertSchema(claimLineItems).omit
 export type InsertClaimLineItem = z.infer<typeof insertClaimLineItemSchema>;
 export type ClaimLineItem = typeof claimLineItems.$inferSelect;
 
+// User Claims - Links claims to authenticated users for "My Claims" dashboard
+export const userClaims = pgTable("user_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => replitUsers.id, { onDelete: "cascade" }),
+  claimId: varchar("claim_id").notNull().references(() => claims.id, { onDelete: "cascade" }),
+  reportUrl: text("report_url"),
+  inputs: jsonb("inputs").$type<{
+    zipCode: string;
+    propertyAddress?: string;
+    items: Array<{
+      category: string;
+      description: string;
+      quantity: number;
+      unit: string;
+      quotedPrice?: number;
+      unitPrice?: number;
+    }>;
+    email?: string;
+  }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdx: index("user_claims_user_idx").on(table.userId),
+  claimIdx: index("user_claims_claim_idx").on(table.claimId),
+  createdAtIdx: index("user_claims_created_at_idx").on(table.createdAt),
+}));
+
+export const insertUserClaimSchema = createInsertSchema(userClaims).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Define InsertUserClaim directly to avoid jsonb type inference issues
+export type InsertUserClaim = {
+  userId: string;
+  claimId: string;
+  reportUrl?: string | null;
+  inputs?: {
+    zipCode: string;
+    propertyAddress?: string;
+    items: Array<{
+      category: string;
+      description: string;
+      quantity: number;
+      unit: string;
+      quotedPrice?: number;
+      unitPrice?: number;
+    }>;
+    email?: string;
+  } | null;
+};
+export type UserClaim = typeof userClaims.$inferSelect;
+
 // Sources - Attribution for libraries, APIs, datasets
 export const sources = pgTable("sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -193,6 +272,21 @@ export type InsertSessionSourceUsage = z.infer<typeof insertSessionSourceUsageSc
 export type SessionSourceUsage = typeof sessionSourceUsage.$inferSelect;
 
 // Relations
+export const replitUsersRelations = relations(replitUsers, ({ many }) => ({
+  userClaims: many(userClaims),
+}));
+
+export const userClaimsRelations = relations(userClaims, ({ one }) => ({
+  user: one(replitUsers, {
+    fields: [userClaims.userId],
+    references: [replitUsers.id],
+  }),
+  claim: one(claims, {
+    fields: [userClaims.claimId],
+    references: [claims.id],
+  }),
+}));
+
 export const sessionsRelations = relations(sessions, ({ many }) => ({
   events: many(sessionEvents),
   claims: many(claims),

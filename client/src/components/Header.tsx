@@ -1,5 +1,6 @@
 import logoImg from "@assets/IMG_20251121_130456_1763930875332.png";
 import { AccessibilitySettings } from "@/components/AccessibilitySettings";
+import { AuthButton } from "@/components/AuthButton";
 
 export default function Header() {
   return (
@@ -15,7 +16,8 @@ export default function Header() {
         <p className="text-sm text-muted-foreground hidden sm:block" aria-label="Site tagline">
           Maximize Your Insurance Claim
         </p>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <AuthButton />
           <AccessibilitySettings />
         </div>
       </div>

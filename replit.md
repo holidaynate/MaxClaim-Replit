@@ -138,8 +138,25 @@ These are automatically managed by Replit and should not be manually set:
 - IP-based coarse location detection from request headers
 - Optional ZIP refinement after IP detection
 
+### Recent Additions (Dec 2024)
+- **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth
+  - Session storage in PostgreSQL (auth_sessions table)
+  - User data in replit_users table with auto-upsert on login
+  - Protected routes with isAuthenticated middleware
+  - Frontend AuthButton component in header
+- **User Claims Dashboard**: /my-claims page for authenticated users
+  - Links claims to users via user_claims table
+  - View claim history with line items and audit results
+  - Access stored PDF reports
+- **Protected File Access**: /files/:claimId/:filename with ownership verification
+- **Object Storage Utilities**: server/utils/objectStorage.ts for Replit Object Storage
+- **Email Utilities**: server/utils/email.ts for SendGrid integration (ready)
+- **PDF Utilities**: server/utils/pdf.ts for server-side PDF generation (ready)
+- **Pricing Refresh Script**: scripts/refreshPricing.ts for scheduled cache updates
+- **Numeric Field Handling**: PostgreSQL numeric columns properly converted to JS numbers
+
 ### Known Beta Limitations
 - IP geolocation is coarse (metro area only)
-- No user accounts/auth yet
 - Partner payment processing not implemented (placeholders only)
-- No email notifications
+- Email sending requires SendGrid API key configuration
+- Scheduled tasks (pricing refresh) need external cron trigger
