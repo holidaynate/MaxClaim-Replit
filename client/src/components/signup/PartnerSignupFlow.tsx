@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { CheckCircle2, Building2, Loader2, Star, Zap, Crown } from "lucide-react";
+import { CheckCircle2, Building2, Loader2, Star, Zap, Crown, ArrowLeft, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PlanBuilderStep } from "./PlanBuilderStep";
 
 type PartnerType = "contractor" | "adjuster" | "agency";
 type PricingTier = "free" | "standard" | "premium";
@@ -23,9 +24,16 @@ interface PartnerFormData {
   phone: string;
   website: string;
   licenseNumber: string;
+  zipCode: string;
   pricingTier: PricingTier;
   referralCode: string;
 }
+
+const tradeTypeMap: Record<PartnerType, string> = {
+  contractor: "general_contractor",
+  adjuster: "public_adjuster",
+  agency: "insurance_attorney",
+};
 
 const tierInfo: Record<PricingTier, { title: string; price: string; icon: typeof Star; features: string[] }> = {
   free: {
@@ -127,6 +135,7 @@ export default function PartnerSignupFlow() {
     phone: "",
     website: "",
     licenseNumber: "",
+    zipCode: "",
     pricingTier: "standard",
     referralCode: "",
   });
@@ -175,8 +184,19 @@ export default function PartnerSignupFlow() {
     e.preventDefault();
     if (step === 1) {
       setStep(2);
+    } else if (step === 2) {
+      setStep(3);
     } else {
       signupMutation.mutate(data);
+    }
+  };
+
+  const getStepTitle = () => {
+    switch (step) {
+      case 1: return "Company Information";
+      case 2: return "Choose Your Plan";
+      case 3: return "Your AI-Powered Ad Plan";
+      default: return "";
     }
   };
 
@@ -190,12 +210,17 @@ export default function PartnerSignupFlow() {
     <Card className="bg-slate-900/90 border-slate-700">
       <CardHeader>
         <CardTitle className="text-xl text-slate-100 flex items-center gap-2">
-          <Building2 className="w-6 h-6 text-purple-400" />
-          {step === 1 ? "Company Information" : "Choose Your Plan"}
+          {step === 3 ? (
+            <Sparkles className="w-6 h-6 text-purple-400" />
+          ) : (
+            <Building2 className="w-6 h-6 text-purple-400" />
+          )}
+          {getStepTitle()}
         </CardTitle>
         <div className="flex gap-2 mt-2">
           <div className={`h-1 flex-1 rounded ${step >= 1 ? 'bg-purple-500' : 'bg-slate-700'}`} />
           <div className={`h-1 flex-1 rounded ${step >= 2 ? 'bg-purple-500' : 'bg-slate-700'}`} />
+          <div className={`h-1 flex-1 rounded ${step >= 3 ? 'bg-purple-500' : 'bg-slate-700'}`} />
         </div>
       </CardHeader>
       <CardContent>
@@ -268,17 +293,32 @@ export default function PartnerSignupFlow() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-slate-300">Business Phone</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={data.phone}
-                  onChange={(e) => setData({ ...data, phone: e.target.value })}
-                  className="bg-slate-800 border-slate-600 text-slate-100"
-                  required
-                  data-testid="input-partner-phone"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-slate-300">Business Phone</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={data.phone}
+                    onChange={(e) => setData({ ...data, phone: e.target.value })}
+                    className="bg-slate-800 border-slate-600 text-slate-100"
+                    required
+                    data-testid="input-partner-phone"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="zipCode" className="text-slate-300">Service Area ZIP</Label>
+                  <Input
+                    id="zipCode"
+                    value={data.zipCode}
+                    onChange={(e) => setData({ ...data, zipCode: e.target.value.replace(/\D/g, '').slice(0, 5) })}
+                    className="bg-slate-800 border-slate-600 text-slate-100"
+                    placeholder="e.g., 77001"
+                    maxLength={5}
+                    required
+                    data-testid="input-partner-zip"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -319,22 +359,29 @@ export default function PartnerSignupFlow() {
                 <p className="text-xs text-slate-500">If an agent referred you, enter their code for tracking.</p>
               </div>
             </>
-          ) : (
+          ) : step === 2 ? (
             <TierSelector 
               selected={data.pricingTier} 
               onSelect={(tier) => setData({ ...data, pricingTier: tier })} 
             />
+          ) : (
+            <PlanBuilderStep
+              zipCode={data.zipCode}
+              tradeType={tradeTypeMap[data.type]}
+              tier={data.pricingTier}
+            />
           )}
 
           <div className="pt-4 flex gap-3">
-            {step === 2 && (
+            {step > 1 && (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setStep(1)}
-                className="flex-1 border-slate-600 text-slate-300"
-                data-testid="button-back-to-company"
+                onClick={() => setStep(step - 1)}
+                className="border-slate-600 text-slate-300"
+                data-testid="button-back"
               >
+                <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
               </Button>
             )}
@@ -342,7 +389,7 @@ export default function PartnerSignupFlow() {
               type="submit"
               disabled={signupMutation.isPending}
               className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold"
-              data-testid={step === 1 ? "button-continue-to-pricing" : "button-submit-partner-signup"}
+              data-testid={step === 1 ? "button-continue-to-pricing" : step === 2 ? "button-continue-to-plan" : "button-submit-partner-signup"}
             >
               {signupMutation.isPending ? (
                 <>
@@ -351,6 +398,11 @@ export default function PartnerSignupFlow() {
                 </>
               ) : step === 1 ? (
                 "Continue to Pricing"
+              ) : step === 2 ? (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  See Your AI Plan
+                </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" />
@@ -360,7 +412,7 @@ export default function PartnerSignupFlow() {
             </Button>
           </div>
 
-          {step === 2 && (
+          {step === 3 && (
             <p className="text-xs text-slate-500 text-center pt-2">
               By signing up, you agree to MaxClaim's Terms of Service. 
               {data.pricingTier !== "free" && " Payment will be collected after approval via Stripe."}

@@ -41,6 +41,7 @@ import crypto from "crypto";
 import { auditCache } from "./cache/auditCache";
 import { batchQueue } from "./queue/batchQueue";
 import { sendPasswordResetEmail, sendEmailVerificationEmail } from "./services/emailService";
+import { generatePlanRecommendation, getTradeTypes, getTierComparison } from "./services/planBuilder";
 
 // Extend Express session type
 declare module "express-session" {
@@ -1384,6 +1385,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       matchingInfo: MATCHING_EXPLANATION,
       totalMatches: matchedPartners.length,
     });
+  }));
+
+  // ==================== Plan Builder API ====================
+
+  // Get trade types for plan builder dropdown
+  app.get("/api/plan-builder/trade-types", (req, res) => {
+    try {
+      const tradeTypes = getTradeTypes();
+      res.json({ tradeTypes });
+    } catch (error: any) {
+      console.error("Get trade types error:", error);
+      res.status(500).json({ error: "Failed to get trade types" });
+    }
+  });
+
+  // Get tier comparison for plan builder
+  app.get("/api/plan-builder/tiers", (req, res) => {
+    try {
+      const tiers = getTierComparison();
+      res.json({ tiers });
+    } catch (error: any) {
+      console.error("Get tiers error:", error);
+      res.status(500).json({ error: "Failed to get tier information" });
+    }
+  });
+
+  // Generate plan recommendation
+  app.post("/api/plan-builder/recommend", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      zipCode: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+      tier: z.enum(["free", "standard", "premium"]),
+    });
+
+    const { zipCode, tradeType, tier } = schema.parse(req.body);
+    
+    const recommendation = generatePlanRecommendation(zipCode, tradeType, tier);
+    
+    res.json({ recommendation });
   }));
 
   // Get partners with filters
