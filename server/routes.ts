@@ -16,6 +16,7 @@ import { PROMO_PARTNERS } from "@shared/partners";
 import { seedDefaultCommissionTiers } from "./services/commissionEngine";
 import { seedProOrgsAndTemplates } from "./seeds/proOrgsAndTemplates";
 import { generateAgentRefCode, isValidAgentRefCodeFormat, generateUniqueAgentRefCode } from "./utils/agentRefCode";
+import { getStateFromZip, US_STATES } from "./utils/zipToState";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -1776,6 +1777,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       scope: scope as string,
     });
     res.json({ organizations: orgs, total: orgs.length });
+  }));
+
+  // Get organizations by state (smart filtering: national + regional + state-specific)
+  app.get("/api/pro-organizations/by-state/:state", asyncHandler(async (req, res) => {
+    const { state } = req.params;
+    const { category } = req.query;
+    
+    if (!US_STATES.includes(state?.toUpperCase())) {
+      res.status(400).json({ error: "Invalid state code" });
+      return;
+    }
+    
+    const orgs = await storage.getOrgsForState(state, category as string);
+    res.json({ 
+      state: state.toUpperCase(), 
+      organizations: orgs, 
+      total: orgs.length 
+    });
+  }));
+
+  // Get organizations by ZIP code (converts ZIP to state, then gets relevant orgs)
+  app.get("/api/pro-organizations/by-zip/:zip", asyncHandler(async (req, res) => {
+    const { zip } = req.params;
+    const { category } = req.query;
+    
+    const state = getStateFromZip(zip);
+    if (!state) {
+      res.status(400).json({ error: "Invalid ZIP code", zip });
+      return;
+    }
+    
+    const orgs = await storage.getOrgsForState(state, category as string);
+    res.json({ 
+      zip,
+      state, 
+      organizations: orgs, 
+      total: orgs.length 
+    });
   }));
 
   // Get single pro organization

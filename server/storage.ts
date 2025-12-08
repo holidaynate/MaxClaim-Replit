@@ -251,6 +251,7 @@ export interface IStorage {
   createProOrganization(data: InsertProOrganization): Promise<ProOrganization>;
   getProOrganizations(filters?: { category?: string; state?: string; scope?: string }): Promise<ProOrganization[]>;
   getProOrganization(id: string): Promise<ProOrganization | undefined>;
+  getOrgsForState(stateCode: string, category?: string): Promise<ProOrganization[]>;
   updateProOrganization(id: string, data: Partial<InsertProOrganization>): Promise<void>;
   deleteProOrganization(id: string): Promise<void>;
   
@@ -1336,6 +1337,40 @@ export class DatabaseStorage implements IStorage {
   async getProOrganization(id: string): Promise<ProOrganization | undefined> {
     const [org] = await db.select().from(proOrganizations).where(eq(proOrganizations.id, id));
     return org || undefined;
+  }
+
+  // Get organizations relevant to a specific state
+  // Returns: national orgs + regional orgs covering the state + state-specific orgs
+  async getOrgsForState(stateCode: string, category?: string): Promise<ProOrganization[]> {
+    const upperState = stateCode?.toUpperCase();
+    if (!upperState) return [];
+    
+    // Get all organizations and filter in memory for complex array matching
+    const allOrgs = await db.select().from(proOrganizations).orderBy(proOrganizations.category, proOrganizations.name);
+    
+    const filtered = allOrgs.filter(org => {
+      // Category filter if specified
+      if (category && org.category !== category) return false;
+      
+      // National orgs apply everywhere
+      if (org.scope === "national") return true;
+      
+      // Regional orgs - check if state is in regions array
+      if (org.scope === "regional" && org.regions?.includes(upperState)) return true;
+      
+      // State-scoped orgs - check if state matches
+      if (org.scope === "state") {
+        if (org.states?.includes(upperState)) return true;
+        if (org.state === upperState) return true;
+      }
+      
+      // Local orgs - check if state matches
+      if (org.scope === "local" && org.state === upperState) return true;
+      
+      return false;
+    });
+    
+    return filtered;
   }
 
   async updateProOrganization(id: string, data: Partial<InsertProOrganization>): Promise<void> {

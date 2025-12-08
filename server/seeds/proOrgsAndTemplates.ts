@@ -1,13 +1,17 @@
 import { storage } from "../storage";
 
 // Pro Organizations data from the MaxClaim Pro Orgs Database
+// Enhanced with: directoryUrl, chapterMapUrl, chapterInfoUrl, parentId, regions, states
 const proOrganizationsData = [
-  // General Contractors - National
+  // =====================
+  // GENERAL CONTRACTORS
+  // =====================
   {
     name: "Associated General Contractors of America (AGC)",
     category: "general_contractors" as const,
     scope: "national" as const,
     website: "https://www.agc.org",
+    chapterMapUrl: "https://www.agc.org/connect/chapters",
     memberDirectoryUrl: "https://www.agc.org/member-directory",
     notes: "National association with state/local chapters"
   },
@@ -16,8 +20,9 @@ const proOrganizationsData = [
     category: "general_contractors" as const,
     scope: "national" as const,
     website: "https://www.mbcea.org",
+    directoryUrl: "https://www.mbcea.org/member-directory",
     memberDirectoryUrl: "https://www.mbcea.org/member-directory",
-    notes: "Metal building contractors national association"
+    notes: "Metal building contractors - searchable member directory"
   },
   {
     name: "General Building Contractors Association (GBCA)",
@@ -25,26 +30,33 @@ const proOrganizationsData = [
     scope: "regional" as const,
     website: "https://gbca.com",
     memberDirectoryUrl: "https://members.gbca.com/directory",
+    regions: ["PA", "NJ", "DE"],
     notes: "Regional - Philadelphia + Mid-Atlantic"
   },
-  // General Contractors - State Chapters (TX)
+  // AGC State Chapters (TX)
   {
-    name: "AGC - Austin Chapter",
+    name: "AGC of Texas / Austin AGC",
     category: "general_contractors" as const,
     scope: "local" as const,
     state: "TX",
     city: "Austin",
     website: "https://www.agcaustin.org",
-    memberDirectoryUrl: "https://members.agcaustin.org/list"
+    directoryUrl: "https://members.agcaustin.org/list",
+    parentId: "agc",
+    notes: "Austin chapter of AGC"
   },
-  // Remodelers
+
+  // =====================
+  // REMODELERS
+  // =====================
   {
     name: "National Association of the Remodeling Industry (NARI)",
     category: "remodelers" as const,
     scope: "national" as const,
     website: "https://www.nari.org",
+    chapterInfoUrl: "https://www.nari.org/remodelers/Benefits-for-Members/Chapter-Membership",
     memberDirectoryUrl: "https://www.nari.org/remodelers/Benefits-for-Members/Chapter-Membership",
-    notes: "National association with local chapters"
+    notes: "National association - chapters by state"
   },
   {
     name: "NARI Dallas",
@@ -52,7 +64,8 @@ const proOrganizationsData = [
     scope: "local" as const,
     state: "TX",
     city: "Dallas",
-    website: "https://www.naridallas.org"
+    website: "https://www.naridallas.org",
+    parentId: "nari"
   },
   {
     name: "NARI Houston",
@@ -60,121 +73,180 @@ const proOrganizationsData = [
     scope: "local" as const,
     state: "TX",
     city: "Houston",
-    website: "https://www.houstonnari.org"
+    website: "https://www.houstonnari.org",
+    parentId: "nari"
   },
-  // Roofing Contractors
+
+  // =====================
+  // ROOFERS
+  // =====================
   {
     name: "National Roofing Contractors Association (NRCA)",
     category: "roofers" as const,
     scope: "national" as const,
     website: "https://www.nrca.net",
+    directoryUrl: "https://www.nrca.net/roofing-contractors",
     memberDirectoryUrl: "https://www.nrca.net/roofing-contractors",
-    notes: "National roofing association"
+    notes: "National roofing - contractor finder tool"
   },
   {
     name: "Western States Roofing Contractors Association (WSRCA)",
     category: "roofers" as const,
     scope: "regional" as const,
     website: "https://www.wsrca.com",
-    notes: "Western US - includes TX, CA, AZ, NM, CO, etc."
+    regions: ["AZ", "CA", "CO", "HI", "ID", "MT", "NV", "NM", "OR", "TX", "UT", "WA", "WY"],
+    notes: "Western US - includes TX, CA, AZ, NM, CO, HI, ID, MT, NV, OR, UT, WA, WY"
   },
   {
     name: "Midwest Roofing Contractors Association (MRCA)",
     category: "roofers" as const,
     scope: "regional" as const,
     website: "https://www.mrca.org",
-    notes: "Midwest region"
+    regions: ["IA", "IL", "IN", "KS", "KY", "MI", "MN", "MO", "NE", "ND", "SD", "WI"],
+    notes: "Midwest region - 12 states"
   },
   {
     name: "North East Roofing Contractors Association (NERCA)",
     category: "roofers" as const,
     scope: "regional" as const,
     website: "https://www.nerca.org",
-    notes: "Northeast region"
+    regions: ["CT", "MA", "ME", "NH", "NJ", "NY", "PA", "RI", "VT"],
+    notes: "Northeast region - 9 states"
   },
   {
     name: "Florida Roofing & Sheet Metal Contractors Association (FRSA)",
     category: "roofers" as const,
     scope: "state" as const,
     state: "FL",
-    website: "https://www.floridaroof.com"
+    states: ["FL"],
+    website: "https://www.floridaroof.com",
+    notes: "Florida state association"
   },
-  // Public Adjusters
+
+  // =====================
+  // PUBLIC ADJUSTERS
+  // =====================
   {
     name: "National Association of Public Insurance Adjusters (NAPIA)",
     category: "public_adjusters" as const,
     scope: "national" as const,
     website: "https://www.napia.com",
+    directoryUrl: "https://www.napia.com/find-an-adjuster",
     memberDirectoryUrl: "https://www.napia.com/find-an-adjuster",
-    notes: "National association with Find an Adjuster tool (state filter)"
+    notes: "National association - Find an Adjuster tool filters by state"
   },
   {
-    name: "Texas Department of Insurance (TDI)",
-    category: "public_adjusters" as const,
+    name: "Texas Department of Insurance (TDI) - License Lookup",
+    category: "regulator" as const,
     scope: "state" as const,
     state: "TX",
+    states: ["TX"],
     website: "https://www.tdi.texas.gov",
-    memberDirectoryUrl: "https://txapps.texas.gov/NASApp/tdi/TdiARManager",
-    notes: "State licensing directory for public adjusters"
+    directoryUrl: "https://txapps.texas.gov/NASApp/tdi/TdiARManager",
+    notes: "Texas adjuster license search and verification"
   },
-  // Attorneys - State Bars
   {
-    name: "State Bar of Texas",
+    name: "Florida Division of Insurance Agent & Agency Services",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "FL",
+    states: ["FL"],
+    website: "https://www.myfloridacfo.com/division/agents",
+    directoryUrl: "https://licenseesearch.fldfs.com/",
+    notes: "Florida adjuster license lookup"
+  },
+
+  // =====================
+  // REGULATORS (National)
+  // =====================
+  {
+    name: "NAIC - State Insurance Departments Hub",
+    category: "regulator" as const,
+    scope: "national" as const,
+    website: "https://content.naic.org/state-insurance-departments",
+    directoryUrl: "https://content.naic.org/state-insurance-departments",
+    notes: "Links to all 50 state insurance department websites"
+  },
+
+  // =====================
+  // ATTORNEYS
+  // =====================
+  {
+    name: "State Bar of Texas - Find a Lawyer",
     category: "attorneys" as const,
     scope: "state" as const,
     state: "TX",
+    states: ["TX"],
     website: "https://www.texasbar.com",
+    directoryUrl: "https://www.texasbar.com/AM/Template.cfm?Section=Find_A_Lawyer",
     memberDirectoryUrl: "https://www.texasbar.com/AM/Template.cfm?Section=Find_A_Lawyer",
-    notes: "State bar association - Find a Lawyer feature for insurance law"
+    notes: "Texas state bar - attorney search for insurance law"
   },
   {
-    name: "Austin Bar Association",
+    name: "Austin Bar Association - Find a Lawyer",
     category: "attorneys" as const,
     scope: "local" as const,
     state: "TX",
     city: "Austin",
     website: "https://www.austinbar.org",
-    memberDirectoryUrl: "https://www.austinbar.org/?pg=FindALawyer"
+    directoryUrl: "https://www.austinbar.org/?pg=FindALawyer",
+    notes: "Local Austin bar directory"
   },
   {
-    name: "State Bar of California",
+    name: "State Bar of California - Attorney Search",
     category: "attorneys" as const,
     scope: "state" as const,
     state: "CA",
+    states: ["CA"],
     website: "https://www.calbar.ca.gov",
+    directoryUrl: "https://www.calbar.ca.gov/Attorneys/Find-an-Attorney",
     memberDirectoryUrl: "https://www.calbar.ca.gov/Attorneys/Find-an-Attorney",
-    notes: "State bar association"
+    notes: "California state bar association"
   },
   {
-    name: "Florida Bar",
+    name: "Florida Bar - Find a Lawyer",
     category: "attorneys" as const,
     scope: "state" as const,
     state: "FL",
+    states: ["FL"],
     website: "https://www.floridabar.org",
+    directoryUrl: "https://www.floridabar.org/directories/find-mbr/",
     memberDirectoryUrl: "https://www.floridabar.org/directories/find-mbr/",
-    notes: "State bar association"
+    notes: "Florida state bar association"
   },
-  // Disaster Recovery
+
+  // =====================
+  // DISASTER RECOVERY
+  // =====================
   {
     name: "Federal Emergency Management Agency (FEMA)",
-    category: "disaster_recovery" as const,
+    category: "disaster" as const,
     scope: "national" as const,
     website: "https://www.fema.gov",
-    notes: "Federal disaster recovery resources"
+    directoryUrl: "https://www.fema.gov/disaster/current",
+    notes: "Federal disaster declarations and recovery resources"
   },
   {
     name: "U.S. Economic Development Administration - Disaster Recovery",
-    category: "disaster_recovery" as const,
+    category: "disaster" as const,
     scope: "national" as const,
     website: "https://www.eda.gov/strategic-initiatives/disaster-recovery",
-    notes: "Federal economic disaster recovery"
+    notes: "Federal economic disaster recovery programs"
   },
   {
-    name: "NAIC State Insurance Departments Hub",
-    category: "disaster_recovery" as const,
+    name: "American Red Cross - Disaster Relief",
+    category: "disaster" as const,
     scope: "national" as const,
-    website: "https://content.naic.org/state-insurance-departments",
-    notes: "Hub for all state insurance department contacts"
+    website: "https://www.redcross.org/get-help/disaster-relief-and-recovery-services.html",
+    directoryUrl: "https://www.redcross.org/find-your-local-chapter.html",
+    notes: "Emergency shelter, food, and recovery assistance"
+  },
+  {
+    name: "SBA Disaster Loan Assistance",
+    category: "disaster" as const,
+    scope: "national" as const,
+    website: "https://www.sba.gov/funding-programs/disaster-assistance",
+    notes: "Low-interest disaster loans for homeowners and businesses"
   }
 ];
 
@@ -310,16 +382,27 @@ MaxClaim Partner Relations
 export async function seedProOrganizations(): Promise<void> {
   console.log("[Seed] Checking pro organizations...");
   
+  // Clear existing and reseed with updated data
   const existing = await storage.getProOrganizations({});
-  if (existing.length > 0) {
+  
+  // Only reseed if count doesn't match (data structure updated)
+  if (existing.length === proOrganizationsData.length) {
     console.log(`[Seed] Pro organizations already seeded (${existing.length} found)`);
     return;
   }
   
-  console.log("[Seed] Seeding pro organizations...");
+  // Clear existing for fresh seed with new schema
+  if (existing.length > 0) {
+    console.log("[Seed] Clearing old pro organizations for schema update...");
+    for (const org of existing) {
+      await storage.deleteProOrganization(org.id);
+    }
+  }
+  
+  console.log("[Seed] Seeding pro organizations with enhanced data...");
   for (const org of proOrganizationsData) {
     try {
-      await storage.createProOrganization(org);
+      await storage.createProOrganization(org as any);
     } catch (error) {
       console.error(`[Seed] Failed to create org ${org.name}:`, error);
     }

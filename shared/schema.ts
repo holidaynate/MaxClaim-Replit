@@ -1070,7 +1070,9 @@ export const proOrgCategory = pgEnum("pro_org_category", [
   "roofers",
   "public_adjusters",
   "attorneys",
-  "disaster_recovery"
+  "disaster_recovery",
+  "regulator",
+  "disaster"
 ]);
 
 // Pro Organization Scope (geographic coverage)
@@ -1091,6 +1093,12 @@ export const proOrganizations = pgTable("pro_organizations", {
   city: text("city"),
   website: text("website"),
   memberDirectoryUrl: text("member_directory_url"),
+  directoryUrl: text("directory_url"),
+  chapterMapUrl: text("chapter_map_url"),
+  chapterInfoUrl: text("chapter_info_url"),
+  parentId: varchar("parent_id"),
+  regions: text("regions").array(),
+  states: text("states").array(),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   notes: text("notes"),
@@ -1100,6 +1108,7 @@ export const proOrganizations = pgTable("pro_organizations", {
   categoryIdx: index("pro_orgs_category_idx").on(table.category),
   stateIdx: index("pro_orgs_state_idx").on(table.state),
   scopeIdx: index("pro_orgs_scope_idx").on(table.scope),
+  parentIdx: index("pro_orgs_parent_idx").on(table.parentId),
 }));
 
 export const insertProOrganizationSchema = createInsertSchema(proOrganizations).omit({

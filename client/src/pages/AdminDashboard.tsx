@@ -100,6 +100,12 @@ interface ProOrganization {
   city: string | null;
   website: string | null;
   memberDirectoryUrl: string | null;
+  directoryUrl: string | null;
+  chapterMapUrl: string | null;
+  chapterInfoUrl: string | null;
+  parentId: string | null;
+  regions: string[] | null;
+  states: string[] | null;
   contactEmail: string | null;
   contactPhone: string | null;
   notes: string | null;
@@ -961,6 +967,16 @@ export default function AdminDashboard() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
+                      {org.regions && org.regions.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {org.regions.slice(0, 6).map((r, i) => (
+                            <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>
+                          ))}
+                          {org.regions.length > 6 && (
+                            <Badge variant="secondary" className="text-xs">+{org.regions.length - 6} more</Badge>
+                          )}
+                        </div>
+                      )}
                       {org.website && (
                         <a 
                           href={org.website} 
@@ -974,16 +990,29 @@ export default function AdminDashboard() {
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
-                      {org.memberDirectoryUrl && (
+                      {(org.directoryUrl || org.memberDirectoryUrl) && (
                         <a 
-                          href={org.memberDirectoryUrl} 
+                          href={org.directoryUrl || org.memberDirectoryUrl || ""} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="flex items-center gap-2 text-sm text-sky-500 hover:underline"
                           data-testid={`link-directory-${org.id}`}
                         >
                           <Users className="h-4 w-4" />
-                          Member Directory
+                          Find Members
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                      {org.chapterMapUrl && (
+                        <a 
+                          href={org.chapterMapUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-sky-500 hover:underline"
+                          data-testid={`link-chapters-${org.id}`}
+                        >
+                          <MapPin className="h-4 w-4" />
+                          Find Chapters
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
