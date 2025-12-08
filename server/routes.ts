@@ -1029,18 +1029,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let result: any;
       if (uncached.length === 0) {
-        // All items were cached
-        result = {
-          items: Array.from(cached.values()),
-          fromCache: true,
-          cachedCount: cached.size,
-        };
+        // All items were cached - rebuild full summary from cached items
+        const cachedItems = Array.from(cached.values());
+        result = buildFullBatchResult(cachedItems, true);
       } else if (cached.size === 0) {
         // No cache hits, compute all
         result = auditBatch(items);
-        // Cache individual results
-        if (result.items) {
-          result.items.forEach((itemResult: any, idx: number) => {
+        // Cache individual results (auditBatch returns 'results' array)
+        if (result.results) {
+          result.results.forEach((itemResult: any, idx: number) => {
             auditCache.set(items[idx].name, itemResult, zipCode);
           });
         }
@@ -1050,23 +1047,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const computedResult = auditBatch(uncachedItems) as any;
         
         // Merge cached and computed results
-        const mergedItems: any[] = new Array(items.length);
+        const mergedResults: any[] = new Array(items.length);
         cached.forEach((cachedResult, index) => {
-          mergedItems[index] = cachedResult;
+          mergedResults[index] = cachedResult;
         });
         uncached.forEach((u, idx) => {
-          if (computedResult.items?.[idx]) {
-            mergedItems[u.index] = computedResult.items[idx];
-            auditCache.set(u.item.name, computedResult.items[idx], zipCode);
+          if (computedResult.results?.[idx]) {
+            mergedResults[u.index] = computedResult.results[idx];
+            auditCache.set(u.item.name, computedResult.results[idx], zipCode);
           }
         });
         
+        // Rebuild summary from merged results
+        const fullResult = buildFullBatchResult(mergedResults.filter(Boolean), false);
         result = {
-          ...computedResult,
-          items: mergedItems,
+          ...fullResult,
           partialCache: true,
           cachedCount: cached.size,
           computedCount: uncached.length,
+        };
+      }
+      
+      // Helper function defined inline
+      function buildFullBatchResult(resultItems: any[], fromCache: boolean) {
+        let totalClaimValue = 0;
+        let totalFMV = 0;
+        let totalUnderpayment = 0;
+        let flaggedCount = 0;
+        let fmvCount = 0;
+        let lowCount = 0;
+        const flagBreakdown = { low: 0, fmv: 0, missing: 0, invalid: 0 };
+
+        resultItems.forEach((item: any) => {
+          if (item.subtotal) totalClaimValue += item.subtotal;
+          if (item.fmvSubtotal) totalFMV += item.fmvSubtotal;
+          if (item.underpaymentOpportunity) totalUnderpayment += item.underpaymentOpportunity;
+          if (item.flagged) flaggedCount++;
+          
+          const status = item.status?.toUpperCase?.() || item.status;
+          switch (status) {
+            case 'LOW': lowCount++; flagBreakdown.low++; break;
+            case 'FMV': fmvCount++; flagBreakdown.fmv++; break;
+            case 'MISSING_ITEM': flagBreakdown.missing++; break;
+            case 'INVALID': flagBreakdown.invalid++; break;
+          }
+        });
+
+        return {
+          totalItems: resultItems.length,
+          flaggedItems: flaggedCount,
+          fmvItems: fmvCount,
+          lowItems: lowCount,
+          totalClaimValue: Math.round(totalClaimValue * 100) / 100,
+          totalFmvValue: Math.round(totalFMV * 100) / 100,
+          totalUnderpaymentOpportunity: Math.round(totalUnderpayment * 100) / 100,
+          totalClaimValueString: totalClaimValue.toFixed(2),
+          totalFmvValueString: totalFMV.toFixed(2),
+          totalUnderpaymentString: totalUnderpayment.toFixed(2),
+          flagBreakdown,
+          results: resultItems,
+          fromCache,
         };
       }
       

@@ -115,8 +115,8 @@ class BatchQueueService {
       const uncachedItems = uncached.map(u => u.item);
       computedResults = auditBatch(uncachedItems);
 
-      if (computedResults.items) {
-        computedResults.items.forEach((result: any, idx: number) => {
+      if (computedResults.results) {
+        computedResults.results.forEach((result: any, idx: number) => {
           const originalItem = uncachedItems[idx];
           auditCache.set(originalItem.name, result, input.zipCode);
         });
@@ -129,11 +129,7 @@ class BatchQueueService {
 
     if (uncached.length === 0) {
       const cachedItems = Array.from(cached.values());
-      return {
-        items: cachedItems,
-        summary: this.buildSummaryFromCached(cachedItems),
-        fromCache: true,
-      };
+      return this.buildFullResultFromItems(cachedItems, true);
     }
 
     const mergedItems: any[] = new Array(input.items.length);
@@ -141,37 +137,73 @@ class BatchQueueService {
       mergedItems[index] = result;
     });
     uncached.forEach((u, idx) => {
-      if (computedResults?.items?.[idx]) {
-        mergedItems[u.index] = computedResults.items[idx];
+      if (computedResults?.results?.[idx]) {
+        mergedItems[u.index] = computedResults.results[idx];
       }
     });
 
+    const fullResult = this.buildFullResultFromItems(mergedItems.filter(Boolean), false);
     return {
-      items: mergedItems,
-      summary: computedResults.summary,
+      ...fullResult,
       partialCache: true,
       cachedCount: cached.size,
       computedCount: uncached.length,
     };
   }
 
-  private buildSummaryFromCached(items: any[]): any {
+  private buildFullResultFromItems(items: any[], fromCache: boolean): any {
     let totalClaimValue = 0;
     let totalFMV = 0;
-    let underpaidItems = 0;
+    let totalUnderpayment = 0;
+    let flaggedItems = 0;
+    let fmvItems = 0;
+    let lowItems = 0;
+
+    const flagBreakdown = { low: 0, fmv: 0, missing: 0, invalid: 0 };
 
     items.forEach((item: any) => {
-      if (item.claimValue) totalClaimValue += item.claimValue;
-      if (item.fmvValue) totalFMV += item.fmvValue;
-      if (item.status === 'low') underpaidItems++;
+      if (item.subtotal) totalClaimValue += item.subtotal;
+      if (item.fmvSubtotal) totalFMV += item.fmvSubtotal;
+      if (item.underpaymentOpportunity) totalUnderpayment += item.underpaymentOpportunity;
+      
+      if (item.flagged) flaggedItems++;
+      
+      switch (item.status) {
+        case 'LOW':
+        case 'low':
+          lowItems++;
+          flagBreakdown.low++;
+          break;
+        case 'FMV':
+        case 'fmv':
+          fmvItems++;
+          flagBreakdown.fmv++;
+          break;
+        case 'MISSING_ITEM':
+        case 'missing':
+          flagBreakdown.missing++;
+          break;
+        case 'INVALID':
+        case 'invalid':
+          flagBreakdown.invalid++;
+          break;
+      }
     });
 
     return {
+      totalItems: items.length,
+      flaggedItems,
+      fmvItems,
+      lowItems,
       totalClaimValue,
-      totalFMV,
-      underpaidItems,
-      itemCount: items.length,
-      fromCache: true,
+      totalFmvValue: totalFMV,
+      totalUnderpaymentOpportunity: totalUnderpayment,
+      totalClaimValueString: totalClaimValue.toFixed(2),
+      totalFmvValueString: totalFMV.toFixed(2),
+      totalUnderpaymentString: totalUnderpayment.toFixed(2),
+      flagBreakdown,
+      results: items,
+      fromCache,
     };
   }
 
