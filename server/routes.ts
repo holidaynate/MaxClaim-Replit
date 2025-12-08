@@ -37,6 +37,7 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
 import { auditCache } from "./cache/auditCache";
 import { batchQueue } from "./queue/batchQueue";
 
@@ -370,6 +371,165 @@ export async function registerRoutes(app: Express): Promise<Server> {
     session.userRole = null;
     res.json({ success: true });
   });
+
+  // ============================================
+  // PASSWORD RESET FLOW
+  // ============================================
+
+  // Forgot Password - Request password reset email
+  app.post("/api/auth/forgot-password", asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check if email exists in agents or partners
+    const agents = await storage.getSalesAgents({ email: normalizedEmail } as any);
+    const partners = await storage.getPartners({ email: normalizedEmail } as any);
+    
+    // Determine if agent or partner
+    let userType: 'agent' | 'partner' | null = null;
+    let userId: string | null = null;
+    
+    // Find agent by email
+    const allAgents = await storage.getSalesAgents({});
+    const matchedAgent = allAgents.find(a => a.email?.toLowerCase() === normalizedEmail);
+    if (matchedAgent) {
+      userType = 'agent';
+      userId = matchedAgent.id;
+    }
+    
+    // Find partner by email
+    const allPartners = await storage.getPartners({});
+    const matchedPartner = allPartners.find(p => p.email?.toLowerCase() === normalizedEmail);
+    if (matchedPartner) {
+      userType = 'partner';
+      userId = matchedPartner.id;
+    }
+    
+    // Always return success to prevent email enumeration attacks
+    if (!userType || !userId) {
+      console.log(`Password reset requested for unknown email: ${normalizedEmail}`);
+      return res.json({ 
+        success: true, 
+        message: "If this email exists in our system, you will receive a password reset link shortly." 
+      });
+    }
+    
+    // Generate secure token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    
+    // Store token in database
+    await storage.createPasswordResetToken({
+      token,
+      email: normalizedEmail,
+      userType,
+      userId,
+      expiresAt,
+    });
+    
+    // In production, send email via SendGrid
+    // For now, log the reset link
+    const resetLink = `${process.env.REPLIT_DEV_DOMAIN || 'http://localhost:5000'}/reset-password?token=${token}`;
+    console.log(`[PASSWORD RESET] Token generated for ${normalizedEmail}: ${resetLink}`);
+    
+    // TODO: Send email via SendGrid when SENDGRID_API_KEY is configured
+    // const sgMail = require('@sendgrid/mail');
+    // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    // await sgMail.send({
+    //   to: normalizedEmail,
+    //   from: 'noreply@maxclaim.com',
+    //   subject: 'Reset Your MaxClaim Password',
+    //   html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`
+    // });
+    
+    res.json({ 
+      success: true, 
+      message: "If this email exists in our system, you will receive a password reset link shortly." 
+    });
+  }));
+
+  // Verify Reset Token - Check if token is valid
+  app.get("/api/auth/verify-reset-token/:token", asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({ valid: false, error: "Token is required" });
+    }
+    
+    const resetToken = await storage.getPasswordResetTokenByToken(token);
+    
+    if (!resetToken) {
+      return res.json({ valid: false, error: "Invalid or expired reset token" });
+    }
+    
+    // Check if token has been used
+    if (resetToken.usedAt) {
+      return res.json({ valid: false, error: "This reset link has already been used" });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(resetToken.expiresAt)) {
+      return res.json({ valid: false, error: "This reset link has expired" });
+    }
+    
+    res.json({ 
+      valid: true, 
+      email: resetToken.email,
+      userType: resetToken.userType 
+    });
+  }));
+
+  // Reset Password - Set new password using token
+  app.post("/api/auth/reset-password", asyncHandler(async (req, res) => {
+    const { token, newPassword } = req.body;
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: "Token is required" });
+    }
+    
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+    
+    const resetToken = await storage.getPasswordResetTokenByToken(token);
+    
+    if (!resetToken) {
+      return res.status(400).json({ error: "Invalid or expired reset token" });
+    }
+    
+    // Check if token has been used
+    if (resetToken.usedAt) {
+      return res.status(400).json({ error: "This reset link has already been used" });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(resetToken.expiresAt)) {
+      return res.status(400).json({ error: "This reset link has expired" });
+    }
+    
+    // Hash new password
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    
+    // Update password based on user type
+    if (resetToken.userType === 'agent') {
+      await storage.updateAgentPassword(resetToken.userId, hashedPassword);
+    } else if (resetToken.userType === 'partner') {
+      await storage.updatePartnerPassword(resetToken.userId, hashedPassword);
+    }
+    
+    // Mark token as used
+    await storage.markPasswordResetTokenUsed(resetToken.id);
+    
+    console.log(`[PASSWORD RESET] Password updated for ${resetToken.email}`);
+    
+    res.json({ success: true, message: "Your password has been reset successfully. You can now sign in with your new password." });
+  }));
 
   // Get sales agent by ID (for agent dashboard)
   app.get("/api/sales-agents/:id", asyncHandler(async (req, res) => {
