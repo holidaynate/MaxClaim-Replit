@@ -13,8 +13,9 @@ import {
   CheckCircle2, XCircle, Clock, Building2, Mail, Phone, MapPin, 
   Users, DollarSign, FileText, CreditCard, TrendingUp, LayoutDashboard,
   UserPlus, Briefcase, Calendar, Award, Globe, Copy, ExternalLink,
-  Library, FileEdit
+  Library, FileEdit, Activity, RefreshCw, Server, Database, Zap, HardDrive, Trash2
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 interface Partner {
   id: number;
@@ -125,6 +126,55 @@ interface EmailTemplate {
   createdAt: string;
 }
 
+interface MetricsData {
+  timestamp: string;
+  server: {
+    uptime: number;
+    uptimeFormatted: string;
+    nodeVersion: string;
+    platform: string;
+    tier: string;
+  };
+  memory: {
+    rss: number;
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+    heapUsagePercent: number;
+  };
+  priceDB: {
+    itemCount: number;
+    cacheHits: number;
+    cacheMisses: number;
+    hitRate: number;
+    memorySizeKB: number;
+    cacheAgeMinutes: number;
+    lastLoaded: string | null;
+  };
+  auditCache: {
+    keys: number;
+    hits: number;
+    misses: number;
+    hitRate: number;
+    ksize: number;
+    vsize: number;
+  };
+  batchQueue: {
+    pending: number;
+    size: number;
+    concurrency: number;
+    isPaused: boolean;
+    activeJobs: number;
+  };
+  recentBatchJobs: Array<{
+    id: string;
+    status: string;
+    itemCount: number;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -134,6 +184,7 @@ export default function AdminDashboard() {
   const [proOrgCategory, setProOrgCategory] = useState<string>("all");
   const [proOrgState, setProOrgState] = useState<string>("all");
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
+  const [metricsAutoRefresh, setMetricsAutoRefresh] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -204,6 +255,25 @@ export default function AdminDashboard() {
   const { data: templatesData, isLoading: templatesLoading } = useQuery<{ templates: EmailTemplate[]; total: number }>({
     queryKey: ["/api/email-templates"],
     enabled: isAuthenticated,
+  });
+
+  const { data: metricsData, isLoading: metricsLoading, refetch: refetchMetrics } = useQuery<MetricsData>({
+    queryKey: ["/api/admin/metrics"],
+    enabled: isAuthenticated && mainTab === "metrics",
+    refetchInterval: metricsAutoRefresh ? 5000 : false,
+  });
+
+  const flushCacheMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("/api/admin/cache/flush", "POST", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/metrics"] });
+      toast({ title: "Cache Flushed", description: "Audit cache has been cleared" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to flush cache", variant: "destructive" });
+    },
   });
 
   const partners = partnersData?.partners || [];
@@ -414,6 +484,10 @@ export default function AdminDashboard() {
             <TabsTrigger value="templates" data-testid="tab-templates">
               <FileEdit className="h-4 w-4 mr-2" />
               Templates
+            </TabsTrigger>
+            <TabsTrigger value="metrics" data-testid="tab-metrics">
+              <Activity className="h-4 w-4 mr-2" />
+              Metrics
             </TabsTrigger>
           </TabsList>
 
@@ -1186,6 +1260,256 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="metrics">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">System Metrics</h2>
+                  <p className="text-sm text-slate-400">
+                    {metricsData?.timestamp 
+                      ? `Last updated: ${new Date(metricsData.timestamp).toLocaleTimeString()}`
+                      : "Loading..."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMetricsAutoRefresh(!metricsAutoRefresh)}
+                    data-testid="button-toggle-auto-refresh"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${metricsAutoRefresh ? 'animate-spin' : ''}`} />
+                    {metricsAutoRefresh ? 'Stop Auto-Refresh' : 'Auto-Refresh (5s)'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchMetrics()}
+                    disabled={metricsLoading}
+                    data-testid="button-refresh-metrics"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${metricsLoading ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              </div>
+
+              {metricsLoading && !metricsData ? (
+                <div className="text-center py-8 text-slate-400">Loading metrics...</div>
+              ) : metricsData ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+                        <CardTitle className="text-sm font-medium">Server Uptime</CardTitle>
+                        <Server className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-uptime">
+                          {metricsData.server.uptimeFormatted}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Node.js {metricsData.server.nodeVersion}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+                        <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+                        <HardDrive className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-memory">
+                          {metricsData.memory.heapUsed}MB / {metricsData.memory.heapTotal}MB
+                        </div>
+                        <Progress value={metricsData.memory.heapUsagePercent} className="mt-2" />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {metricsData.memory.heapUsagePercent}% heap used
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+                        <CardTitle className="text-sm font-medium">Price DB Cache</CardTitle>
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-pricedb-hitrate">
+                          {metricsData.priceDB.hitRate}%
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {metricsData.priceDB.itemCount} items | {metricsData.priceDB.memorySizeKB}KB
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+                        <CardTitle className="text-sm font-medium">Audit Cache</CardTitle>
+                        <Zap className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold" data-testid="stat-auditcache-hitrate">
+                          {metricsData.auditCache.hitRate}%
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {metricsData.auditCache.keys} cached | {metricsData.auditCache.hits} hits
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle>Cache Details</CardTitle>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => flushCacheMutation.mutate()}
+                            disabled={flushCacheMutation.isPending}
+                            data-testid="button-flush-cache"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Flush Audit Cache
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm text-slate-400">Price DB Stats</Label>
+                            <div className="space-y-1 mt-1">
+                              <p className="text-sm">Hits: <span className="text-green-400">{metricsData.priceDB.cacheHits}</span></p>
+                              <p className="text-sm">Misses: <span className="text-amber-400">{metricsData.priceDB.cacheMisses}</span></p>
+                              <p className="text-sm">Age: {metricsData.priceDB.cacheAgeMinutes} min</p>
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-slate-400">Audit Cache Stats</Label>
+                            <div className="space-y-1 mt-1">
+                              <p className="text-sm">Hits: <span className="text-green-400">{metricsData.auditCache.hits}</span></p>
+                              <p className="text-sm">Misses: <span className="text-amber-400">{metricsData.auditCache.misses}</span></p>
+                              <p className="text-sm">Keys: {metricsData.auditCache.keys}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Batch Queue Status</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm text-slate-400">Queue Status</Label>
+                            <div className="space-y-1 mt-1">
+                              <p className="text-sm">Pending: <span className="font-semibold">{metricsData.batchQueue.pending}</span></p>
+                              <p className="text-sm">Active: <span className="font-semibold">{metricsData.batchQueue.activeJobs}</span></p>
+                              <p className="text-sm">Concurrency: {metricsData.batchQueue.concurrency}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-sm text-slate-400">Status</Label>
+                            <div className="mt-1">
+                              <Badge variant={metricsData.batchQueue.isPaused ? "secondary" : "default"}>
+                                {metricsData.batchQueue.isPaused ? "Paused" : "Running"}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recent Batch Jobs</CardTitle>
+                      <CardDescription>Last 10 async batch processing jobs</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {metricsData.recentBatchJobs.length === 0 ? (
+                        <p className="text-sm text-slate-400">No batch jobs yet</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-700">
+                                <th className="text-left py-2 px-2">Job ID</th>
+                                <th className="text-left py-2 px-2">Status</th>
+                                <th className="text-left py-2 px-2">Items</th>
+                                <th className="text-left py-2 px-2">Created</th>
+                                <th className="text-left py-2 px-2">Completed</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {metricsData.recentBatchJobs.map((job) => (
+                                <tr key={job.id} className="border-b border-slate-800" data-testid={`row-batchjob-${job.id}`}>
+                                  <td className="py-2 px-2 font-mono text-xs">{job.id.substring(0, 8)}...</td>
+                                  <td className="py-2 px-2">
+                                    <Badge 
+                                      variant={
+                                        job.status === 'completed' ? 'default' :
+                                        job.status === 'failed' ? 'destructive' :
+                                        job.status === 'processing' ? 'secondary' :
+                                        'outline'
+                                      }
+                                    >
+                                      {job.status}
+                                    </Badge>
+                                  </td>
+                                  <td className="py-2 px-2">{job.itemCount}</td>
+                                  <td className="py-2 px-2">{new Date(job.createdAt).toLocaleString()}</td>
+                                  <td className="py-2 px-2">
+                                    {job.completedAt ? new Date(job.completedAt).toLocaleString() : '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Memory Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <Label className="text-sm text-slate-400">RSS</Label>
+                          <p className="text-lg font-semibold">{metricsData.memory.rss}MB</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-slate-400">Heap Used</Label>
+                          <p className="text-lg font-semibold">{metricsData.memory.heapUsed}MB</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-slate-400">Heap Total</Label>
+                          <p className="text-lg font-semibold">{metricsData.memory.heapTotal}MB</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm text-slate-400">External</Label>
+                          <p className="text-lg font-semibold">{metricsData.memory.external}MB</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <div className="text-center py-8 text-slate-400">
+                  Failed to load metrics. Please try again.
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
