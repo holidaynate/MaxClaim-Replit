@@ -1,5 +1,22 @@
 // Regional Fair Market Value pricing database
-// In production, this would come from a real database with regularly updated market data
+// Enhanced with multi-source baseline pricing and citation support
+//
+// Data Sources:
+// - RSMeans Data Online (industry standard baseline)
+// - NRCA Roofing Cost Guide (roofing-specific)
+// - PrecisionEstimator open-source rates (MIT license)
+// - BLS Regional CPI (regional adjustments)
+// - HUD CBSA cost indices (metro area adjustments)
+
+import { 
+  generateCitedEstimate, 
+  generateDisclaimer,
+  type CitedPriceEstimate,
+  type PricingSource
+} from './utils/pricingCitation';
+import { getStateFromZip } from './utils/zipToState';
+import { getRegionalCostAdjustment } from './utils/hudZipCrosswalk';
+import { getCategoryPricing, getLineItem, BASELINE_PRICING, type BaselineEstimate } from './utils/baselinePricing';
 
 interface PricingData {
   [category: string]: {
@@ -224,7 +241,9 @@ export function analyzeClaimItem(
   percentageIncrease: number;
   status: 'underpaid' | 'fair';
 } {
-  let fmvPrice = calculateFMV(category, quantity, zipCode, inflationMultiplier);
+  // Normalize category name for pricing lookup (handles frontend damage types)
+  const normalizedCategory = normalizeCategoryForPricing(category);
+  let fmvPrice = calculateFMV(normalizedCategory, quantity, zipCode, inflationMultiplier);
   
   // If we have pricing stats from real user data, use it to refine the FMV
   if (pricingStats && pricingStats.count > 0) {
@@ -248,3 +267,132 @@ export function analyzeClaimItem(
     status
   };
 }
+
+/**
+ * Enhanced claim analysis with multi-source citation
+ * Returns full pricing breakdown with data source attribution
+ */
+export function analyzeClaimItemWithCitation(
+  category: string,
+  description: string,
+  quantity: number,
+  insuranceOffer: number,
+  zipCode: string,
+  inflationMultiplier: number = 1.0,
+  pricingStats?: { min: number; max: number; avg: number; last: number; count: number } | null
+): {
+  fmvPrice: number;
+  additionalAmount: number;
+  percentageIncrease: number;
+  status: 'underpaid' | 'fair';
+  citation: CitedPriceEstimate | null;
+} {
+  // Normalize category name for pricing lookup (handles frontend damage types)
+  const normalizedCategory = normalizeCategoryForPricing(category);
+  
+  // Get basic analysis first (analyzeClaimItem also normalizes, but we do it here for clarity)
+  const basicAnalysis = analyzeClaimItem(
+    category, description, quantity, insuranceOffer, 
+    zipCode, inflationMultiplier, pricingStats
+  );
+  
+  // Generate cited estimate for documentation using normalized category
+  const citation = generateCitedEstimate(
+    normalizedCategory,
+    description,
+    quantity,
+    zipCode,
+    insuranceOffer,
+    pricingStats?.avg
+  );
+  
+  return {
+    ...basicAnalysis,
+    citation
+  };
+}
+
+/**
+ * Get available line items for a category (for dropdown selection)
+ */
+export function getCategoryLineItems(category: string): { name: string; description: string; unit: string }[] {
+  const catPricing = getCategoryPricing(category);
+  if (!catPricing) return [];
+  
+  return catPricing.lineItems.map(item => ({
+    name: item.name,
+    description: item.description,
+    unit: item.unit
+  }));
+}
+
+/**
+ * Get all supported categories (merged from legacy and baseline pricing)
+ */
+export function getSupportedCategories(): string[] {
+  const legacyCategories = Object.keys(fmvPricingData);
+  const baselineCategories = BASELINE_PRICING.map(cat => cat.category);
+  
+  // Merge and deduplicate
+  return [...new Set([...legacyCategories, ...baselineCategories])].sort();
+}
+
+/**
+ * Map frontend damage types to pricing categories
+ * Frontend uses user-friendly damage type names, but pricing uses trade categories
+ */
+const DAMAGE_TYPE_TO_CATEGORY: Record<string, string> = {
+  // Frontend damage types
+  "Roofing & Exterior": "Roofing",
+  "Water Damage": "Plumbing",
+  "Fire Damage": "Drywall",
+  "Hail Damage": "Roofing",
+  "Wind Damage": "Roofing",
+  "Foundation": "Other",
+  "Other Structural": "Framing",
+  
+  // Direct mappings for exact category names
+  "Roofing": "Roofing",
+  "Flooring": "Flooring",
+  "Drywall": "Drywall",
+  "Painting": "Painting",
+  "Plumbing": "Plumbing",
+  "Electrical": "Electrical",
+  "HVAC": "HVAC",
+  "Windows & Doors": "Windows & Doors",
+  "Appliances": "Appliances",
+  "Cabinets": "Cabinets",
+  "Siding": "Siding",
+  "Tile": "Tile",
+  "Trim": "Trim",
+  "Framing": "Framing",
+  "Insulation": "Insulation",
+  "Other": "Other"
+};
+
+/**
+ * Normalize category name for pricing lookup
+ * Handles frontend damage types and various category name formats
+ */
+export function normalizeCategoryForPricing(category: string): string {
+  // Try direct mapping first
+  if (DAMAGE_TYPE_TO_CATEGORY[category]) {
+    return DAMAGE_TYPE_TO_CATEGORY[category];
+  }
+  
+  // Try case-insensitive lookup
+  const lowerCategory = category.toLowerCase();
+  for (const [key, value] of Object.entries(DAMAGE_TYPE_TO_CATEGORY)) {
+    if (key.toLowerCase() === lowerCategory) {
+      return value;
+    }
+  }
+  
+  // Default to original category name (may still work with legacy pricing)
+  return category;
+}
+
+/**
+ * Export disclaimer for reports
+ */
+export { generateDisclaimer };

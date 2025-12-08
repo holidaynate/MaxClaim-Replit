@@ -2,7 +2,8 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replitAuth";
-import { analyzeClaimItem } from "./pricing-data";
+import { analyzeClaimItem, analyzeClaimItemWithCitation, getCategoryLineItems, getSupportedCategories, generateDisclaimer } from "./pricing-data";
+import { aggregateSources, type CitedPriceEstimate, type PricingSource } from "./utils/pricingCitation";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
 import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
@@ -163,11 +164,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const zipPrefix = data.zipCode.substring(0, 3);
       
+      // Collect full citations for source aggregation (before trimming for response)
+      const fullCitations: CitedPriceEstimate[] = [];
+      
       const results = await Promise.all(normalizedItems.map(async (item) => {
-        // Try to get pricing stats for this category/unit
         const pricingStats = await storage.getPricingStats(item.category, item.unit, zipPrefix).catch(() => null);
         
-        const analysis = analyzeClaimItem(
+        // Use enhanced analysis with citation data for defensible estimates
+        const analysis = analyzeClaimItemWithCitation(
           item.category,
           item.description,
           item.quantity,
@@ -176,6 +180,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           inflationMultiplier,
           pricingStats
         );
+        
+        // Store full citation for aggregation
+        if (analysis.citation) {
+          fullCitations.push(analysis.citation);
+        }
         
         return {
           category: item.category,
@@ -187,9 +196,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fmvPrice: analysis.fmvPrice,
           additionalAmount: analysis.additionalAmount,
           percentageIncrease: analysis.percentageIncrease,
-          status: analysis.status
+          status: analysis.status,
+          citation: analysis.citation ? {
+            sources: analysis.citation.sources,
+            confidenceLevel: analysis.citation.confidenceLevel,
+            shortCitation: analysis.citation.shortCitation,
+            methodology: analysis.citation.methodology,
+            lowEstimate: analysis.citation.lowEstimate,
+            highEstimate: analysis.citation.highEstimate,
+            regionalMultiplier: analysis.citation.regionalMultiplier,
+            regionName: analysis.citation.regionName
+          } : null
         };
       }));
+      
+      // Use full citations for aggregation
+      const aggregatedSources = fullCitations.length > 0 
+        ? aggregateSources(fullCitations) 
+        : [];
 
       const totalInsuranceOffer = normalizedItems.reduce((sum, item) => sum + item.subtotal, 0);
       const totalFMV = results.reduce((sum, item) => sum + item.fmvPrice, 0);
@@ -272,7 +296,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         website: partner.website,
         score: partner.matchScore,
         matchReasons: partner.matchReasons
-      }))
+      })),
+      dataSources: aggregatedSources,
+      disclaimer: generateDisclaimer()
     });
   }));
 
@@ -435,6 +461,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching pricing stats:", error);
       res.status(500).json({ error: "Failed to fetch pricing stats" });
+    }
+  });
+
+  // Get supported categories
+  app.get("/api/pricing/categories", async (req, res) => {
+    try {
+      const categories = getSupportedCategories();
+      res.json({ categories });
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ error: "Failed to fetch categories" });
+    }
+  });
+
+  // Get line items for a specific category
+  app.get("/api/pricing/categories/:category/items", async (req, res) => {
+    try {
+      const { category } = req.params;
+      const lineItems = getCategoryLineItems(category);
+      res.json({ category, lineItems });
+    } catch (error) {
+      console.error("Error fetching line items:", error);
+      res.status(500).json({ error: "Failed to fetch line items" });
+    }
+  });
+
+  // Get disclaimer text for reports
+  app.get("/api/pricing/disclaimer", async (req, res) => {
+    try {
+      const disclaimer = generateDisclaimer();
+      res.json({ disclaimer });
+    } catch (error) {
+      console.error("Error fetching disclaimer:", error);
+      res.status(500).json({ error: "Failed to fetch disclaimer" });
     }
   });
 
