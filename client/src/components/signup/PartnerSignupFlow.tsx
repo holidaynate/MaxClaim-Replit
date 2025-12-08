@@ -11,6 +11,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CheckCircle2, Building2, Loader2, Star, Zap, Crown, ArrowLeft, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PlanBuilderStep } from "./PlanBuilderStep";
+import { PlanSelectorCards } from "./PlanSelectorCards";
+import { RegionPickerModal } from "./RegionPickerModal";
 
 type PartnerType = "contractor" | "adjuster" | "agency";
 type PricingTier = "free" | "standard" | "premium";
@@ -122,10 +124,16 @@ function TierSelector({ selected, onSelect }: { selected: PricingTier; onSelect:
   );
 }
 
+type ExtendedPricingTier = PricingTier | "build_your_own";
+
 export default function PartnerSignupFlow() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
+  const [regionPickerOpen, setRegionPickerOpen] = useState(false);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [customBudget, setCustomBudget] = useState(500);
+  const [extendedTier, setExtendedTier] = useState<ExtendedPricingTier>("standard");
   const [data, setData] = useState<PartnerFormData>({
     companyName: "",
     type: "contractor",
@@ -360,10 +368,32 @@ export default function PartnerSignupFlow() {
               </div>
             </>
           ) : step === 2 ? (
-            <TierSelector 
-              selected={data.pricingTier} 
-              onSelect={(tier) => setData({ ...data, pricingTier: tier })} 
-            />
+            <>
+              <PlanSelectorCards
+                zipCode={data.zipCode}
+                tradeType={tradeTypeMap[data.type]}
+                selectedPlan={extendedTier}
+                onPlanSelect={(plan) => {
+                  setExtendedTier(plan);
+                  if (plan === 'build_your_own') {
+                    setData({ ...data, pricingTier: 'standard' });
+                  } else {
+                    setData({ ...data, pricingTier: plan as PricingTier });
+                  }
+                }}
+                onOpenRegionPicker={() => setRegionPickerOpen(true)}
+              />
+              <RegionPickerModal
+                open={regionPickerOpen}
+                onOpenChange={setRegionPickerOpen}
+                zipCode={data.zipCode}
+                tradeType={tradeTypeMap[data.type]}
+                selectedRegions={selectedRegions}
+                onRegionsChange={setSelectedRegions}
+                budget={customBudget}
+                onBudgetChange={setCustomBudget}
+              />
+            </>
           ) : (
             <PlanBuilderStep
               zipCode={data.zipCode}
