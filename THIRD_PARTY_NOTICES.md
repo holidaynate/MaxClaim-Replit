@@ -58,11 +58,17 @@ This document lists third-party code, services, and open data sources used by Ma
 |---------|---------|-------|
 | @radix-ui/react-accordion | MIT | Accordion component |
 | @radix-ui/react-alert-dialog | MIT | Alert dialog component |
+| @radix-ui/react-aspect-ratio | MIT | Aspect ratio component |
 | @radix-ui/react-avatar | MIT | Avatar component |
 | @radix-ui/react-checkbox | MIT | Checkbox component |
+| @radix-ui/react-collapsible | MIT | Collapsible component |
+| @radix-ui/react-context-menu | MIT | Context menu component |
 | @radix-ui/react-dialog | MIT | Dialog/modal component |
 | @radix-ui/react-dropdown-menu | MIT | Dropdown menu component |
+| @radix-ui/react-hover-card | MIT | Hover card component |
 | @radix-ui/react-label | MIT | Label component |
+| @radix-ui/react-menubar | MIT | Menubar component |
+| @radix-ui/react-navigation-menu | MIT | Navigation menu component |
 | @radix-ui/react-popover | MIT | Popover component |
 | @radix-ui/react-progress | MIT | Progress bar component |
 | @radix-ui/react-radio-group | MIT | Radio group component |
@@ -86,8 +92,10 @@ All Radix UI packages: https://www.radix-ui.com
 |---------|-----|---------|-------|
 | tailwindcss | https://tailwindcss.com | MIT | Utility-first CSS |
 | @tailwindcss/typography | https://github.com/tailwindlabs/tailwindcss-typography | MIT | Typography plugin |
+| @tailwindcss/vite | https://tailwindcss.com | MIT | Tailwind Vite plugin |
 | tailwind-merge | https://github.com/dcastil/tailwind-merge | MIT | Class merging utility |
 | tailwindcss-animate | https://github.com/jamiebuilds/tailwindcss-animate | MIT | Animation utilities |
+| tw-animate-css | https://github.com/khattak-dev/tw-animate-css | MIT | Additional animation utilities |
 | class-variance-authority | https://cva.style | Apache-2.0 | Variant management |
 | clsx | https://github.com/lukeed/clsx | MIT | Class name utility |
 | autoprefixer | https://github.com/postcss/autoprefixer | MIT | CSS vendor prefixing |
@@ -147,9 +155,13 @@ All Radix UI packages: https://www.radix-ui.com
 |---------|-----|---------|-------|
 | vite | https://vitejs.dev | MIT | Build tool & dev server |
 | @vitejs/plugin-react | https://vitejs.dev | MIT | React plugin for Vite |
+| @replit/vite-plugin-cartographer | https://replit.com | MIT | Replit code navigation |
+| @replit/vite-plugin-dev-banner | https://replit.com | MIT | Replit dev banner |
+| @replit/vite-plugin-runtime-error-modal | https://replit.com | MIT | Replit error modal |
 | esbuild | https://esbuild.github.io | MIT | JavaScript bundler |
 | tsx | https://github.com/esbuild-kit/tsx | MIT | TypeScript execution |
 | typescript | https://www.typescriptlang.org | Apache-2.0 | TypeScript compiler |
+| @jridgewell/trace-mapping | https://github.com/jridgewell/trace-mapping | MIT | Source map utilities |
 
 ### Additional UI Components
 
@@ -169,6 +181,30 @@ All Radix UI packages: https://www.radix-ui.com
 |---------|-----|---------|-------|
 | ws | https://github.com/websockets/ws | MIT | WebSocket implementation |
 | memorystore | https://github.com/roccomuso/memorystore | MIT | In-memory session store |
+
+### TypeScript Type Definitions
+
+| Package | License | Usage |
+|---------|---------|-------|
+| @types/connect-pg-simple | MIT | PostgreSQL session store types |
+| @types/express | MIT | Express.js types |
+| @types/express-session | MIT | Express session types |
+| @types/memoizee | MIT | Memoizee types |
+| @types/multer | MIT | Multer types |
+| @types/node | MIT | Node.js types |
+| @types/passport | MIT | Passport types |
+| @types/passport-local | MIT | Passport local types |
+| @types/react | MIT | React types |
+| @types/react-dom | MIT | React DOM types |
+| @types/ws | MIT | WebSocket types |
+
+All @types packages from DefinitelyTyped: https://github.com/DefinitelyTyped/DefinitelyTyped
+
+### Optional Dependencies
+
+| Package | URL | License | Usage |
+|---------|-----|---------|-------|
+| bufferutil | https://github.com/websockets/bufferutil | MIT | WebSocket buffer utilities |
 
 ---
 
