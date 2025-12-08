@@ -22,17 +22,17 @@ Key features include:
 - **Comprehensive Accessibility**: Includes text size toggle, high contrast mode, ARIA labels, and keyboard navigation.
 - **Privacy Architecture**: Collects only anonymous data; no PII stored.
 - **Monetization Infrastructure**: Partnership system for contractors/adjusters with various pricing models, ZIP targeting, and lead tracking.
-- **Credential-Based Auth System**: Role-based authentication for Agents and Partners with dashboards.
+- **Credential-Based Auth System**: Role-based authentication for Contacts/Advocates and Partners with dashboards.
 - **User Claims Dashboard**: Authenticated users can view their claim history and reports.
-- **Monetization System**: Complete partner monetization with sales agent reference codes, commission management, and Stripe integration.
+- **Monetization System**: Complete partner monetization with advocate reference codes, commission management, and Stripe integration.
 - **Pro Organizations Database**: A 50-state lead prospecting tool with professional organizations, supporting hierarchical structures and regional coverage.
 - **Local Pros API**: Enhanced organization search with smart prioritization (local > state > regional > national), ZIP-to-state mapping, trade filtering, and dynamic organization display with collapsible "Show more" UI.
-- **Disaster Risk Prioritization**: A 4-tier priority system for sales agent lead targeting based on disaster frequency and primary hazards.
+- **Disaster Risk Prioritization**: A 4-tier priority system for advocate lead targeting based on disaster frequency and primary hazards.
 - **Email Templates System**: Four vendor outreach email templates with placeholder support.
 - **Performance & Caching Infrastructure**: Enterprise-grade caching and async processing for audit results and batch operations.
 - **Regional Pricing Infrastructure**: A demand-weighted pricing system for partner advertising with state-to-region mapping, demand multipliers, and disaster awareness.
 - **Competitive Rotation Algorithm**: A budget-weighted ad placement priority system with tier multipliers, budget factors, and demand bonuses.
-- **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal.
+- **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal. Build Your Own plan includes partner-type budget validation (contractors: $200 min, adjusters: $50 min) with recommended $200/mo guidance.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
 
 ### System Design Choices

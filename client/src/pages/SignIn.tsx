@@ -27,7 +27,7 @@ const roleOptions: RoleOption[] = [
   },
   {
     role: "agent",
-    title: "I'm an Agent/Sales Rep",
+    title: "I'm a Contact/Advocate",
     subtitle: "Build recurring commissions up to 40%",
     icon: Rocket,
   },

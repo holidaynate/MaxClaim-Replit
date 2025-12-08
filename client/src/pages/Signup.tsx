@@ -127,7 +127,7 @@ function RoleSelector({ onSelect }: { onSelect: (role: SignupRole) => void }) {
 
         <div className="text-center mt-10 text-slate-500 text-sm">
           <p>
-            MaxClaim users file claims for FREE during disasters. Both Agents and Partners benefit from massive adoption.
+            MaxClaim users file claims for FREE during disasters. Both Advocates and Partners benefit from massive adoption.
           </p>
           <p className="mt-4">
             Already have an account?{" "}

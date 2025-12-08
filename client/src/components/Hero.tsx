@@ -23,6 +23,9 @@ export default function Hero() {
             No login required. No obligations. Built in Texas for disaster‑hit
             and underserved communities.
           </p>
+          <p className="mt-3 text-xs text-sky-400/80 font-medium" data-testid="text-hero-positioning">
+            MaxClaim is a Consumer & Community Advocacy platform — focused on Small Business Development & Lead Support.
+          </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
             <a

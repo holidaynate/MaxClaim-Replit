@@ -73,7 +73,7 @@ export default function AgentDashboard() {
           <CardHeader>
             <CardTitle className="text-slate-100">Access Denied</CardTitle>
             <CardDescription className="text-slate-400">
-              Please sign in as an agent to access this dashboard.
+              Please sign in as an advocate to access this dashboard.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -101,8 +101,8 @@ export default function AgentDashboard() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-slate-100">Agent Dashboard</h1>
-              <p className="text-slate-400">Welcome back, {agentData?.name || "Agent"}</p>
+              <h1 className="text-3xl font-bold text-slate-100">Advocate Dashboard</h1>
+              <p className="text-slate-400">Welcome back, {agentData?.name || "Advocate"}</p>
             </div>
           </div>
           <Button variant="outline" onClick={handleLogout} data-testid="button-logout">

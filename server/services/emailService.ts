@@ -200,7 +200,7 @@ export async function sendWelcomeEmail(
         <h2 style="color: #f1f5f9; font-size: 20px; margin-bottom: 20px;">Welcome to MaxClaim${userName ? `, ${userName}` : ''}!</h2>
         
         <p style="color: #cbd5e1; line-height: 1.6; margin-bottom: 20px;">
-          Your ${userType} account has been verified and is ready to use. We're excited to have you on board!
+          Your ${userType === 'agent' ? 'advocate' : userType} account has been verified and is ready to use. We're excited to have you on board!
         </p>
         
         <div style="text-align: center; margin: 30px 0;">
@@ -211,7 +211,7 @@ export async function sendWelcomeEmail(
         
         <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">
           ${userType === 'agent' 
-            ? 'Start referring partners and earn commissions of 15-40% on their subscriptions!' 
+            ? 'Start referring partners as an advocate and earn commissions of 15-40% on their subscriptions!' 
             : 'Start advertising to homeowners with insurance claims in your area!'}
         </p>
         

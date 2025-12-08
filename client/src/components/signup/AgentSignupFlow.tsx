@@ -49,8 +49,8 @@ Example: Close a $500/mo premium partner → $1,250 year 1 (25% × $500 × 12), 
 
         <Section
           icon={RefreshCw}
-          title="Recurring Income (Like Insurance Agents)"
-          description="Every month a partner renews with MaxClaim, you get paid. Most insurance carriers pay agents ongoing commissions forever — MaxClaim does the same. Build passive income that compounds year over year."
+          title="Recurring Income (Like Insurance Advocates)"
+          description="Every month a partner renews with MaxClaim, you get paid. Most insurance carriers pay advocates ongoing commissions forever — MaxClaim does the same. Build passive income that compounds year over year."
         />
 
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4" role="region" aria-label="Commission projection example">
@@ -109,13 +109,13 @@ function AgentFormPage({ data, setData, onSubmit, isLoading }: {
   return (
     <Card className="bg-slate-900/90 border-slate-700" role="region" aria-labelledby="agent-form-heading">
       <CardHeader>
-        <CardTitle id="agent-form-heading" className="text-xl text-slate-100">Create Your Agent Account</CardTitle>
+        <CardTitle id="agent-form-heading" className="text-xl text-slate-100">Create Your Advocate Account</CardTitle>
       </CardHeader>
       <CardContent>
         <form 
           onSubmit={(e) => { e.preventDefault(); onSubmit(); }} 
           className="space-y-4"
-          aria-label="Agent registration form"
+          aria-label="Advocate registration form"
         >
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -225,7 +225,7 @@ function AgentFormPage({ data, setData, onSubmit, isLoading }: {
               disabled={isLoading}
               className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white py-5 font-semibold min-h-[52px]"
               data-testid="button-submit-agent-signup"
-              aria-label={isLoading ? "Creating your account, please wait" : "Create Agent Account"}
+              aria-label={isLoading ? "Creating your account, please wait" : "Create Advocate Account"}
               aria-busy={isLoading}
             >
               {isLoading ? (
@@ -236,7 +236,7 @@ function AgentFormPage({ data, setData, onSubmit, isLoading }: {
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" />
-                  Create Agent Account
+                  Create Advocate Account
                 </>
               )}
             </Button>
@@ -282,7 +282,7 @@ export default function AgentSignupFlow() {
       if (result.success) {
         toast({
           title: "Welcome to MaxClaim!",
-          description: `Your agent account has been created. Your ref code is ${result.refCode}`,
+          description: `Your advocate account has been created. Your ref code is ${result.refCode}`,
         });
         setLocation("/agent-dashboard");
       } else {

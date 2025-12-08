@@ -141,7 +141,7 @@ export default function VerifyEmail() {
               </p>
               <p className="text-slate-400 text-sm">
                 {data?.userType === 'agent' 
-                  ? 'You can now access your agent dashboard and start earning commissions!'
+                  ? 'You can now access your advocate dashboard and start earning commissions!'
                   : 'You can now access your partner dashboard.'}
               </p>
             </div>

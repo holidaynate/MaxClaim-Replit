@@ -75,6 +75,7 @@ const planConfigs: Record<PlanType, {
     borderColor: "border-sky-500/50",
     bgGradient: "from-sky-500/10 to-slate-900/80",
     features: [
+      "Recommended: $200/mo to stay visible",
       "Choose your own regions",
       "Set custom budget per region",
       "Flexible CPC bidding",
@@ -82,6 +83,7 @@ const planConfigs: Record<PlanType, {
       "Full analytics access",
     ],
     regionCount: { adjacent: 0, nonAdjacent: 0 },
+    badge: "Flexible",
   },
   standard: {
     title: "Standard",

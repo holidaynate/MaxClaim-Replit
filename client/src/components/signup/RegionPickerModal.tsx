@@ -65,6 +65,7 @@ interface RegionPickerModalProps {
   onOpenChange: (open: boolean) => void;
   zipCode: string;
   tradeType: string;
+  partnerType?: "contractor" | "adjuster" | "agency";
   selectedRegions: string[];
   onRegionsChange: (regions: string[]) => void;
   budget: number;
@@ -76,11 +77,14 @@ export function RegionPickerModal({
   onOpenChange,
   zipCode,
   tradeType,
+  partnerType = "contractor",
   selectedRegions,
   onRegionsChange,
   budget,
   onBudgetChange,
 }: RegionPickerModalProps) {
+  const minBudget = partnerType === "adjuster" ? 50 : 200;
+  const recommendedBudget = 200;
   const [localRegions, setLocalRegions] = useState<string[]>(selectedRegions);
   const [localBudget, setLocalBudget] = useState(budget);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
@@ -122,8 +126,14 @@ export function RegionPickerModal({
 
   const handleConfirm = () => {
     onRegionsChange(localRegions);
-    onBudgetChange(localBudget);
+    onBudgetChange(Math.max(minBudget, localBudget));
     onOpenChange(false);
+  };
+
+  const handleBudgetBlur = () => {
+    if (localBudget < minBudget) {
+      setLocalBudget(minBudget);
+    }
   };
 
   const getRegionDemand = (regionName: string): RegionDemandInfo | undefined => {
@@ -367,39 +377,49 @@ export function RegionPickerModal({
             <div className="pt-4 border-t border-slate-700 space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <Label htmlFor="budget-input" className="text-slate-300">Monthly Budget</Label>
+                  <div className="flex flex-col">
+                    <Label htmlFor="budget-input" className="text-slate-300">Monthly Budget</Label>
+                    <span className="text-xs text-sky-400 mt-0.5">Recommended: ${recommendedBudget}/mo</span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <span className="text-slate-400" aria-hidden="true">$</span>
                     <Input
                       id="budget-input"
                       type="number"
                       value={localBudget}
-                      onChange={(e) => setLocalBudget(Number(e.target.value))}
+                      onChange={(e) => setLocalBudget(Number(e.target.value) || 0)}
+                      onBlur={handleBudgetBlur}
                       className="w-24 bg-slate-800 border-slate-700 text-right min-h-[44px]"
-                      min={100}
+                      min={minBudget}
                       max={10000}
                       data-testid="input-budget"
                       aria-label="Monthly advertising budget in dollars"
-                      aria-describedby="budget-range-hint"
+                      aria-describedby="budget-helper-text"
                     />
                     <span className="text-slate-400" aria-hidden="true">/mo</span>
                   </div>
                 </div>
+                <p className="text-xs text-slate-500" id="budget-helper-text">
+                  {partnerType === "adjuster" 
+                    ? `Recommended: $${recommendedBudget}/month, but many adjusters start as low as $${minBudget} in a single region.`
+                    : `Recommended: $${recommendedBudget}/month to stay visible in your area. You can choose less if you're just getting started (min: $${minBudget}).`
+                  }
+                </p>
                 <Slider
-                  value={[localBudget]}
+                  value={[Math.max(minBudget, localBudget)]}
                   onValueChange={([value]) => setLocalBudget(value)}
-                  min={100}
+                  min={minBudget}
                   max={5000}
                   step={50}
                   className="py-2"
                   aria-label="Adjust monthly budget"
-                  aria-valuemin={100}
+                  aria-valuemin={minBudget}
                   aria-valuemax={5000}
                   aria-valuenow={localBudget}
                   aria-valuetext={`$${localBudget} per month`}
                 />
                 <div className="flex justify-between text-xs text-slate-500" id="budget-range-hint">
-                  <span>$100</span>
+                  <span>${minBudget}</span>
                   <span>$5,000+</span>
                 </div>
               </div>

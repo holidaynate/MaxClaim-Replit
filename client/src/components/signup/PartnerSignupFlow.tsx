@@ -386,7 +386,7 @@ export default function PartnerSignupFlow() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="referralCode" className="text-slate-300">Agent Referral Code (optional)</Label>
+                <Label htmlFor="referralCode" className="text-slate-300">Advocate Referral Code (optional)</Label>
                 <Input
                   id="referralCode"
                   value={data.referralCode}
@@ -395,7 +395,7 @@ export default function PartnerSignupFlow() {
                   placeholder="e.g., MarRod8125"
                   data-testid="input-partner-referral"
                 />
-                <p className="text-xs text-slate-500">If an agent referred you, enter their code for tracking.</p>
+                <p className="text-xs text-slate-500">If an advocate referred you, enter their code for tracking.</p>
               </div>
             </>
           ) : step === 2 ? (
@@ -419,6 +419,7 @@ export default function PartnerSignupFlow() {
                 onOpenChange={setRegionPickerOpen}
                 zipCode={data.zipCode}
                 tradeType={tradeTypeMap[data.type]}
+                partnerType={data.type}
                 selectedRegions={selectedRegions}
                 onRegionsChange={setSelectedRegions}
                 budget={customBudget}

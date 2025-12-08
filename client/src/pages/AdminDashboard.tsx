@@ -270,7 +270,7 @@ function PartnerCard({ partner, approveMutation, rejectMutation, agents }: Partn
             )}
             {signingAgent && (
               <div className="text-sm">
-                <span className="text-slate-400">Agent: </span>
+                <span className="text-slate-400">Advocate: </span>
                 <span className="text-sky-400">{signingAgent.name}</span>
               </div>
             )}
@@ -637,7 +637,7 @@ export default function AdminDashboard() {
       <div className="container mx-auto p-6">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
-          <p className="text-slate-400">Manage partners, agents, contracts, and monetization</p>
+          <p className="text-slate-400">Manage partners, advocates, contracts, and monetization</p>
         </div>
 
         <Tabs value={mainTab} onValueChange={setMainTab}>
@@ -652,7 +652,7 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="agents" data-testid="tab-agents">
               <Users className="h-4 w-4 mr-2" />
-              Sales Agents
+              Advocates
             </TabsTrigger>
             <TabsTrigger value="contracts" data-testid="tab-contracts">
               <FileText className="h-4 w-4 mr-2" />
@@ -729,7 +729,7 @@ export default function AdminDashboard() {
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-                  <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
+                  <CardTitle className="text-sm font-medium">Active Advocates</CardTitle>
                   <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -737,7 +737,7 @@ export default function AdminDashboard() {
                     {statsData?.agents?.active || 0}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {statsData?.agents?.total || 0} total agents
+                    {statsData?.agents?.total || 0} total advocates
                   </p>
                 </CardContent>
               </Card>
