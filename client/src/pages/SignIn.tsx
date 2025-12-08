@@ -190,6 +190,13 @@ export default function SignIn() {
               <p className="text-center text-slate-300 font-medium mb-4">
                 What brings you to MaxClaim?
               </p>
+              
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium" data-testid="text-signin-error">
+                  {error}
+                </div>
+              )}
+              
               {roleOptions.map((option) => (
                 <button
                   key={option.role}
