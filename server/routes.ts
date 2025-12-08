@@ -42,6 +42,18 @@ import { auditCache } from "./cache/auditCache";
 import { batchQueue } from "./queue/batchQueue";
 import { sendPasswordResetEmail, sendEmailVerificationEmail } from "./services/emailService";
 import { generatePlanRecommendation, getTradeTypes, getTierComparison } from "./services/planBuilder";
+import { 
+  calculateRegionCostBreakdown, 
+  generateFullRecommendation, 
+  getAvailableRegions 
+} from "./services/regionalCostCalculator";
+import { 
+  getRegionsForState, 
+  findRegionByZip, 
+  getRegionAllocationByPlan,
+  getAllStatesWithRegions 
+} from "./config/regions";
+import { getAllDisasterRegions, REGIONAL_DEMAND_DATA } from "./config/regionalDemand";
 
 // Extend Express session type
 declare module "express-session" {
@@ -1582,6 +1594,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     res.json({ recommendation });
   }));
+
+  // ==================== Regional Pricing API ====================
+
+  // Get all states with regional pricing data
+  app.get("/api/regions/states", (req, res) => {
+    try {
+      const states = getAllStatesWithRegions();
+      res.json({ states });
+    } catch (error: any) {
+      console.error("Get states error:", error);
+      res.status(500).json({ error: "Failed to get states" });
+    }
+  });
+
+  // Get regions for a specific state
+  app.get("/api/regions/:state", (req, res) => {
+    try {
+      const { state } = req.params;
+      const regions = getRegionsForState(state.toUpperCase());
+      
+      if (!regions) {
+        return res.status(404).json({ error: `No regions found for state: ${state}` });
+      }
+      
+      const regionList = Object.entries(regions).map(([name, data]) => ({
+        name,
+        cities: data.cities,
+        zipPrefixes: data.zipPrefixes
+      }));
+      
+      res.json({ state: state.toUpperCase(), regions: regionList });
+    } catch (error: any) {
+      console.error("Get regions error:", error);
+      res.status(500).json({ error: "Failed to get regions" });
+    }
+  });
+
+  // Get available regions for a ZIP code
+  app.get("/api/regions/by-zip/:zip", (req, res) => {
+    try {
+      const { zip } = req.params;
+      const available = getAvailableRegions(zip);
+      res.json(available);
+    } catch (error: any) {
+      console.error("Get regions by ZIP error:", error);
+      res.status(500).json({ error: "Failed to get regions for ZIP" });
+    }
+  });
+
+  // Get region allocation by plan type
+  app.post("/api/regions/allocation", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      stateCode: z.string().length(2),
+      homeRegion: z.string().min(1),
+      planType: z.enum(["standard", "premium", "build_your_own"]),
+    });
+
+    const { stateCode, homeRegion, planType } = schema.parse(req.body);
+    const allocation = getRegionAllocationByPlan(stateCode, homeRegion, planType);
+    
+    res.json({ allocation });
+  }));
+
+  // Calculate cost breakdown for a specific region
+  app.post("/api/regions/cost-breakdown", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      state: z.string().length(2),
+      region: z.string().min(1),
+      zip: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+    });
+
+    const { state, region, zip, tradeType } = schema.parse(req.body);
+    const breakdown = calculateRegionCostBreakdown(state, region, zip, tradeType);
+    
+    res.json({ breakdown });
+  }));
+
+  // Generate full regional recommendation with budget allocation
+  app.post("/api/regions/recommend", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      zip: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+      planType: z.enum(["standard", "premium", "build_your_own"]),
+      budget: z.number().positive().optional(),
+      selectedRegions: z.array(z.string()).optional(),
+    });
+
+    const { zip, tradeType, planType, budget, selectedRegions } = schema.parse(req.body);
+    const recommendation = generateFullRecommendation(zip, tradeType, planType, budget, selectedRegions);
+    
+    res.json({ recommendation });
+  }));
+
+  // Get active disaster declarations
+  app.get("/api/regions/disasters", (req, res) => {
+    try {
+      const disasters = getAllDisasterRegions();
+      res.json({ disasters, count: disasters.length });
+    } catch (error: any) {
+      console.error("Get disasters error:", error);
+      res.status(500).json({ error: "Failed to get disaster declarations" });
+    }
+  });
+
+  // Get regional demand data for a state
+  app.get("/api/regions/demand/:state", (req, res) => {
+    try {
+      const { state } = req.params;
+      const demandData = REGIONAL_DEMAND_DATA[state.toUpperCase()];
+      
+      if (!demandData) {
+        return res.status(404).json({ error: `No demand data for state: ${state}` });
+      }
+      
+      const regions = Object.entries(demandData).map(([region, data]) => ({
+        region,
+        ...data
+      }));
+      
+      res.json({ state: state.toUpperCase(), regions });
+    } catch (error: any) {
+      console.error("Get demand data error:", error);
+      res.status(500).json({ error: "Failed to get demand data" });
+    }
+  });
 
   // Get partners with filters
   app.get("/api/partners", async (req, res) => {
