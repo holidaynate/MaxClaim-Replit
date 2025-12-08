@@ -54,6 +54,13 @@ import {
   getAllStatesWithRegions 
 } from "./config/regions";
 import { getAllDisasterRegions, REGIONAL_DEMAND_DATA } from "./config/regionalDemand";
+import { 
+  calculateRotationWeights, 
+  selectPartnersForPlacement, 
+  calculateBudgetPacing, 
+  getCompetitiveInsights,
+  type PartnerAdConfig 
+} from "./services/competitiveRotation";
 
 // Extend Express session type
 declare module "express-session" {
@@ -1718,6 +1725,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get demand data error:", error);
       res.status(500).json({ error: "Failed to get demand data" });
+    }
+  });
+
+  // ==================== Competitive Rotation API ====================
+
+  // Get competitive insights for a region
+  app.get("/api/rotation/insights/:state/:region", requireAdmin, async (req, res) => {
+    try {
+      const { state, region } = req.params;
+      
+      const partners = await storage.getPartners({ status: "approved" });
+      
+      const partnerConfigs: PartnerAdConfig[] = partners.map(p => ({
+        partnerId: p.id,
+        companyName: p.companyName,
+        tradeType: p.type,
+        tier: (p.pricingTier || "standard") as any,
+        monthlyBudget: p.pricingTier === "premium" ? 2000 : p.pricingTier === "standard" ? 500 : 0,
+        budgetSpent: 0,
+        regions: [decodeURIComponent(region)],
+        state: state.toUpperCase(),
+        isTradeAssociation: p.type === "agency",
+        status: "active" as const,
+        totalImpressions: 0,
+        totalClicks: 0,
+      }));
+
+      const insights = getCompetitiveInsights(partnerConfigs, decodeURIComponent(region), state.toUpperCase());
+      
+      res.json({ insights });
+    } catch (error: any) {
+      console.error("Get rotation insights error:", error);
+      res.status(500).json({ error: "Failed to get rotation insights" });
+    }
+  });
+
+  // Calculate rotation weights for ad placement (admin)
+  app.post("/api/rotation/calculate", requireAdmin, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      region: z.string().min(1),
+      state: z.string().length(2),
+      tradeType: z.string().nullable().optional(),
+      maxResults: z.number().positive().default(5),
+    });
+
+    const { region, state, tradeType, maxResults } = schema.parse(req.body);
+    
+    const partners = await storage.getPartners({ status: "approved" });
+    
+    const partnerConfigs: PartnerAdConfig[] = partners.map(p => ({
+      partnerId: p.id,
+      companyName: p.companyName,
+      tradeType: p.type,
+      tier: (p.pricingTier || "standard") as any,
+      monthlyBudget: p.pricingTier === "premium" ? 2000 : p.pricingTier === "standard" ? 500 : 0,
+      budgetSpent: 0,
+      regions: [region],
+      state: state.toUpperCase(),
+      isTradeAssociation: p.type === "agency",
+      status: "active" as const,
+      totalImpressions: 0,
+      totalClicks: 0,
+    }));
+
+    const result = selectPartnersForPlacement(
+      partnerConfigs,
+      region,
+      state.toUpperCase(),
+      tradeType || null,
+      maxResults
+    );
+    
+    res.json({ placement: result });
+  }));
+
+  // Get budget pacing for a partner (admin or own partner)
+  app.get("/api/rotation/pacing/:partnerId", async (req, res) => {
+    try {
+      const { partnerId } = req.params;
+      const session = req.session as any;
+      
+      if (!session.isAdmin && session.partnerId !== partnerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: "Partner not found" });
+      }
+      
+      const partnerConfig: PartnerAdConfig = {
+        partnerId: partner.id,
+        companyName: partner.companyName,
+        tradeType: partner.type,
+        tier: (partner.pricingTier || "standard") as any,
+        monthlyBudget: partner.pricingTier === "premium" ? 2000 : partner.pricingTier === "standard" ? 500 : 0,
+        budgetSpent: 0,
+        regions: [],
+        state: "",
+        isTradeAssociation: partner.type === "agency",
+        status: partner.status === "approved" ? "active" : "paused",
+        totalImpressions: 0,
+        totalClicks: 0,
+      };
+      
+      const pacing = calculateBudgetPacing(partnerConfig);
+      
+      res.json({ pacing });
+    } catch (error: any) {
+      console.error("Get pacing error:", error);
+      res.status(500).json({ error: "Failed to get budget pacing" });
     }
   });
 
