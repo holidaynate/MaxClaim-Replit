@@ -398,6 +398,8 @@ export const partners = pgTable("partners", {
   billingStatus: billingStatus("billing_status").default("pending"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  serviceRegions: text("service_regions").array(), // Multiple service areas
+  activeRegion: text("active_region"), // Currently active region for dashboard view
   adConfig: jsonb("ad_config").$type<{
     bannerSize?: string;
     placements?: string[];
@@ -1158,6 +1160,11 @@ export const proOrganizations = pgTable("pro_organizations", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   notes: text("notes"),
+  tradeSpecialties: text("trade_specialties").array(),
+  disasterSpecialties: text("disaster_specialties").array(),
+  certifications: text("certifications").array(),
+  emergencyServices: integer("emergency_services").default(0).$type<boolean>(),
+  stateBoards: jsonb("state_boards").$type<Record<string, string>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
