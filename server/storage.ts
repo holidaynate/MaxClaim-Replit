@@ -52,6 +52,8 @@ import {
   type InsertProOrganization,
   type EmailTemplate,
   type InsertEmailTemplate,
+  type BatchJob,
+  type InsertBatchJob,
   users,
   replitUsers,
   userClaims,
@@ -80,6 +82,7 @@ import {
   adImpressions,
   proOrganizations,
   emailTemplates,
+  batchJobs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, inArray, like, gte, lte } from "drizzle-orm";
@@ -261,6 +264,12 @@ export interface IStorage {
   getEmailTemplate(id: string): Promise<EmailTemplate | undefined>;
   updateEmailTemplate(id: string, data: Partial<InsertEmailTemplate>): Promise<void>;
   deleteEmailTemplate(id: string): Promise<void>;
+  
+  // Batch Jobs - Async processing queue
+  createBatchJob(data: InsertBatchJob): Promise<BatchJob>;
+  getBatchJob(id: string): Promise<BatchJob | undefined>;
+  updateBatchJobStatus(id: string, status: 'queued' | 'processing' | 'completed' | 'failed', results?: any, error?: string): Promise<void>;
+  getRecentBatchJobs(limit?: number): Promise<BatchJob[]>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -1427,6 +1436,54 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEmailTemplate(id: string): Promise<void> {
     await db.delete(emailTemplates).where(eq(emailTemplates.id, id));
+  }
+
+  // ============================================
+  // BATCH JOBS - Async Processing Queue
+  // ============================================
+
+  async createBatchJob(data: InsertBatchJob): Promise<BatchJob> {
+    const [job] = await db.insert(batchJobs).values(data).returning();
+    return job;
+  }
+
+  async getBatchJob(id: string): Promise<BatchJob | undefined> {
+    const [job] = await db.select().from(batchJobs).where(eq(batchJobs.id, id));
+    return job;
+  }
+
+  async updateBatchJobStatus(
+    id: string, 
+    status: 'queued' | 'processing' | 'completed' | 'failed', 
+    results?: any, 
+    error?: string
+  ): Promise<void> {
+    const updateData: any = { status };
+    
+    if (status === 'processing') {
+      updateData.startedAt = new Date();
+    }
+    
+    if (status === 'completed' || status === 'failed') {
+      updateData.completedAt = new Date();
+    }
+    
+    if (results !== undefined) {
+      updateData.results = results;
+    }
+    
+    if (error !== undefined) {
+      updateData.error = error;
+    }
+    
+    await db.update(batchJobs).set(updateData).where(eq(batchJobs.id, id));
+  }
+
+  async getRecentBatchJobs(limit: number = 20): Promise<BatchJob[]> {
+    return db.select()
+      .from(batchJobs)
+      .orderBy(desc(batchJobs.createdAt))
+      .limit(limit);
   }
 }
 

@@ -1156,3 +1156,43 @@ export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit
 
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
+
+// Batch Job Status enum for async processing
+export const batchJobStatus = pgEnum("batch_job_status", [
+  "queued",
+  "processing",
+  "completed",
+  "failed"
+]);
+
+// Batch Jobs - Async processing queue for large claim audits
+export const batchJobs = pgTable("batch_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  status: batchJobStatus("status").default("queued").notNull(),
+  itemCount: integer("item_count").notNull(),
+  processedCount: integer("processed_count").default(0).notNull(),
+  zipCode: char("zip_code", { length: 5 }),
+  inputData: jsonb("input_data").notNull(),
+  results: jsonb("results"),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("batch_jobs_status_idx").on(table.status),
+  createdAtIdx: index("batch_jobs_created_at_idx").on(table.createdAt),
+}));
+
+export const insertBatchJobSchema = createInsertSchema(batchJobs).omit({
+  id: true,
+  status: true,
+  processedCount: true,
+  results: true,
+  error: true,
+  startedAt: true,
+  completedAt: true,
+  createdAt: true,
+});
+
+export type InsertBatchJob = z.infer<typeof insertBatchJobSchema>;
+export type BatchJob = typeof batchJobs.$inferSelect;

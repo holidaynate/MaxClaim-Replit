@@ -37,12 +37,27 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+import { auditCache } from "./cache/auditCache";
+import { batchQueue } from "./queue/batchQueue";
 
 // Extend Express session type
 declare module "express-session" {
   interface SessionData {
     isAdmin?: boolean;
   }
+}
+
+// Helper to format uptime in human-readable format
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
 }
 
 const claimAnalysisSchema = z.object({
@@ -962,16 +977,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== MaxClaim v2.0 AUDIT ENDPOINTS ==========
 
-  // Single item audit (v2.0)
+  // Single item audit (v2.0) - with caching
   app.post("/api/audit/single", (req, res) => {
     try {
-      const { item, price, qty } = z.object({
+      const { item, price, qty, zipCode } = z.object({
         item: z.string().min(1, "Item name is required"),
         price: z.number().positive("Price must be positive"),
         qty: z.number().positive("Quantity must be positive"),
+        zipCode: z.string().length(5).optional(),
       }).parse(req.body);
 
+      // Check cache first
+      const cached = auditCache.get(item, zipCode);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const result = auditClaimItem(item, price, qty);
+      
+      // Cache the result
+      auditCache.set(item, result, zipCode);
+      
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -986,18 +1012,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Batch audit (v2.0) - Full claim with multiple items
+  // Batch audit (v2.0) - Full claim with multiple items (with caching)
   app.post("/api/audit/batch", (req, res) => {
     try {
-      const { items } = z.object({
+      const { items, zipCode } = z.object({
         items: z.array(z.object({
           name: z.string().min(1),
           price: z.number(),
           qty: z.number(),
         })).min(1, "At least one item is required"),
+        zipCode: z.string().length(5).optional(),
       }).parse(req.body);
 
-      const result = auditBatch(items);
+      // Check batch cache for optimization
+      const { cached, uncached } = auditCache.getBatchCached(items, zipCode);
+      
+      let result: any;
+      if (uncached.length === 0) {
+        // All items were cached
+        result = {
+          items: Array.from(cached.values()),
+          fromCache: true,
+          cachedCount: cached.size,
+        };
+      } else if (cached.size === 0) {
+        // No cache hits, compute all
+        result = auditBatch(items);
+        // Cache individual results
+        if (result.items) {
+          result.items.forEach((itemResult: any, idx: number) => {
+            auditCache.set(items[idx].name, itemResult, zipCode);
+          });
+        }
+      } else {
+        // Partial cache - compute uncached items
+        const uncachedItems = uncached.map(u => u.item);
+        const computedResult = auditBatch(uncachedItems) as any;
+        
+        // Merge cached and computed results
+        const mergedItems: any[] = new Array(items.length);
+        cached.forEach((cachedResult, index) => {
+          mergedItems[index] = cachedResult;
+        });
+        uncached.forEach((u, idx) => {
+          if (computedResult.items?.[idx]) {
+            mergedItems[u.index] = computedResult.items[idx];
+            auditCache.set(u.item.name, computedResult.items[idx], zipCode);
+          }
+        });
+        
+        result = {
+          ...computedResult,
+          items: mergedItems,
+          partialCache: true,
+          cachedCount: cached.size,
+          computedCount: uncached.length,
+        };
+      }
+      
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -1011,6 +1083,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   });
+
+  // ========== ASYNC BATCH PROCESSING ENDPOINTS ==========
+
+  // Submit async batch job - returns immediately with job ID
+  app.post("/api/batch-audit", asyncHandler(async (req, res) => {
+    const { items, zipCode } = z.object({
+      items: z.array(z.object({
+        name: z.string().min(1),
+        price: z.number(),
+        qty: z.number(),
+      })).min(1, "At least one item is required").max(500, "Maximum 500 items per batch"),
+      zipCode: z.string().length(5).optional(),
+    }).parse(req.body);
+
+    // Create batch job in database
+    const job = await storage.createBatchJob({
+      itemCount: items.length,
+      zipCode: zipCode || null,
+      inputData: { items, zipCode },
+    });
+
+    // Enqueue for background processing
+    batchQueue.enqueueBatch(
+      job.id,
+      { items, zipCode },
+      async (batchId, status, results, error) => {
+        await storage.updateBatchJobStatus(batchId, status, results, error);
+      }
+    );
+
+    const queueStats = batchQueue.getQueueStats();
+
+    res.status(202).json({
+      batchId: job.id,
+      status: 'queued',
+      itemCount: items.length,
+      estimatedWait: queueStats.size * 2,
+      queuePosition: queueStats.size,
+    });
+  }));
+
+  // Poll batch job status
+  app.get("/api/batch-audit/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const job = await storage.getBatchJob(id);
+    if (!job) {
+      return res.status(404).json({ error: 'Batch job not found' });
+    }
+
+    // Include in-memory status if still processing
+    const memoryStatus = batchQueue.getJobStatus(id);
+
+    res.json({
+      batchId: job.id,
+      status: job.status,
+      itemCount: job.itemCount,
+      processedCount: job.processedCount,
+      results: job.results,
+      error: job.error,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      createdAt: job.createdAt,
+      inMemoryStatus: memoryStatus,
+    });
+  }));
 
   // Get all items for autocomplete (v2.0)
   app.get("/api/items", (req, res) => {
@@ -2027,6 +2165,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastLoaded: cacheStats.lastLoaded
       }
     });
+  });
+
+  // ========== ADMIN METRICS ENDPOINT ==========
+  
+  // Comprehensive metrics for admin dashboard
+  app.get("/api/admin/metrics", requireAdmin, asyncHandler(async (req, res) => {
+    const memUsage = process.memoryUsage();
+    const priceDBStats = priceDBCache.getStats();
+    const auditCacheStats = auditCache.getStats();
+    const queueStats = batchQueue.getQueueStats();
+    const items = getAllItems();
+    const recentBatchJobs = await storage.getRecentBatchJobs(10);
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      server: {
+        uptime: Math.floor(process.uptime()),
+        uptimeFormatted: formatUptime(process.uptime()),
+        nodeVersion: process.version,
+        platform: process.platform,
+        tier: 'core',
+      },
+      memory: {
+        rss: Math.round(memUsage.rss / 1024 / 1024),
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+        external: Math.round(memUsage.external / 1024 / 1024),
+        heapUsagePercent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
+      },
+      priceDB: {
+        itemCount: items.length,
+        cacheHits: priceDBStats.cacheHits,
+        cacheMisses: priceDBStats.cacheMisses,
+        hitRate: priceDBStats.cacheHits + priceDBStats.cacheMisses > 0 
+          ? Math.round((priceDBStats.cacheHits / (priceDBStats.cacheHits + priceDBStats.cacheMisses)) * 100)
+          : 0,
+        memorySizeKB: priceDBStats.memorySizeKB,
+        cacheAgeMinutes: priceDBCache.getCacheAge(),
+        lastLoaded: priceDBStats.lastLoaded,
+      },
+      auditCache: {
+        keys: auditCacheStats.keys,
+        hits: auditCacheStats.hits,
+        misses: auditCacheStats.misses,
+        hitRate: auditCache.getHitRate(),
+        ksize: auditCacheStats.ksize,
+        vsize: auditCacheStats.vsize,
+      },
+      batchQueue: {
+        pending: queueStats.pending,
+        size: queueStats.size,
+        concurrency: queueStats.concurrency,
+        isPaused: queueStats.isPaused,
+        activeJobs: batchQueue.getActiveJobCount(),
+      },
+      recentBatchJobs: recentBatchJobs.map(job => ({
+        id: job.id,
+        status: job.status,
+        itemCount: job.itemCount,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt,
+      })),
+    });
+  }));
+
+  // Flush audit cache (admin action)
+  app.post("/api/admin/cache/flush", requireAdmin, (req, res) => {
+    auditCache.flush();
+    res.json({ success: true, message: 'Audit cache flushed' });
+  });
+
+  // Get cache keys (admin action)
+  app.get("/api/admin/cache/keys", requireAdmin, (req, res) => {
+    const keys = auditCache.keys();
+    res.json({ count: keys.length, keys: keys.slice(0, 100) });
   });
 
   // Seed default commission tiers on startup
