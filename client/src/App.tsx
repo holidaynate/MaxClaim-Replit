@@ -14,6 +14,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
+import { SkipLink } from "@/components/SkipLink";
 import Home from "@/pages/home";
 import AttributionsPage from "@/pages/AttributionsPage";
 import AdminDashboard from "@/pages/AdminDashboard";
@@ -51,8 +52,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AccessibilityProvider>
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <SkipLink targetId="main-content" />
+          <main id="main-content" tabIndex={-1} className="outline-none">
+            <Toaster />
+            <Router />
+          </main>
         </TooltipProvider>
       </AccessibilityProvider>
     </QueryClientProvider>

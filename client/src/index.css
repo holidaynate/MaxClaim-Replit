@@ -286,6 +286,83 @@
     inset: -1px;
   }
 
+  /* Accessibility: Skip Link for keyboard users */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 9999;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    padding: 12px 24px;
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: 0 0 8px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: left 0.2s ease;
+  }
+
+  .skip-link:focus {
+    left: 0;
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Accessibility: Focus Visible Styles (WCAG 2.4.7) */
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Enhanced focus for buttons and interactive elements */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.2);
+  }
+
+  /* High contrast focus for prefers-contrast */
+  @media (prefers-contrast: more) {
+    :focus-visible {
+      outline: 4px solid hsl(var(--foreground));
+      outline-offset: 3px;
+      box-shadow: 0 0 0 6px hsl(var(--ring) / 0.3);
+    }
+  }
+
+  /* Reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Accessibility: Reduced Motion Mode (user-controlled) */
+  :root.reduce-motion *,
+  :root.reduce-motion *::before,
+  :root.reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   /* Accessibility: Text Size Scaling */
   :root[data-text-size="normal"] {
     font-size: 16px;
