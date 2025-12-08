@@ -23,6 +23,7 @@ Key features include:
 - **Privacy Architecture**: Collects only anonymous data; no PII stored.
 - **Monetization Infrastructure**: Partnership system for contractors/adjusters with various pricing models, ZIP targeting, and lead tracking.
 - **Credential-Based Auth System**: Role-based authentication for Contacts/Advocates and Partners with dashboards.
+- **Auto-Approval System**: Partners are automatically approved after verifying their email address, eliminating manual admin approval wait times. Welcome emails are sent upon successful verification.
 - **User Claims Dashboard**: Authenticated users can view their claim history and reports.
 - **Monetization System**: Complete partner monetization with advocate reference codes, commission management, and Stripe integration.
 - **Pro Organizations Database**: A 50-state lead prospecting tool with professional organizations, supporting hierarchical structures and regional coverage.
