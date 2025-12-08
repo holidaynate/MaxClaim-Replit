@@ -26,7 +26,7 @@ Key features include:
 - **Auto-Approval System**: Partners are automatically approved after verifying their email address, eliminating manual admin approval wait times. Welcome emails are sent upon successful verification.
 - **User Claims Dashboard**: Authenticated users can view their claim history and reports.
 - **Monetization System**: Complete partner monetization with advocate reference codes, commission management, and Stripe integration.
-- **Pro Organizations Database**: A 50-state lead prospecting tool with professional organizations, supporting hierarchical structures and regional coverage.
+- **Pro Organizations Database**: A 50-state lead prospecting tool with 183+ professional organizations across 17 trade categories (general contractors, remodelers, roofers, public adjusters, attorneys, disaster recovery, regulators, licensing boards, plumbers, electricians, HVAC, flooring, painters, restoration specialists, windows & doors, tree services, appliance repair). Supports hierarchical structures and regional coverage with disaster risk prioritization.
 - **Local Pros API**: Enhanced organization search with smart prioritization (local > state > regional > national), ZIP-to-state mapping, trade filtering, and dynamic organization display with collapsible "Show more" UI.
 - **Disaster Risk Prioritization**: A 4-tier priority system for advocate lead targeting based on disaster frequency and primary hazards.
 - **Email Templates System**: Four vendor outreach email templates with placeholder support.
