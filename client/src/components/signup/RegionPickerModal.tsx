@@ -70,6 +70,8 @@ interface RegionPickerModalProps {
   onRegionsChange: (regions: string[]) => void;
   budget: number;
   onBudgetChange: (budget: number) => void;
+  maxRegions?: number;
+  planType?: "build_your_own" | "standard" | "premium" | "free";
 }
 
 export function RegionPickerModal({
@@ -82,9 +84,12 @@ export function RegionPickerModal({
   onRegionsChange,
   budget,
   onBudgetChange,
+  maxRegions,
+  planType = "build_your_own",
 }: RegionPickerModalProps) {
   const minBudget = partnerType === "adjuster" ? 50 : 200;
   const recommendedBudget = 200;
+  const isFixedPricePlan = planType === 'standard' || planType === 'premium';
   const [localRegions, setLocalRegions] = useState<string[]>(selectedRegions);
   const [localBudget, setLocalBudget] = useState(budget);
   const [expandedRegion, setExpandedRegion] = useState<string | null>(null);
@@ -117,12 +122,18 @@ export function RegionPickerModal({
   const handleRegionToggle = (region: string) => {
     if (region === availableData?.homeRegion) return;
     
-    setLocalRegions(prev => 
-      prev.includes(region)
-        ? prev.filter(r => r !== region)
-        : [...prev, region]
-    );
+    setLocalRegions(prev => {
+      if (prev.includes(region)) {
+        return prev.filter(r => r !== region);
+      }
+      if (maxRegions && prev.length >= maxRegions) {
+        return prev;
+      }
+      return [...prev, region];
+    });
   };
+
+  const isAtMaxRegions = maxRegions ? localRegions.length >= maxRegions : false;
 
   const handleConfirm = () => {
     onRegionsChange(localRegions);
@@ -181,6 +192,7 @@ export function RegionPickerModal({
     const isSelected = localRegions.includes(region);
     const isHome = type === 'home';
     const regionId = `region-${region.toLowerCase().replace(/\s+/g, '-')}`;
+    const isDisabled = !isSelected && isAtMaxRegions;
     
     const demandLevelText = demand?.demandIndex 
       ? demand.demandIndex >= 80 ? 'Very High' 
@@ -195,16 +207,19 @@ export function RegionPickerModal({
         className={`p-3 rounded-lg border transition-all min-h-[48px] ${
           isSelected 
             ? 'border-purple-500 bg-purple-500/10' 
-            : 'border-slate-700 hover:border-slate-600 bg-slate-800/50'
-        } ${isHome ? 'cursor-default' : 'cursor-pointer'}`}
-        onClick={() => !isHome && handleRegionToggle(region)}
-        onKeyDown={(e) => handleRegionKeyDown(e, region, isHome)}
-        tabIndex={isHome ? -1 : 0}
+            : isDisabled
+              ? 'border-slate-700 bg-slate-800/30 opacity-50 cursor-not-allowed'
+              : 'border-slate-700 hover:border-slate-600 bg-slate-800/50'
+        } ${isHome ? 'cursor-default' : isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        onClick={() => !isHome && !isDisabled && handleRegionToggle(region)}
+        onKeyDown={(e) => !isDisabled && handleRegionKeyDown(e, region, isHome)}
+        tabIndex={isHome || isDisabled ? -1 : 0}
         role={isHome ? undefined : "checkbox"}
         aria-checked={isHome ? undefined : isSelected}
+        aria-disabled={isDisabled}
         aria-label={isHome 
           ? `${region} - Your home region (always included)` 
-          : `${region}${type === 'adjacent' ? ' - Adjacent region' : ''}${demand?.disasterDeclaration ? ', Active disaster declaration' : ''}${demandLevelText ? `, ${demandLevelText} demand` : ''}`
+          : `${region}${type === 'adjacent' ? ' - Adjacent region' : ''}${demand?.disasterDeclaration ? ', Active disaster declaration' : ''}${demandLevelText ? `, ${demandLevelText} demand` : ''}${isDisabled ? ' - Maximum regions selected' : ''}`
         }
         data-testid={`region-item-${region.toLowerCase().replace(/\s+/g, '-')}`}
       >
@@ -214,8 +229,9 @@ export function RegionPickerModal({
               <Checkbox 
                 id={regionId}
                 checked={isSelected}
+                disabled={isDisabled}
                 className="mt-1 min-w-[20px] min-h-[20px]"
-                onCheckedChange={() => handleRegionToggle(region)}
+                onCheckedChange={() => !isDisabled && handleRegionToggle(region)}
                 tabIndex={-1}
                 aria-hidden="true"
               />
@@ -304,12 +320,25 @@ export function RegionPickerModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-slate-900 border-slate-700">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-slate-100">
-            <MapPin className="w-5 h-5 text-sky-400" />
-            Configure Your Regions
+          <DialogTitle className="flex items-center justify-between gap-2 text-slate-100 flex-wrap">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-sky-400" />
+              {isFixedPricePlan ? 'Edit Your Regions' : 'Configure Your Regions'}
+            </div>
+            {maxRegions && (
+              <Badge 
+                variant={isAtMaxRegions ? "default" : "secondary"}
+                className={isAtMaxRegions ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-700"}
+              >
+                {localRegions.length}/{maxRegions} regions
+              </Badge>
+            )}
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Select the regions where you want your ads to appear. Your home region is included automatically.
+            {isFixedPricePlan 
+              ? `Choose which ${maxRegions} regions you want for your ${planType === 'standard' ? 'Standard' : 'Premium'} plan. Your home region is included automatically.`
+              : 'Select the regions where you want your ads to appear. Your home region is included automatically.'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -375,90 +404,106 @@ export function RegionPickerModal({
             )}
 
             <div className="pt-4 border-t border-slate-700 space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex flex-col">
-                    <Label htmlFor="budget-input" className="text-slate-300">Monthly Budget</Label>
-                    <span className="text-xs text-sky-400 mt-0.5">Recommended: ${recommendedBudget}/mo</span>
+              {!isFixedPricePlan && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex flex-col">
+                      <Label htmlFor="budget-input" className="text-slate-300">Monthly Budget</Label>
+                      <span className="text-xs text-sky-400 mt-0.5">Recommended: ${recommendedBudget}/mo</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400" aria-hidden="true">$</span>
+                      <Input
+                        id="budget-input"
+                        type="number"
+                        value={localBudget}
+                        onChange={(e) => setLocalBudget(Number(e.target.value) || 0)}
+                        onBlur={handleBudgetBlur}
+                        className="w-24 bg-slate-800 border-slate-700 text-right min-h-[44px]"
+                        min={minBudget}
+                        max={10000}
+                        data-testid="input-budget"
+                        aria-label="Monthly advertising budget in dollars"
+                        aria-describedby="budget-helper-text"
+                      />
+                      <span className="text-slate-400" aria-hidden="true">/mo</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400" aria-hidden="true">$</span>
-                    <Input
-                      id="budget-input"
-                      type="number"
-                      value={localBudget}
-                      onChange={(e) => setLocalBudget(Number(e.target.value) || 0)}
-                      onBlur={handleBudgetBlur}
-                      className="w-24 bg-slate-800 border-slate-700 text-right min-h-[44px]"
-                      min={minBudget}
-                      max={10000}
-                      data-testid="input-budget"
-                      aria-label="Monthly advertising budget in dollars"
-                      aria-describedby="budget-helper-text"
-                    />
-                    <span className="text-slate-400" aria-hidden="true">/mo</span>
+                  <p className="text-xs text-slate-500" id="budget-helper-text">
+                    {partnerType === "adjuster" 
+                      ? `Recommended: $${recommendedBudget}/month, but many adjusters start as low as $${minBudget} in a single region.`
+                      : `Recommended: $${recommendedBudget}/month to stay visible in your area. You can choose less if you're just getting started (min: $${minBudget}).`
+                    }
+                  </p>
+                  <Slider
+                    value={[Math.max(minBudget, localBudget)]}
+                    onValueChange={([value]) => setLocalBudget(value)}
+                    min={minBudget}
+                    max={5000}
+                    step={50}
+                    className="py-2"
+                    aria-label="Adjust monthly budget"
+                    aria-valuemin={minBudget}
+                    aria-valuemax={5000}
+                    aria-valuenow={localBudget}
+                    aria-valuetext={`$${localBudget} per month`}
+                  />
+                  <div className="flex justify-between text-xs text-slate-500" id="budget-range-hint">
+                    <span>${minBudget}</span>
+                    <span>$5,000+</span>
                   </div>
                 </div>
-                <p className="text-xs text-slate-500" id="budget-helper-text">
-                  {partnerType === "adjuster" 
-                    ? `Recommended: $${recommendedBudget}/month, but many adjusters start as low as $${minBudget} in a single region.`
-                    : `Recommended: $${recommendedBudget}/month to stay visible in your area. You can choose less if you're just getting started (min: $${minBudget}).`
-                  }
-                </p>
-                <Slider
-                  value={[Math.max(minBudget, localBudget)]}
-                  onValueChange={([value]) => setLocalBudget(value)}
-                  min={minBudget}
-                  max={5000}
-                  step={50}
-                  className="py-2"
-                  aria-label="Adjust monthly budget"
-                  aria-valuemin={minBudget}
-                  aria-valuemax={5000}
-                  aria-valuenow={localBudget}
-                  aria-valuetext={`$${localBudget} per month`}
-                />
-                <div className="flex justify-between text-xs text-slate-500" id="budget-range-hint">
-                  <span>${minBudget}</span>
-                  <span>$5,000+</span>
-                </div>
-              </div>
+              )}
 
               <Card className="bg-slate-800/50 border-slate-700" aria-live="polite" aria-atomic="true">
                 <CardContent className="py-3">
-                  <div className="grid grid-cols-3 gap-4 text-center" role="group" aria-label="Selection summary">
+                  <div className={`grid ${isFixedPricePlan ? 'grid-cols-2' : 'grid-cols-3'} gap-4 text-center`} role="group" aria-label="Selection summary">
                     <div>
                       <div className="text-lg font-bold text-purple-400">
-                        {localRegions.length}
+                        {localRegions.length}{maxRegions ? `/${maxRegions}` : ''}
                       </div>
                       <div className="text-xs text-slate-400">
                         Regions
                         <span className="sr-only"> selected</span>
                       </div>
                     </div>
-                    <div>
-                      <div className="text-lg font-bold text-emerald-400">
-                        ${localBudget}
+                    {isFixedPricePlan ? (
+                      <div>
+                        <div className="text-lg font-bold text-emerald-400">
+                          ${planType === 'standard' ? '500' : '2,000'}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          Fixed Price
+                          <span className="sr-only"> per month</span>
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-400">
-                        Monthly
-                        <span className="sr-only"> budget</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-bold text-sky-400">
-                        ~{calculateEstimatedLeads()}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        Est. Leads
-                        <span className="sr-only"> per month</span>
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div>
+                          <div className="text-lg font-bold text-emerald-400">
+                            ${localBudget}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Monthly
+                            <span className="sr-only"> budget</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-sky-400">
+                            ~{calculateEstimatedLeads()}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Est. Leads
+                            <span className="sr-only"> per month</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              {calculateEstimatedCost() > localBudget && (
+              {!isFixedPricePlan && calculateEstimatedCost() > localBudget && (
                 <div 
                   className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 p-2 rounded"
                   role="alert"

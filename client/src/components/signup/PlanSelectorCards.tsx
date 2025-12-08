@@ -50,7 +50,7 @@ interface PlanSelectorCardsProps {
   tradeType: string;
   selectedPlan: PlanType;
   onPlanSelect: (plan: PlanType) => void;
-  onOpenRegionPicker?: () => void;
+  onOpenRegionPicker?: (planType?: PlanType) => void;
 }
 
 const planConfigs: Record<PlanType, {
@@ -512,13 +512,36 @@ export function PlanSelectorCards({
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
-                            onOpenRegionPicker();
+                            onOpenRegionPicker('build_your_own');
                           }}
                           data-testid="button-open-region-picker"
                           aria-label="Configure your custom regions for the Build Your Own plan"
                         >
                           <MapPin className="w-4 h-4 mr-2" aria-hidden="true" />
                           Configure Regions
+                          <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+                        </Button>
+                      )}
+
+                      {(planType === 'standard' || planType === 'premium') && onOpenRegionPicker && isSelected && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={`w-full mt-2 min-h-[44px] ${
+                            planType === 'standard' 
+                              ? 'border-purple-500/50 text-purple-400 hover:bg-purple-500/10' 
+                              : 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10'
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onOpenRegionPicker(planType);
+                          }}
+                          data-testid={`button-edit-regions-${planType}`}
+                          aria-label={`Customize your region selections for the ${config.title} plan (${planType === 'standard' ? '3' : '8'} regions included)`}
+                        >
+                          <MapPin className="w-4 h-4 mr-2" aria-hidden="true" />
+                          Edit Regions ({planType === 'standard' ? '3' : '8'} included)
                           <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
                         </Button>
                       )}

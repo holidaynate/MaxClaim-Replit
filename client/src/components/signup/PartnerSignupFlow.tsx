@@ -149,11 +149,21 @@ function TierSelector({ selected, onSelect }: { selected: PricingTier; onSelect:
 
 type ExtendedPricingTier = PricingTier | "build_your_own";
 
+type PlanTypeForModal = "build_your_own" | "standard" | "premium" | "free";
+
+const planRegionLimits: Record<PlanTypeForModal, number | undefined> = {
+  build_your_own: undefined,
+  standard: 3,
+  premium: 8,
+  free: 1,
+};
+
 export default function PartnerSignupFlow() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [regionPickerOpen, setRegionPickerOpen] = useState(false);
+  const [editingPlanType, setEditingPlanType] = useState<PlanTypeForModal>("build_your_own");
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [customBudget, setCustomBudget] = useState(500);
   const [extendedTier, setExtendedTier] = useState<ExtendedPricingTier>("standard");
@@ -412,7 +422,10 @@ export default function PartnerSignupFlow() {
                     setData({ ...data, pricingTier: plan as PricingTier });
                   }
                 }}
-                onOpenRegionPicker={() => setRegionPickerOpen(true)}
+                onOpenRegionPicker={(planType) => {
+                  setEditingPlanType(planType || 'build_your_own');
+                  setRegionPickerOpen(true);
+                }}
               />
               <RegionPickerModal
                 open={regionPickerOpen}
@@ -424,6 +437,8 @@ export default function PartnerSignupFlow() {
                 onRegionsChange={setSelectedRegions}
                 budget={customBudget}
                 onBudgetChange={setCustomBudget}
+                maxRegions={planRegionLimits[editingPlanType]}
+                planType={editingPlanType}
               />
             </>
           ) : (
