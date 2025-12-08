@@ -301,6 +301,9 @@ export interface IStorage {
   // Update password
   updateAgentPassword(id: string, hashedPassword: string): Promise<void>;
   updatePartnerPassword(id: string, hashedPassword: string): Promise<void>;
+  
+  // Stripe integration
+  updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<void>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -1607,6 +1610,21 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(partners)
       .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(partners.id, id));
+  }
+
+  // Stripe integration
+  async updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<void> {
+    const updateData: Record<string, any> = { updatedAt: new Date() };
+    if (info.stripeCustomerId) {
+      updateData.stripeCustomerId = info.stripeCustomerId;
+    }
+    if (info.stripeSubscriptionId) {
+      updateData.stripeSubscriptionId = info.stripeSubscriptionId;
+    }
+    await db
+      .update(partners)
+      .set(updateData)
       .where(eq(partners.id, id));
   }
 }

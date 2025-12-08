@@ -1387,6 +1387,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ==================== Stripe Checkout API ====================
+
+  // Create checkout session for partner subscription
+  app.post("/api/checkout/create-session", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      partnerId: z.string(),
+      tier: z.enum(["standard", "premium"]),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+    });
+
+    const { partnerId, tier, successUrl, cancelUrl } = schema.parse(req.body);
+    const session = req.session as any;
+
+    // Only allow partner to create checkout for themselves (or admin)
+    if (!session.isAdmin && session.partnerId !== partnerId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const { stripePaymentService } = await import("./services/stripePayments");
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await stripePaymentService.createCheckoutSession(
+      partnerId,
+      tier,
+      successUrl || `${baseUrl}/partner-dashboard`,
+      cancelUrl || `${baseUrl}/partner-dashboard`
+    );
+
+    res.json({ 
+      sessionId: result.sessionId, 
+      url: result.url 
+    });
+  }));
+
+  // Get checkout session status
+  app.get("/api/checkout/session/:sessionId", asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { stripePaymentService } = await import("./services/stripePayments");
+    
+    const session = await stripePaymentService.getCheckoutSession(sessionId);
+    
+    res.json({
+      status: session.status,
+      paymentStatus: session.payment_status,
+      customerId: session.customer,
+      subscriptionId: session.subscription?.id,
+    });
+  }));
+
+  // Stripe webhook handler
+  app.post("/api/webhooks/stripe", asyncHandler(async (req, res) => {
+    const { getUncachableStripeClient, getStripeSecretKey } = await import("./services/stripeClient");
+    const { stripePaymentService } = await import("./services/stripePayments");
+    const Stripe = (await import("stripe")).default;
+
+    const stripe = await getUncachableStripeClient();
+    const sig = req.headers['stripe-signature'] as string;
+    
+    let event;
+
+    try {
+      // Note: In production, use webhook secret for verification
+      // For development, we'll trust the payload
+      if (process.env.STRIPE_WEBHOOK_SECRET) {
+        event = stripe.webhooks.constructEvent(
+          req.body,
+          sig,
+          process.env.STRIPE_WEBHOOK_SECRET
+        );
+      } else {
+        event = req.body;
+      }
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        console.log('[Stripe Webhook] Checkout session completed:', session.id);
+        await stripePaymentService.handleCheckoutComplete(session.id);
+        break;
+
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted':
+        const subscription = event.data.object;
+        console.log(`[Stripe Webhook] Subscription ${event.type}:`, subscription.id);
+        // Handle subscription updates as needed
+        break;
+
+      case 'invoice.payment_succeeded':
+        const invoice = event.data.object;
+        console.log('[Stripe Webhook] Invoice paid:', invoice.id);
+        break;
+
+      case 'invoice.payment_failed':
+        const failedInvoice = event.data.object;
+        console.log('[Stripe Webhook] Invoice payment failed:', failedInvoice.id);
+        break;
+
+      default:
+        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  }));
+
+  // Get partner pricing tiers
+  app.get("/api/checkout/pricing", (req, res) => {
+    res.json({
+      tiers: {
+        free: {
+          id: "free",
+          name: "Free",
+          price: 0,
+          interval: "month",
+          features: [
+            "Basic listing",
+            "1 placement",
+            "Pay-per-lead only",
+            "Monthly analytics",
+          ],
+        },
+        standard: {
+          id: "standard",
+          name: "Standard",
+          price: 500,
+          interval: "month",
+          features: [
+            "Priority listing",
+            "3 placements",
+            "2 banner sizes",
+            "Weekly analytics",
+            "Lead notifications",
+          ],
+        },
+        premium: {
+          id: "premium",
+          name: "Premium",
+          price: 2000,
+          interval: "month",
+          features: [
+            "Featured listing",
+            "All placements",
+            "All banner sizes",
+            "Real-time analytics",
+            "Dedicated support",
+            "API access",
+          ],
+        },
+      },
+    });
+  });
+
   // ==================== Plan Builder API ====================
 
   // Get trade types for plan builder dropdown

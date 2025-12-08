@@ -12,6 +12,18 @@ export interface PartnerPricingTier {
 }
 
 export const PARTNER_PRICING: Record<string, PartnerPricingTier> = {
+  free: {
+    tier: 'free_bogo',
+    monthlyPrice: 0,
+    setupFee: 0,
+    rotationWeight: 0.5,
+    features: [
+      'Basic listing in contractor directory',
+      'Available via trade association membership',
+      'Standard rotation weight (1x)',
+      'Monthly analytics report',
+    ],
+  },
   free_bogo: {
     tier: 'free_bogo',
     monthlyPrice: 0,
@@ -25,28 +37,32 @@ export const PARTNER_PRICING: Record<string, PartnerPricingTier> = {
   },
   standard: {
     tier: 'standard',
-    monthlyPrice: 99,
-    setupFee: 49,
-    rotationWeight: 1.0,
+    monthlyPrice: 500,
+    setupFee: 0,
+    rotationWeight: 2.0,
     features: [
-      'Standard listing in contractor directory',
-      'Normal priority in rotation (1.0x weight)',
-      'Lead tracking dashboard',
-      'ZIP code targeting (up to 5 codes)',
+      'Priority listing placement',
+      '2x rotation weight',
+      'Weekly analytics dashboard',
+      'Lead notifications',
+      'Edit listing anytime',
+      '3 ad placements',
     ],
   },
   premium: {
     tier: 'premium',
-    monthlyPrice: 299,
+    monthlyPrice: 2000,
     setupFee: 0,
-    rotationWeight: 2.0,
+    rotationWeight: 4.0,
     features: [
-      'Premium featured listing',
-      'High priority in rotation (2.0x weight)',
-      'Full analytics dashboard',
-      'Unlimited ZIP code targeting',
-      'Dedicated account support',
-      'Featured badge display',
+      'Top placement guarantee',
+      '4x rotation weight',
+      'Real-time analytics',
+      'Direct lead routing',
+      'Custom branding options',
+      'Dedicated account manager',
+      'All ad placements',
+      'API access',
     ],
   },
 };
@@ -308,6 +324,98 @@ export class StripePaymentService {
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
+  }
+
+  async createCheckoutSession(
+    partnerId: string,
+    tier: 'standard' | 'premium',
+    successUrl: string,
+    cancelUrl: string
+  ): Promise<{ sessionId: string; url: string }> {
+    const stripe = await getUncachableStripeClient();
+    const pricing = PARTNER_PRICING[tier];
+    
+    if (!pricing || pricing.monthlyPrice === 0) {
+      throw new Error('Invalid pricing tier for checkout');
+    }
+
+    const partner = await storage.getPartner(partnerId);
+    if (!partner) {
+      throw new Error('Partner not found');
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: partner.email,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `MaxClaim ${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan`,
+              description: pricing.features.join(', '),
+            },
+            unit_amount: Math.round(pricing.monthlyPrice * 100),
+            recurring: {
+              interval: 'month',
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: cancelUrl,
+      metadata: {
+        partnerId,
+        tier,
+        source: 'max-claim-partner-signup',
+      },
+      subscription_data: {
+        metadata: {
+          partnerId,
+          tier,
+        },
+      },
+    });
+
+    return {
+      sessionId: session.id,
+      url: session.url || '',
+    };
+  }
+
+  async getCheckoutSession(sessionId: string): Promise<any> {
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription', 'customer'],
+    });
+    return session;
+  }
+
+  async handleCheckoutComplete(sessionId: string): Promise<void> {
+    const stripe = await getUncachableStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription'],
+    });
+
+    const partnerId = session.metadata?.partnerId;
+    
+    if (!partnerId) {
+      throw new Error('Partner ID not found in session metadata');
+    }
+
+    const partner = await storage.getPartner(partnerId);
+    if (!partner) {
+      throw new Error('Partner not found');
+    }
+
+    await storage.updatePartnerStatus(partnerId, 'approved');
+    
+    await storage.updatePartnerStripeInfo(partnerId, {
+      stripeCustomerId: session.customer as string,
+      stripeSubscriptionId: (session.subscription as any)?.id,
+    });
   }
 }
 
