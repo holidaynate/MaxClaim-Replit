@@ -221,6 +221,11 @@ export default function SignIn() {
           )}
 
           <div className="mt-6 pt-6 border-t border-slate-700 text-center">
+            <p className="text-sm text-slate-400 mb-2">
+              <a href="/forgot-password" className="text-sky-400 hover:text-sky-300 font-medium" data-testid="link-forgot-password">
+                Forgot your password?
+              </a>
+            </p>
             <p className="text-sm text-slate-400 mb-3">
               First time here?{" "}
               <a href="/signup" className="font-semibold text-sky-400 hover:text-sky-300" data-testid="link-signup">

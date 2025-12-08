@@ -20,6 +20,8 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import MyClaims from "@/pages/MyClaims";
 import SignIn from "@/pages/SignIn";
 import Signup from "@/pages/Signup";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import AgentDashboard from "@/pages/AgentDashboard";
 import PartnerDashboard from "@/pages/PartnerDashboard";
 import NotFound from "@/pages/not-found";
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/signin" component={SignIn} />
       <Route path="/signup" component={Signup} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/agent-dashboard" component={AgentDashboard} />
       <Route path="/partner-dashboard" component={PartnerDashboard} />
       <Route path="/attributions" component={AttributionsPage} />
