@@ -1,7 +1,8 @@
 import { storage } from "../storage";
 
 // Pro Organizations data from the MaxClaim Pro Orgs Database
-// Enhanced with: directoryUrl, chapterMapUrl, chapterInfoUrl, parentId, regions, states
+// Enhanced with: directoryUrl, chapterMapUrl, chapterInfoUrl, parentId, regions, states, priority, primaryHazards
+// Priority: 1 = Critical (always target), 2 = High-disaster states, 3 = Standard/specialty
 const proOrganizationsData = [
   // =====================
   // GENERAL CONTRACTORS
@@ -13,6 +14,7 @@ const proOrganizationsData = [
     website: "https://www.agc.org",
     chapterMapUrl: "https://www.agc.org/connect/chapters",
     memberDirectoryUrl: "https://www.agc.org/member-directory",
+    priority: 1,
     notes: "National association with state/local chapters"
   },
   {
@@ -22,6 +24,7 @@ const proOrganizationsData = [
     website: "https://www.mbcea.org",
     directoryUrl: "https://www.mbcea.org/member-directory",
     memberDirectoryUrl: "https://www.mbcea.org/member-directory",
+    priority: 2,
     notes: "Metal building contractors - searchable member directory"
   },
   {
@@ -31,6 +34,7 @@ const proOrganizationsData = [
     website: "https://gbca.com",
     memberDirectoryUrl: "https://members.gbca.com/directory",
     regions: ["PA", "NJ", "DE"],
+    priority: 3,
     notes: "Regional - Philadelphia + Mid-Atlantic"
   },
   // AGC State Chapters (TX)
@@ -43,6 +47,8 @@ const proOrganizationsData = [
     website: "https://www.agcaustin.org",
     directoryUrl: "https://members.agcaustin.org/list",
     parentId: "agc",
+    priority: 1,
+    primaryHazards: ["tornado", "hail", "hurricane"],
     notes: "Austin chapter of AGC"
   },
 
@@ -56,6 +62,7 @@ const proOrganizationsData = [
     website: "https://www.nari.org",
     chapterInfoUrl: "https://www.nari.org/remodelers/Benefits-for-Members/Chapter-Membership",
     memberDirectoryUrl: "https://www.nari.org/remodelers/Benefits-for-Members/Chapter-Membership",
+    priority: 1,
     notes: "National association - chapters by state"
   },
   {
@@ -65,7 +72,9 @@ const proOrganizationsData = [
     state: "TX",
     city: "Dallas",
     website: "https://www.naridallas.org",
-    parentId: "nari"
+    parentId: "nari",
+    priority: 1,
+    primaryHazards: ["tornado", "hail"]
   },
   {
     name: "NARI Houston",
@@ -74,7 +83,9 @@ const proOrganizationsData = [
     state: "TX",
     city: "Houston",
     website: "https://www.houstonnari.org",
-    parentId: "nari"
+    parentId: "nari",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"]
   },
 
   // =====================
@@ -87,6 +98,7 @@ const proOrganizationsData = [
     website: "https://www.nrca.net",
     directoryUrl: "https://www.nrca.net/roofing-contractors",
     memberDirectoryUrl: "https://www.nrca.net/roofing-contractors",
+    priority: 1,
     notes: "National roofing - contractor finder tool"
   },
   {
@@ -95,6 +107,8 @@ const proOrganizationsData = [
     scope: "regional" as const,
     website: "https://www.wsrca.com",
     regions: ["AZ", "CA", "CO", "HI", "ID", "MT", "NV", "NM", "OR", "TX", "UT", "WA", "WY"],
+    priority: 1,
+    primaryHazards: ["wildfire", "earthquake", "tornado"],
     notes: "Western US - includes TX, CA, AZ, NM, CO, HI, ID, MT, NV, OR, UT, WA, WY"
   },
   {
@@ -103,6 +117,8 @@ const proOrganizationsData = [
     scope: "regional" as const,
     website: "https://www.mrca.org",
     regions: ["IA", "IL", "IN", "KS", "KY", "MI", "MN", "MO", "NE", "ND", "SD", "WI"],
+    priority: 1,
+    primaryHazards: ["tornado", "hail", "flood"],
     notes: "Midwest region - 12 states"
   },
   {
@@ -111,6 +127,8 @@ const proOrganizationsData = [
     scope: "regional" as const,
     website: "https://www.nerca.org",
     regions: ["CT", "MA", "ME", "NH", "NJ", "NY", "PA", "RI", "VT"],
+    priority: 2,
+    primaryHazards: ["hurricane", "flood"],
     notes: "Northeast region - 9 states"
   },
   {
@@ -120,6 +138,8 @@ const proOrganizationsData = [
     state: "FL",
     states: ["FL"],
     website: "https://www.floridaroof.com",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"],
     notes: "Florida state association"
   },
 
@@ -133,6 +153,7 @@ const proOrganizationsData = [
     website: "https://www.napia.com",
     directoryUrl: "https://www.napia.com/find-an-adjuster",
     memberDirectoryUrl: "https://www.napia.com/find-an-adjuster",
+    priority: 1,
     notes: "National association - Find an Adjuster tool filters by state"
   },
   {
@@ -143,6 +164,8 @@ const proOrganizationsData = [
     states: ["TX"],
     website: "https://www.tdi.texas.gov",
     directoryUrl: "https://txapps.texas.gov/NASApp/tdi/TdiARManager",
+    priority: 1,
+    primaryHazards: ["tornado", "hurricane", "hail", "flood"],
     notes: "Texas adjuster license search and verification"
   },
   {
@@ -153,6 +176,8 @@ const proOrganizationsData = [
     states: ["FL"],
     website: "https://www.myfloridacfo.com/division/agents",
     directoryUrl: "https://licenseesearch.fldfs.com/",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"],
     notes: "Florida adjuster license lookup"
   },
 
@@ -165,6 +190,7 @@ const proOrganizationsData = [
     scope: "national" as const,
     website: "https://content.naic.org/state-insurance-departments",
     directoryUrl: "https://content.naic.org/state-insurance-departments",
+    priority: 1,
     notes: "Links to all 50 state insurance department websites"
   },
 
@@ -180,6 +206,8 @@ const proOrganizationsData = [
     website: "https://www.texasbar.com",
     directoryUrl: "https://www.texasbar.com/AM/Template.cfm?Section=Find_A_Lawyer",
     memberDirectoryUrl: "https://www.texasbar.com/AM/Template.cfm?Section=Find_A_Lawyer",
+    priority: 1,
+    primaryHazards: ["tornado", "hurricane", "hail"],
     notes: "Texas state bar - attorney search for insurance law"
   },
   {
@@ -190,6 +218,8 @@ const proOrganizationsData = [
     city: "Austin",
     website: "https://www.austinbar.org",
     directoryUrl: "https://www.austinbar.org/?pg=FindALawyer",
+    priority: 2,
+    primaryHazards: ["tornado", "hail"],
     notes: "Local Austin bar directory"
   },
   {
@@ -201,6 +231,8 @@ const proOrganizationsData = [
     website: "https://www.calbar.ca.gov",
     directoryUrl: "https://www.calbar.ca.gov/Attorneys/Find-an-Attorney",
     memberDirectoryUrl: "https://www.calbar.ca.gov/Attorneys/Find-an-Attorney",
+    priority: 1,
+    primaryHazards: ["wildfire", "earthquake"],
     notes: "California state bar association"
   },
   {
@@ -212,6 +244,8 @@ const proOrganizationsData = [
     website: "https://www.floridabar.org",
     directoryUrl: "https://www.floridabar.org/directories/find-mbr/",
     memberDirectoryUrl: "https://www.floridabar.org/directories/find-mbr/",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"],
     notes: "Florida state bar association"
   },
 
@@ -224,6 +258,7 @@ const proOrganizationsData = [
     scope: "national" as const,
     website: "https://www.fema.gov",
     directoryUrl: "https://www.fema.gov/disaster/current",
+    priority: 1,
     notes: "Federal disaster declarations and recovery resources"
   },
   {
@@ -231,6 +266,7 @@ const proOrganizationsData = [
     category: "disaster" as const,
     scope: "national" as const,
     website: "https://www.eda.gov/strategic-initiatives/disaster-recovery",
+    priority: 2,
     notes: "Federal economic disaster recovery programs"
   },
   {
@@ -239,6 +275,7 @@ const proOrganizationsData = [
     scope: "national" as const,
     website: "https://www.redcross.org/get-help/disaster-relief-and-recovery-services.html",
     directoryUrl: "https://www.redcross.org/find-your-local-chapter.html",
+    priority: 1,
     notes: "Emergency shelter, food, and recovery assistance"
   },
   {
@@ -246,6 +283,7 @@ const proOrganizationsData = [
     category: "disaster" as const,
     scope: "national" as const,
     website: "https://www.sba.gov/funding-programs/disaster-assistance",
+    priority: 1,
     notes: "Low-interest disaster loans for homeowners and businesses"
   },
 
@@ -635,24 +673,32 @@ MaxClaim Partner Relations
 export async function seedProOrganizations(): Promise<void> {
   console.log("[Seed] Checking pro organizations...");
   
-  // Clear existing and reseed with updated data
+  // Check existing data
   const existing = await storage.getProOrganizations({});
   
-  // Only reseed if count doesn't match (data structure updated)
-  if (existing.length === proOrganizationsData.length) {
-    console.log(`[Seed] Pro organizations already seeded (${existing.length} found)`);
+  // Check if existing data has v2 fields (priority AND primaryHazards populated)
+  const hasV2Data = existing.length > 0 && existing.some(org => 
+    org.priority !== null && 
+    org.priority > 0 && 
+    org.primaryHazards !== null && 
+    org.primaryHazards.length > 0
+  );
+  
+  // Reseed if count doesn't match or if v2 fields are missing
+  if (existing.length === proOrganizationsData.length && hasV2Data) {
+    console.log(`[Seed] Pro organizations already seeded with v2 data (${existing.length} found)`);
     return;
   }
   
   // Clear existing for fresh seed with new schema
   if (existing.length > 0) {
-    console.log("[Seed] Clearing old pro organizations for schema update...");
+    console.log("[Seed] Clearing old pro organizations for v2 schema update...");
     for (const org of existing) {
       await storage.deleteProOrganization(org.id);
     }
   }
   
-  console.log("[Seed] Seeding pro organizations with enhanced data...");
+  console.log("[Seed] Seeding pro organizations with v2 data (priority + hazards)...");
   for (const org of proOrganizationsData) {
     try {
       await storage.createProOrganization(org as any);
@@ -660,7 +706,7 @@ export async function seedProOrganizations(): Promise<void> {
       console.error(`[Seed] Failed to create org ${org.name}:`, error);
     }
   }
-  console.log(`[Seed] Seeded ${proOrganizationsData.length} pro organizations`);
+  console.log(`[Seed] Seeded ${proOrganizationsData.length} pro organizations with disaster risk data`);
 }
 
 export async function seedEmailTemplates(): Promise<void> {
