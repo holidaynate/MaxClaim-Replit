@@ -85,7 +85,8 @@ export function calculateRotationWeights(
   const competitorCount = regionDemand?.competitorCount || eligiblePartners.length;
 
   const totalBudget = eligiblePartners.reduce((sum, p) => sum + p.monthlyBudget, 0);
-  const avgBudget = totalBudget / eligiblePartners.length;
+  const paidPartnerCount = eligiblePartners.filter(p => p.monthlyBudget > 0).length;
+  const avgBudget = paidPartnerCount > 0 ? totalBudget / paidPartnerCount : 500;
 
   const dayOfMonth = currentTime.getDate();
   const daysInMonth = new Date(currentTime.getFullYear(), currentTime.getMonth() + 1, 0).getDate();
@@ -95,17 +96,25 @@ export function calculateRotationWeights(
   const weights: RotationWeight[] = eligiblePartners.map(partner => {
     const tierMultiplier = TIER_MULTIPLIERS[partner.tier] || 1.0;
     
-    const budgetRatio = partner.monthlyBudget / avgBudget;
-    const remainingBudgetRatio = (partner.monthlyBudget - partner.budgetSpent) / partner.monthlyBudget;
-    let budgetFactor = Math.min(2.0, Math.max(0.3, budgetRatio));
-    
-    if (isMonthEnd && remainingBudgetRatio > 0.3) {
-      budgetFactor *= MONTH_END_BUDGET_BOOST;
+    let budgetFactor = 1.0;
+    if (partner.monthlyBudget > 0 && avgBudget > 0) {
+      const budgetRatio = partner.monthlyBudget / avgBudget;
+      budgetFactor = Math.min(2.0, Math.max(0.3, budgetRatio));
+      
+      const remainingBudgetRatio = (partner.monthlyBudget - partner.budgetSpent) / partner.monthlyBudget;
+      if (isMonthEnd && remainingBudgetRatio > 0.3) {
+        budgetFactor *= MONTH_END_BUDGET_BOOST;
+      }
+    } else {
+      budgetFactor = 0.3;
     }
     
-    const competitivePosition = Math.min(2.0, 
-      1.0 + (partner.monthlyBudget / (avgBudget * competitorCount)) * 0.5
-    );
+    let competitivePosition = 1.0;
+    if (partner.monthlyBudget > 0 && avgBudget > 0 && competitorCount > 0) {
+      competitivePosition = Math.min(2.0, 
+        1.0 + (partner.monthlyBudget / (avgBudget * competitorCount)) * 0.5
+      );
+    }
     
     const demandBonus = demandIndex > 70 ? 1.3 : demandIndex > 50 ? 1.1 : 1.0;
     const disasterBonus = hasDisaster && partner.tier === "premium" ? DISASTER_REGION_BOOST : 
@@ -225,6 +234,17 @@ export function calculateBudgetPacing(
   daysRemaining: number;
   projectedMonthEnd: number;
 } {
+  if (partner.monthlyBudget <= 0) {
+    const daysInMonth = new Date(currentTime.getFullYear(), currentTime.getMonth() + 1, 0).getDate();
+    return {
+      isOnPace: true,
+      spendRate: 0,
+      recommendedDailySpend: 0,
+      daysRemaining: daysInMonth - currentTime.getDate(),
+      projectedMonthEnd: 0,
+    };
+  }
+
   const dayOfMonth = currentTime.getDate();
   const daysInMonth = new Date(currentTime.getFullYear(), currentTime.getMonth() + 1, 0).getDate();
   const daysRemaining = daysInMonth - dayOfMonth;
@@ -232,7 +252,7 @@ export function calculateBudgetPacing(
   const idealSpendRatio = dayOfMonth / daysInMonth;
   const actualSpendRatio = partner.budgetSpent / partner.monthlyBudget;
   
-  const spendRate = actualSpendRatio / idealSpendRatio;
+  const spendRate = idealSpendRatio > 0 ? actualSpendRatio / idealSpendRatio : 0;
   
   const budgetRemaining = partner.monthlyBudget - partner.budgetSpent;
   const recommendedDailySpend = daysRemaining > 0 ? budgetRemaining / daysRemaining : budgetRemaining;
