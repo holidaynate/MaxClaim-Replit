@@ -44,13 +44,16 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
 - **Email Templates System**: 4 vendor outreach email templates (Property Management, Public Adjuster, Roofing Contractor, Insurance Attorney) with placeholder support for personalization. Admin dashboard tab with view/copy functionality for easy agent use. Placeholders include [YOUR_NAME], [COMPANY_NAME], [ADJUSTER_NAME], etc.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates:
   - **Primary Source**: RSMeans/NRCA industry-standard baseline pricing with labor/material breakdowns
-  - **Secondary Source**: Regional cost adjustments via HUD CBSA indices and BLS CPI data
+  - **Secondary Source**: Regional cost adjustments via HUD CBSA indices and BLS CPI data (50+ metro areas)
   - **Tertiary Source**: Historical user claim data for continuous improvement
+  - **State Cost Multipliers**: All 50 states with BLS CPI-based regional cost factors (0.82x - 1.42x)
   - **Waste Factor Calculations**: Material-specific waste factors (roofing: 10-25%, general: 5-15%)
   - **Citation Framework**: Full data source attribution in all estimates with confidence levels (HIGH/MEDIUM/LOW)
+  - **Category Normalization**: Maps frontend damage types (e.g., "Roofing & Exterior") to pricing categories
   - **API Endpoints**: `/api/pricing/categories`, `/api/pricing/categories/:category/items`, `/api/pricing/disclaimer`
+  - **Frontend Display**: ResultsStep.tsx displays server FMV results with tooltips showing data sources, methodology, and regional adjustments
   - **PDF Reports**: Enhanced with data sources section, methodology explanation, and comprehensive legal disclaimer
-  - **Utility Modules**: `baselinePricing.ts`, `hudZipCrosswalk.ts`, `pricingCitation.ts`, `zipToState.ts`
+  - **Utility Modules**: `baselinePricing.ts` (1500+ lines, 16 categories), `hudZipCrosswalk.ts`, `pricingCitation.ts`, `zipToState.ts`
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
