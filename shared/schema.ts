@@ -1072,7 +1072,16 @@ export const proOrgCategory = pgEnum("pro_org_category", [
   "attorneys",
   "disaster_recovery",
   "regulator",
-  "disaster"
+  "disaster",
+  "licensing"
+]);
+
+// Disaster Risk Tiers for state prioritization
+export const disasterRiskTier = pgEnum("disaster_risk_tier", [
+  "critical",
+  "high",
+  "moderate",
+  "low"
 ]);
 
 // Pro Organization Scope (geographic coverage)
@@ -1099,6 +1108,8 @@ export const proOrganizations = pgTable("pro_organizations", {
   parentId: varchar("parent_id"),
   regions: text("regions").array(),
   states: text("states").array(),
+  priority: integer("priority").default(1),
+  primaryHazards: text("primary_hazards").array(),
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   notes: text("notes"),
@@ -1109,6 +1120,7 @@ export const proOrganizations = pgTable("pro_organizations", {
   stateIdx: index("pro_orgs_state_idx").on(table.state),
   scopeIdx: index("pro_orgs_scope_idx").on(table.scope),
   parentIdx: index("pro_orgs_parent_idx").on(table.parentId),
+  priorityIdx: index("pro_orgs_priority_idx").on(table.priority),
 }));
 
 export const insertProOrganizationSchema = createInsertSchema(proOrganizations).omit({

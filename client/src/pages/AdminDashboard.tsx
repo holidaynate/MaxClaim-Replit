@@ -106,6 +106,8 @@ interface ProOrganization {
   parentId: string | null;
   regions: string[] | null;
   states: string[] | null;
+  priority: number | null;
+  primaryHazards: string[] | null;
   contactEmail: string | null;
   contactPhone: string | null;
   notes: string | null;
@@ -955,9 +957,17 @@ export default function AdminDashboard() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base">{org.name}</CardTitle>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {formatCategory(org.category)}
-                        </Badge>
+                        <div className="flex gap-1 shrink-0">
+                          {org.priority === 1 && (
+                            <Badge variant="destructive" className="text-xs">P1</Badge>
+                          )}
+                          {org.priority === 2 && (
+                            <Badge variant="default" className="text-xs bg-amber-500">P2</Badge>
+                          )}
+                          <Badge variant="outline" className="text-xs">
+                            {formatCategory(org.category)}
+                          </Badge>
+                        </div>
                       </div>
                       <CardDescription className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
@@ -967,6 +977,15 @@ export default function AdminDashboard() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
+                      {org.primaryHazards && org.primaryHazards.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {org.primaryHazards.slice(0, 4).map((h, i) => (
+                            <Badge key={i} variant="outline" className="text-xs text-orange-400 border-orange-400/50">
+                              {h.replace(/_/g, " ")}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                       {org.regions && org.regions.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-2">
                           {org.regions.slice(0, 6).map((r, i) => (

@@ -247,6 +247,259 @@ const proOrganizationsData = [
     scope: "national" as const,
     website: "https://www.sba.gov/funding-programs/disaster-assistance",
     notes: "Low-interest disaster loans for homeowners and businesses"
+  },
+
+  // =====================
+  // STATE LICENSING BOARDS (Critical + High Risk States)
+  // =====================
+  {
+    name: "Texas Department of Licensing & Regulation (TDLR)",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "TX",
+    states: ["TX"],
+    website: "https://www.tdlr.texas.gov",
+    directoryUrl: "https://www.tdlr.texas.gov/LicenseSearch/",
+    priority: 1,
+    primaryHazards: ["severe_storm", "hurricane", "flood", "hail", "tornado"],
+    notes: "Texas contractor license search by type - Critical disaster state"
+  },
+  {
+    name: "Florida Dept of Business & Professional Regulation (DBPR)",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "FL",
+    states: ["FL"],
+    website: "https://www.myfloridalicense.com",
+    directoryUrl: "https://www.myfloridalicense.com/wl11.asp",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood", "severe_storm"],
+    notes: "Florida licensed contractor search - Critical disaster state"
+  },
+  {
+    name: "California Contractors State License Board (CSLB)",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "CA",
+    states: ["CA"],
+    website: "https://www.cslb.ca.gov",
+    directoryUrl: "https://www.cslb.ca.gov/OnlineServices/CheckLicenseII/CheckLicense.aspx",
+    priority: 1,
+    primaryHazards: ["wildfire", "flood", "earthquake", "severe_storm"],
+    notes: "California license lookup by contractor type - Critical disaster state"
+  },
+  {
+    name: "Oklahoma Construction Industries Board",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "OK",
+    states: ["OK"],
+    website: "https://ocieb.ok.gov",
+    directoryUrl: "https://ocieb.ok.gov/verify-license",
+    priority: 1,
+    primaryHazards: ["tornado", "severe_storm", "hail", "flood"],
+    notes: "Oklahoma contractor license verification - Critical disaster state"
+  },
+  {
+    name: "Illinois Division of Professional Regulation",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "IL",
+    states: ["IL"],
+    website: "https://www.idfpr.com",
+    directoryUrl: "https://online-dfpr.micropact.com/lookup/licenselookup.aspx",
+    priority: 1,
+    primaryHazards: ["severe_storm", "tornado", "flood"],
+    notes: "Illinois license lookup - Critical disaster state"
+  },
+  {
+    name: "Georgia Secretary of State - Contractor Licensing",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "GA",
+    states: ["GA"],
+    website: "https://sos.ga.gov",
+    directoryUrl: "https://verify.sos.ga.gov/verification/",
+    priority: 2,
+    primaryHazards: ["severe_storm", "tornado", "hurricane"],
+    notes: "Georgia contractor verification - High disaster state"
+  },
+  {
+    name: "North Carolina Licensing Board for General Contractors",
+    category: "licensing" as const,
+    scope: "state" as const,
+    state: "NC",
+    states: ["NC"],
+    website: "https://www.nclbgc.org",
+    directoryUrl: "https://www.nclbgc.org/LicenseeList",
+    priority: 2,
+    primaryHazards: ["hurricane", "severe_storm", "flood"],
+    notes: "North Carolina GC licensing - High disaster state"
+  },
+
+  // =====================
+  // ADDITIONAL STATE INSURANCE COMMISSIONERS
+  // =====================
+  {
+    name: "California Department of Insurance",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "CA",
+    states: ["CA"],
+    website: "https://www.insurance.ca.gov",
+    directoryUrl: "https://interactive.web.insurance.ca.gov/webuser/licw_name_search$.startup",
+    priority: 1,
+    notes: "California adjuster/agent license lookup"
+  },
+  {
+    name: "Oklahoma Insurance Department",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "OK",
+    states: ["OK"],
+    website: "https://www.oid.ok.gov",
+    directoryUrl: "https://sbs.naic.org/solar-external-lookup/",
+    priority: 1,
+    notes: "Oklahoma insurance license search"
+  },
+  {
+    name: "Mississippi Insurance Department",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "MS",
+    states: ["MS"],
+    website: "https://www.mid.ms.gov",
+    directoryUrl: "https://sbs.naic.org/solar-external-lookup/",
+    priority: 1,
+    notes: "Mississippi adjuster license lookup"
+  },
+  {
+    name: "Illinois Department of Insurance",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "IL",
+    states: ["IL"],
+    website: "https://insurance.illinois.gov",
+    directoryUrl: "https://sbs.naic.org/solar-external-lookup/",
+    priority: 1,
+    notes: "Illinois insurance license search"
+  },
+  {
+    name: "Georgia Office of Commissioner of Insurance",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "GA",
+    states: ["GA"],
+    website: "https://oci.georgia.gov",
+    directoryUrl: "https://sbs.naic.org/solar-external-lookup/",
+    priority: 2,
+    notes: "Georgia insurance license lookup"
+  },
+  {
+    name: "Missouri Department of Commerce & Insurance",
+    category: "regulator" as const,
+    scope: "state" as const,
+    state: "MO",
+    states: ["MO"],
+    website: "https://insurance.mo.gov",
+    directoryUrl: "https://sbs.naic.org/solar-external-lookup/",
+    priority: 2,
+    primaryHazards: ["severe_storm", "tornado", "flood"],
+    notes: "Missouri insurance license search - High disaster state"
+  },
+
+  // =====================
+  // ADDITIONAL STATE BAR ASSOCIATIONS
+  // =====================
+  {
+    name: "Oklahoma Bar Association - Lawyer Referral",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "OK",
+    states: ["OK"],
+    website: "https://www.okbar.org",
+    directoryUrl: "https://www.okbar.org/lrs/",
+    priority: 1,
+    notes: "Oklahoma lawyer referral service"
+  },
+  {
+    name: "Mississippi Bar Association",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "MS",
+    states: ["MS"],
+    website: "https://www.msbar.org",
+    directoryUrl: "https://www.msbar.org/lawyer-directory/",
+    priority: 1,
+    notes: "Mississippi lawyer directory"
+  },
+  {
+    name: "Illinois State Bar Association",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "IL",
+    states: ["IL"],
+    website: "https://www.isba.org",
+    directoryUrl: "https://www.isba.org/public/findlawyer",
+    priority: 1,
+    notes: "Illinois lawyer referral service"
+  },
+  {
+    name: "Missouri Bar - Find a Lawyer",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "MO",
+    states: ["MO"],
+    website: "https://www.mobar.org",
+    directoryUrl: "https://www.mobar.org/public/lawyersearch.aspx",
+    priority: 2,
+    notes: "Missouri attorney search - High disaster state"
+  },
+  {
+    name: "Georgia State Bar - Lawyer Search",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "GA",
+    states: ["GA"],
+    website: "https://www.gabar.org",
+    directoryUrl: "https://www.gabar.org/forthepublic/findalawyer/",
+    priority: 2,
+    notes: "Georgia lawyer finder"
+  },
+  {
+    name: "North Carolina State Bar",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "NC",
+    states: ["NC"],
+    website: "https://www.ncbar.gov",
+    directoryUrl: "https://www.nclawspecialists.gov/",
+    priority: 2,
+    notes: "North Carolina attorney search"
+  },
+  {
+    name: "Alabama State Bar - Find a Lawyer",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "AL",
+    states: ["AL"],
+    website: "https://www.alabar.org",
+    directoryUrl: "https://www.alabar.org/find-a-lawyer/",
+    priority: 2,
+    primaryHazards: ["severe_storm", "tornado", "hurricane"],
+    notes: "Alabama lawyer referral - High disaster state"
+  },
+  {
+    name: "Colorado Bar Association - Find a Lawyer",
+    category: "attorneys" as const,
+    scope: "state" as const,
+    state: "CO",
+    states: ["CO"],
+    website: "https://www.cobar.org",
+    directoryUrl: "https://www.cobar.org/Find-A-Lawyer",
+    priority: 2,
+    primaryHazards: ["severe_storm", "wildfire", "hail"],
+    notes: "Colorado attorney search - High disaster state"
   }
 ];
 
