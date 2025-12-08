@@ -373,6 +373,9 @@ export const pricingDataPointsRelations = relations(pricingDataPoints, ({ one })
   }),
 }));
 
+// Partner billing status for admin dashboard filtering
+export const billingStatus = pgEnum("billing_status", ["active", "past_due", "cancelled", "pending", "trial"]);
+
 // Partners - Contractors, Adjusters, and Agencies applying for the network
 export const partners = pgTable("partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -382,10 +385,36 @@ export const partners = pgTable("partners", {
   contactPerson: text("contact_person").notNull(),
   email: text("email").notNull(),
   password: text("password"), // Hashed password for credential login
+  emailVerified: integer("email_verified").default(0).$type<boolean>(), // Email verification status
   phone: text("phone").notNull(),
   website: text("website"),
   licenseNumber: text("license_number"),
+  zipCode: varchar("zip_code", { length: 5 }), // Primary ZIP for filtering
+  state: varchar("state", { length: 2 }), // State for grouping
+  subType: text("sub_type"), // Specialty: roofing, plumbing, etc.
+  orgMembership: text("org_membership"), // NRCA, AGC, NARI, etc.
   signingAgentId: varchar("signing_agent_id"), // Sales agent who signed this partner
+  planId: text("plan_id").default("free"), // free, standard, premium
+  billingStatus: billingStatus("billing_status").default("pending"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  adConfig: jsonb("ad_config").$type<{
+    bannerSize?: string;
+    placements?: string[];
+    cpc?: number;
+    monthlyBudget?: number;
+    affiliatePct?: number;
+  }>(),
+  metrics: jsonb("metrics").$type<{
+    impressions?: number;
+    clicks?: number;
+    leads?: number;
+    conversions?: number;
+    spendMTD?: number;
+    spendYTD?: number;
+    payoutsMTD?: number;
+    payoutsYTD?: number;
+  }>().default({}),
   status: partnerStatus("status").default("pending").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -394,6 +423,10 @@ export const partners = pgTable("partners", {
   statusIdx: index("partners_status_idx").on(table.status),
   typeIdx: index("partners_type_idx").on(table.type),
   agentIdx: index("partners_agent_idx").on(table.signingAgentId),
+  stateIdx: index("partners_state_idx").on(table.state),
+  zipIdx: index("partners_zip_idx").on(table.zipCode),
+  planIdx: index("partners_plan_idx").on(table.planId),
+  billingIdx: index("partners_billing_idx").on(table.billingStatus),
 }));
 
 export const insertPartnerSchema = createInsertSchema(partners).omit({
@@ -654,6 +687,7 @@ export const salesAgents = pgTable("sales_agents", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   password: text("password"), // Hashed password for credential login
+  emailVerified: integer("email_verified").default(0).$type<boolean>(), // Email verification status
   phone: text("phone"),
   region: text("region"),
   birthYear: integer("birth_year"),
@@ -1198,3 +1232,60 @@ export const insertBatchJobSchema = createInsertSchema(batchJobs).omit({
 
 export type InsertBatchJob = z.infer<typeof insertBatchJobSchema>;
 export type BatchJob = typeof batchJobs.$inferSelect;
+
+// ============================================
+// AUTH TOKENS - Password Reset & Email Verification
+// ============================================
+
+// Token type enum
+export const tokenType = pgEnum("token_type", ["password_reset", "email_verification"]);
+
+// Password Reset Tokens - For forgot password flow
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  userType: text("user_type").notNull(), // 'agent' or 'partner'
+  userId: varchar("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("password_reset_token_idx").on(table.token),
+  emailIdx: index("password_reset_email_idx").on(table.email),
+  expiresIdx: index("password_reset_expires_idx").on(table.expiresAt),
+}));
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  usedAt: true,
+  createdAt: true,
+});
+
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+// Email Verification Tokens - For email verification flow
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  userType: text("user_type").notNull(), // 'agent' or 'partner'
+  userId: varchar("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("email_verification_token_idx").on(table.token),
+  emailIdx: index("email_verification_email_idx").on(table.email),
+  expiresIdx: index("email_verification_expires_idx").on(table.expiresAt),
+}));
+
+export const insertEmailVerificationTokenSchema = createInsertSchema(emailVerificationTokens).omit({
+  id: true,
+  verifiedAt: true,
+  createdAt: true,
+});
+
+export type InsertEmailVerificationToken = z.infer<typeof insertEmailVerificationTokenSchema>;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;

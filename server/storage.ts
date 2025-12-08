@@ -54,6 +54,10 @@ import {
   type InsertEmailTemplate,
   type BatchJob,
   type InsertBatchJob,
+  type PasswordResetToken,
+  type InsertPasswordResetToken,
+  type EmailVerificationToken,
+  type InsertEmailVerificationToken,
   users,
   replitUsers,
   userClaims,
@@ -83,6 +87,8 @@ import {
   proOrganizations,
   emailTemplates,
   batchJobs,
+  passwordResetTokens,
+  emailVerificationTokens,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, and, inArray, like, gte, lte } from "drizzle-orm";
@@ -271,6 +277,30 @@ export interface IStorage {
   getBatchJob(id: string): Promise<BatchJob | undefined>;
   updateBatchJobStatus(id: string, status: 'queued' | 'processing' | 'completed' | 'failed', results?: any, error?: string): Promise<void>;
   getRecentBatchJobs(limit?: number): Promise<BatchJob[]>;
+  
+  // ============================================
+  // AUTH TOKENS - Password Reset & Email Verification
+  // ============================================
+  
+  // Password Reset Tokens
+  createPasswordResetToken(data: InsertPasswordResetToken): Promise<PasswordResetToken>;
+  getPasswordResetTokenByToken(token: string): Promise<PasswordResetToken | undefined>;
+  markPasswordResetTokenUsed(id: string): Promise<void>;
+  deleteExpiredPasswordResetTokens(): Promise<void>;
+  
+  // Email Verification Tokens
+  createEmailVerificationToken(data: InsertEmailVerificationToken): Promise<EmailVerificationToken>;
+  getEmailVerificationTokenByToken(token: string): Promise<EmailVerificationToken | undefined>;
+  markEmailVerified(id: string): Promise<void>;
+  deleteExpiredEmailVerificationTokens(): Promise<void>;
+  
+  // Update email verified status
+  updateAgentEmailVerified(id: string, verified: boolean): Promise<void>;
+  updatePartnerEmailVerified(id: string, verified: boolean): Promise<void>;
+  
+  // Update password
+  updateAgentPassword(id: string, hashedPassword: string): Promise<void>;
+  updatePartnerPassword(id: string, hashedPassword: string): Promise<void>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -1490,6 +1520,94 @@ export class DatabaseStorage implements IStorage {
       .from(batchJobs)
       .orderBy(desc(batchJobs.createdAt))
       .limit(limit);
+  }
+
+  // ============================================
+  // AUTH TOKENS - Password Reset & Email Verification
+  // ============================================
+
+  // Password Reset Tokens
+  async createPasswordResetToken(data: InsertPasswordResetToken): Promise<PasswordResetToken> {
+    const [token] = await db.insert(passwordResetTokens).values(data).returning();
+    return token;
+  }
+
+  async getPasswordResetTokenByToken(token: string): Promise<PasswordResetToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.token, token));
+    return result || undefined;
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, id));
+  }
+
+  async deleteExpiredPasswordResetTokens(): Promise<void> {
+    await db
+      .delete(passwordResetTokens)
+      .where(lte(passwordResetTokens.expiresAt, new Date()));
+  }
+
+  // Email Verification Tokens
+  async createEmailVerificationToken(data: InsertEmailVerificationToken): Promise<EmailVerificationToken> {
+    const [token] = await db.insert(emailVerificationTokens).values(data).returning();
+    return token;
+  }
+
+  async getEmailVerificationTokenByToken(token: string): Promise<EmailVerificationToken | undefined> {
+    const [result] = await db
+      .select()
+      .from(emailVerificationTokens)
+      .where(eq(emailVerificationTokens.token, token));
+    return result || undefined;
+  }
+
+  async markEmailVerified(id: string): Promise<void> {
+    await db
+      .update(emailVerificationTokens)
+      .set({ verifiedAt: new Date() })
+      .where(eq(emailVerificationTokens.id, id));
+  }
+
+  async deleteExpiredEmailVerificationTokens(): Promise<void> {
+    await db
+      .delete(emailVerificationTokens)
+      .where(lte(emailVerificationTokens.expiresAt, new Date()));
+  }
+
+  // Update email verified status for agents and partners
+  async updateAgentEmailVerified(id: string, verified: boolean): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({ emailVerified: verified, updatedAt: new Date() })
+      .where(eq(salesAgents.id, id));
+  }
+
+  async updatePartnerEmailVerified(id: string, verified: boolean): Promise<void> {
+    await db
+      .update(partners)
+      .set({ emailVerified: verified, updatedAt: new Date() })
+      .where(eq(partners.id, id));
+  }
+
+  // Update password for agents and partners
+  async updateAgentPassword(id: string, hashedPassword: string): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(salesAgents.id, id));
+  }
+
+  async updatePartnerPassword(id: string, hashedPassword: string): Promise<void> {
+    await db
+      .update(partners)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(partners.id, id));
   }
 }
 
