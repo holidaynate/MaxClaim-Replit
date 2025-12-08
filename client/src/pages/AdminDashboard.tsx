@@ -964,6 +964,12 @@ export default function AdminDashboard() {
                           {org.priority === 2 && (
                             <Badge variant="default" className="text-xs bg-amber-500">P2</Badge>
                           )}
+                          {org.priority === 3 && (
+                            <Badge variant="default" className="text-xs bg-yellow-500/80">P3</Badge>
+                          )}
+                          {org.priority === 4 && (
+                            <Badge variant="default" className="text-xs bg-green-500/70">P4</Badge>
+                          )}
                           <Badge variant="outline" className="text-xs">
                             {formatCategory(org.category)}
                           </Badge>
