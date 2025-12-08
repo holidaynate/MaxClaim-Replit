@@ -26,6 +26,7 @@ Key features include:
 - **User Claims Dashboard**: Authenticated users can view their claim history and reports.
 - **Monetization System**: Complete partner monetization with sales agent reference codes, commission management, and Stripe integration.
 - **Pro Organizations Database**: A 50-state lead prospecting tool with professional organizations, supporting hierarchical structures and regional coverage.
+- **Local Pros API**: Enhanced organization search with smart prioritization (local > state > regional > national), ZIP-to-state mapping, trade filtering, and dynamic organization display with collapsible "Show more" UI.
 - **Disaster Risk Prioritization**: A 4-tier priority system for sales agent lead targeting based on disaster frequency and primary hazards.
 - **Email Templates System**: Four vendor outreach email templates with placeholder support.
 - **Performance & Caching Infrastructure**: Enterprise-grade caching and async processing for audit results and batch operations.
