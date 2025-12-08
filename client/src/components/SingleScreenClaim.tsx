@@ -1,3 +1,13 @@
+/**
+ * MaxClaim – Frontend UI
+ * https://github.com/holidaynate/MaxClaim-Replit
+ *
+ * © 2023–2025 Nate Chacon (InfiN8 / HolidayNate). All rights reserved.
+ *
+ * Original design and UX by Nate Chacon.
+ * External CSS/JS frameworks used only as utilities; see THIRD_PARTY_NOTICES.md.
+ */
+
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";

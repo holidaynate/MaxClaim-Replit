@@ -1,4 +1,19 @@
 /**
+ * MaxClaim – Insurance Claim Fair Market Value Tool
+ * https://github.com/holidaynate/MaxClaim-Replit
+ *
+ * © 2023–2025 Nate Chacon (InfiN8 / HolidayNate). All rights reserved.
+ *
+ * This file is part of the proprietary MaxClaim SaaS implementation.
+ * Business logic (claim auditing, multi-carrier pricing aggregation,
+ * geo-targeted partner matching, weighted "pay what you want" promotions)
+ * is original to MaxClaim and protected by copyright and pending patents.
+ *
+ * Third-party libraries are used under their respective open source licenses
+ * as documented in THIRD_PARTY_NOTICES.md.
+ */
+
+/**
  * Multi-Source Pricing Citation System
  * 
  * Provides transparent, defensible pricing documentation for insurance claims.
