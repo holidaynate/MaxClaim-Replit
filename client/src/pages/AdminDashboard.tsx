@@ -30,6 +30,19 @@ interface Partner {
   status: "pending" | "approved" | "rejected";
   createdAt: string;
   priority?: number;
+  zipCode?: string;
+  state?: string;
+  subType?: string;
+  orgMembership?: string;
+  planId?: string;
+  billingStatus?: "pending" | "active" | "past_due" | "cancelled";
+  signingAgentId?: string;
+  metrics?: {
+    impressions?: number;
+    clicks?: number;
+    leads?: number;
+    spend?: number;
+  };
 }
 
 interface SalesAgent {
@@ -175,12 +188,152 @@ interface MetricsData {
   }>;
 }
 
+interface PartnerCardProps {
+  partner: Partner;
+  approveMutation: any;
+  rejectMutation: any;
+  agents: SalesAgent[];
+}
+
+function PartnerCard({ partner, approveMutation, rejectMutation, agents }: PartnerCardProps) {
+  const signingAgent = agents.find(a => a.id === partner.signingAgentId);
+  
+  return (
+    <Card data-testid={`card-partner-${partner.id}`}>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              {partner.companyName}
+            </CardTitle>
+            <CardDescription className="mt-1">
+              {partner.type.charAt(0).toUpperCase() + partner.type.slice(1)} • {partner.tier.charAt(0).toUpperCase() + partner.tier.slice(1)} Tier
+              {partner.state && ` • ${partner.state}`}
+              {partner.subType && ` • ${partner.subType}`}
+            </CardDescription>
+          </div>
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Badge variant={partner.status === "approved" ? "default" : partner.status === "rejected" ? "destructive" : "secondary"}>
+              {partner.status}
+            </Badge>
+            {partner.billingStatus && partner.billingStatus !== "pending" && (
+              <Badge variant={partner.billingStatus === "active" ? "default" : partner.billingStatus === "past_due" ? "destructive" : "secondary"}>
+                {partner.billingStatus === "active" ? "Paid" : partner.billingStatus === "past_due" ? "Past Due" : partner.billingStatus}
+              </Badge>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <Mail className="h-4 w-4 text-slate-400" />
+              <span className="text-slate-300">{partner.email}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Phone className="h-4 w-4 text-slate-400" />
+              <span className="text-slate-300">{partner.phone}</span>
+            </div>
+            {partner.zipCode && (
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="h-4 w-4 text-slate-400" />
+                <span className="text-slate-300">{partner.zipCode}{partner.state ? `, ${partner.state}` : ''}</span>
+              </div>
+            )}
+            {partner.website && (
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="h-4 w-4 text-slate-400" />
+                <a href={partner.website} target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:text-sky-400">
+                  {partner.website}
+                </a>
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm">
+              <span className="text-slate-400">Contact: </span>
+              <span className="text-slate-300">{partner.contactPerson}</span>
+            </div>
+            {partner.licenseNumber && (
+              <div className="text-sm">
+                <span className="text-slate-400">License: </span>
+                <span className="text-slate-300">{partner.licenseNumber}</span>
+              </div>
+            )}
+            {partner.orgMembership && (
+              <div className="text-sm">
+                <span className="text-slate-400">Org: </span>
+                <span className="text-slate-300">{partner.orgMembership}</span>
+              </div>
+            )}
+            {signingAgent && (
+              <div className="text-sm">
+                <span className="text-slate-400">Agent: </span>
+                <span className="text-sky-400">{signingAgent.name}</span>
+              </div>
+            )}
+            <div className="text-sm">
+              <span className="text-slate-400">Applied: </span>
+              <span className="text-slate-300">{new Date(partner.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Metrics Row */}
+        {partner.metrics && (partner.metrics.impressions || partner.metrics.clicks || partner.metrics.leads) && (
+          <div className="grid grid-cols-4 gap-4 pt-3 border-t">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">Impressions</p>
+              <p className="font-semibold">{partner.metrics.impressions?.toLocaleString() || 0}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">Clicks</p>
+              <p className="font-semibold">{partner.metrics.clicks?.toLocaleString() || 0}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">Leads</p>
+              <p className="font-semibold">{partner.metrics.leads?.toLocaleString() || 0}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">Spend</p>
+              <p className="font-semibold text-green-500">${partner.metrics.spend?.toLocaleString() || 0}</p>
+            </div>
+          </div>
+        )}
+
+        {partner.status === "pending" && (
+          <div className="flex gap-2 pt-4 flex-wrap">
+            <Button onClick={() => approveMutation.mutate(partner.id)} disabled={approveMutation.isPending} className="flex-1" data-testid={`button-approve-${partner.id}`}>
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Approve
+            </Button>
+            <Button onClick={() => rejectMutation.mutate(partner.id)} disabled={rejectMutation.isPending} variant="destructive" className="flex-1" data-testid={`button-reject-${partner.id}`}>
+              <XCircle className="h-4 w-4 mr-2" />
+              Reject
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [password, setPassword] = useState("");
   const [mainTab, setMainTab] = useState("overview");
   const [partnerStatus, setPartnerStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [partnerState, setPartnerState] = useState<string>("all");
+  const [partnerType, setPartnerType] = useState<string>("all");
+  const [partnerTier, setPartnerTier] = useState<string>("all");
+  const [partnerSubType, setPartnerSubType] = useState<string>("all");
+  const [partnerBilling, setPartnerBilling] = useState<string>("all");
+  const [partnerGroupBy, setPartnerGroupBy] = useState<string>("none");
+  const [agentStatus, setAgentStatus] = useState<string>("all");
+  const [agentRegion, setAgentRegion] = useState<string>("all");
   const [proOrgCategory, setProOrgCategory] = useState<string>("all");
   const [proOrgState, setProOrgState] = useState<string>("all");
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
@@ -283,6 +436,42 @@ export default function AdminDashboard() {
   const payouts = payoutsData?.payouts || [];
   const proOrgs = proOrgsData?.organizations || [];
   const emailTemplates = templatesData?.templates || [];
+
+  // Apply client-side filters to partners
+  const filteredPartners = partners.filter(p => {
+    if (partnerType !== "all" && p.type !== partnerType) return false;
+    if (partnerTier !== "all" && p.tier !== partnerTier) return false;
+    if (partnerState !== "all" && p.state !== partnerState) return false;
+    if (partnerSubType !== "all" && p.subType !== partnerSubType) return false;
+    if (partnerBilling !== "all" && p.billingStatus !== partnerBilling) return false;
+    return true;
+  });
+
+  // Group partners if grouping is enabled
+  const groupedPartners = (() => {
+    if (partnerGroupBy === "none") return null;
+    const groups: Record<string, Partner[]> = {};
+    filteredPartners.forEach(p => {
+      let key = "Unknown";
+      switch (partnerGroupBy) {
+        case "state": key = p.state || "No State"; break;
+        case "type": key = p.type || "No Type"; break;
+        case "tier": key = p.tier || "No Tier"; break;
+        case "billing": key = p.billingStatus || "No Status"; break;
+        case "agent": key = p.signingAgentId || "No Agent"; break;
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+    return groups;
+  })();
+
+  // Apply client-side filters to agents
+  const filteredAgents = agents.filter(a => {
+    if (agentStatus !== "all" && a.status !== agentStatus) return false;
+    if (agentRegion !== "all" && a.region !== agentRegion) return false;
+    return true;
+  });
 
   // Get unique states from pro organizations for filter
   const uniqueStates = Array.from(new Set(proOrgs.filter(o => o.state).map(o => o.state as string))).sort();
@@ -611,18 +800,173 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="partners">
-            <div className="mb-4">
-              <Select value={partnerStatus} onValueChange={(val) => setPartnerStatus(val as any)}>
-                <SelectTrigger className="w-48" data-testid="select-partner-status">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Enhanced Filter Bar */}
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Filter & Group Partners
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                  {/* Status Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Status</Label>
+                    <Select value={partnerStatus} onValueChange={(val) => setPartnerStatus(val as any)}>
+                      <SelectTrigger data-testid="select-partner-status">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Type Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Type</Label>
+                    <Select value={partnerType} onValueChange={setPartnerType}>
+                      <SelectTrigger data-testid="select-partner-type">
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="contractor">Contractor</SelectItem>
+                        <SelectItem value="adjuster">Adjuster</SelectItem>
+                        <SelectItem value="agency">Agency</SelectItem>
+                        <SelectItem value="attorney">Attorney</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Tier Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Plan Tier</Label>
+                    <Select value={partnerTier} onValueChange={setPartnerTier}>
+                      <SelectTrigger data-testid="select-partner-tier">
+                        <SelectValue placeholder="All Tiers" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tiers</SelectItem>
+                        <SelectItem value="free">Free</SelectItem>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* State Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">State</Label>
+                    <Select value={partnerState} onValueChange={setPartnerState}>
+                      <SelectTrigger data-testid="select-partner-state">
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(partners.filter(p => p.state).map(p => p.state!))).sort().map(s => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Trade Type Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Trade</Label>
+                    <Select value={partnerSubType} onValueChange={setPartnerSubType}>
+                      <SelectTrigger data-testid="select-partner-subtype">
+                        <SelectValue placeholder="All Trades" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Trades</SelectItem>
+                        <SelectItem value="roofing">Roofing</SelectItem>
+                        <SelectItem value="general">General Contracting</SelectItem>
+                        <SelectItem value="restoration">Restoration</SelectItem>
+                        <SelectItem value="public_adjuster">Public Adjuster</SelectItem>
+                        <SelectItem value="insurance_attorney">Insurance Attorney</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Billing Status Filter */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Billing</Label>
+                    <Select value={partnerBilling} onValueChange={setPartnerBilling}>
+                      <SelectTrigger data-testid="select-partner-billing">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="past_due">Past Due</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Group By */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Group By</Label>
+                    <Select value={partnerGroupBy} onValueChange={setPartnerGroupBy}>
+                      <SelectTrigger data-testid="select-partner-groupby">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Grouping</SelectItem>
+                        <SelectItem value="state">State</SelectItem>
+                        <SelectItem value="type">Type</SelectItem>
+                        <SelectItem value="tier">Plan Tier</SelectItem>
+                        <SelectItem value="billing">Billing Status</SelectItem>
+                        <SelectItem value="agent">Signing Agent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                {(partnerType !== "all" || partnerTier !== "all" || partnerState !== "all" || partnerSubType !== "all" || partnerBilling !== "all") && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t flex-wrap">
+                    <span className="text-xs text-muted-foreground">Active filters:</span>
+                    {partnerType !== "all" && (
+                      <Badge variant="secondary" className="text-xs">Type: {partnerType}</Badge>
+                    )}
+                    {partnerTier !== "all" && (
+                      <Badge variant="secondary" className="text-xs">Tier: {partnerTier}</Badge>
+                    )}
+                    {partnerState !== "all" && (
+                      <Badge variant="secondary" className="text-xs">State: {partnerState}</Badge>
+                    )}
+                    {partnerSubType !== "all" && (
+                      <Badge variant="secondary" className="text-xs">Trade: {partnerSubType}</Badge>
+                    )}
+                    {partnerBilling !== "all" && (
+                      <Badge variant="secondary" className="text-xs">Billing: {partnerBilling}</Badge>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        setPartnerType("all");
+                        setPartnerTier("all");
+                        setPartnerState("all");
+                        setPartnerSubType("all");
+                        setPartnerBilling("all");
+                        setPartnerGroupBy("none");
+                      }}
+                      data-testid="button-clear-filters"
+                    >
+                      Clear All
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {partnersLoading ? (
               <Card>
@@ -630,15 +974,33 @@ export default function AdminDashboard() {
                   <p className="text-center text-slate-400">Loading partners...</p>
                 </CardContent>
               </Card>
-            ) : partners.length === 0 ? (
+            ) : filteredPartners.length === 0 ? (
               <Card>
                 <CardContent className="p-6">
-                  <p className="text-center text-slate-400">No {partnerStatus} partners found</p>
+                  <p className="text-center text-slate-400">No partners match your filters</p>
                 </CardContent>
               </Card>
+            ) : groupedPartners ? (
+              // Grouped display
+              <div className="space-y-6">
+                {Object.entries(groupedPartners).sort(([a], [b]) => a.localeCompare(b)).map(([groupName, groupPartners]) => (
+                  <div key={groupName}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Badge variant="outline" className="text-sm font-semibold">{groupName}</Badge>
+                      <span className="text-xs text-muted-foreground">({groupPartners.length} partners)</span>
+                    </div>
+                    <div className="grid gap-4">
+                      {groupPartners.map((partner) => (
+                        <PartnerCard key={partner.id} partner={partner} approveMutation={approveMutation} rejectMutation={rejectMutation} agents={agents} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
+              // Flat display
               <div className="grid gap-4">
-                {partners.map((partner) => (
+                {filteredPartners.map((partner) => (
                   <Card key={partner.id} data-testid={`card-partner-${partner.id}`}>
                     <CardHeader>
                       <div className="flex items-start justify-between gap-4">
@@ -714,23 +1076,79 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="agents">
+            {/* Agent Filter Bar */}
+            <Card className="mb-4">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Filter Sales Agents
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-3 flex-wrap">
+                  <div className="min-w-[150px]">
+                    <Label className="text-xs text-muted-foreground mb-1 block">Status</Label>
+                    <Select value={agentStatus} onValueChange={setAgentStatus}>
+                      <SelectTrigger data-testid="select-agent-status">
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <Label className="text-xs text-muted-foreground mb-1 block">Region</Label>
+                    <Select value={agentRegion} onValueChange={setAgentRegion}>
+                      <SelectTrigger data-testid="select-agent-region">
+                        <SelectValue placeholder="All Regions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Regions</SelectItem>
+                        {Array.from(new Set(agents.filter(a => a.region).map(a => a.region!))).sort().map(r => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {(agentStatus !== "all" || agentRegion !== "all") && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="self-end h-9"
+                      onClick={() => {
+                        setAgentStatus("all");
+                        setAgentRegion("all");
+                      }}
+                      data-testid="button-clear-agent-filters"
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             {agentsLoading ? (
               <Card>
                 <CardContent className="p-6">
                   <p className="text-center text-slate-400">Loading agents...</p>
                 </CardContent>
               </Card>
-            ) : agents.length === 0 ? (
+            ) : filteredAgents.length === 0 ? (
               <Card>
                 <CardContent className="p-6 text-center">
                   <UserPlus className="h-12 w-12 mx-auto text-slate-400 mb-4" />
-                  <p className="text-slate-400 mb-4">No sales agents found</p>
-                  <p className="text-sm text-slate-500">Agents can be added via the API</p>
+                  <p className="text-slate-400 mb-4">No agents match your filters</p>
+                  <p className="text-sm text-slate-500">Try adjusting your filter criteria</p>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {agents.map((agent) => (
+                {filteredAgents.map((agent) => (
                   <Card key={agent.id} data-testid={`card-agent-${agent.id}`}>
                     <CardHeader>
                       <div className="flex items-center justify-between gap-2">
