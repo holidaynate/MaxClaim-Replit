@@ -40,6 +40,7 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import { auditCache } from "./cache/auditCache";
 import { batchQueue } from "./queue/batchQueue";
+import { sendPasswordResetEmail, sendEmailVerificationEmail } from "./services/emailService";
 
 // Extend Express session type
 declare module "express-session" {
@@ -432,20 +433,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       expiresAt,
     });
     
-    // In production, send email via SendGrid
-    // For now, log the reset link
-    const resetLink = `${process.env.REPLIT_DEV_DOMAIN || 'http://localhost:5000'}/reset-password?token=${token}`;
-    console.log(`[PASSWORD RESET] Token generated for ${normalizedEmail}: ${resetLink}`);
-    
-    // TODO: Send email via SendGrid when SENDGRID_API_KEY is configured
-    // const sgMail = require('@sendgrid/mail');
-    // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    // await sgMail.send({
-    //   to: normalizedEmail,
-    //   from: 'noreply@maxclaim.com',
-    //   subject: 'Reset Your MaxClaim Password',
-    //   html: `<p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`
-    // });
+    // Send password reset email via SendGrid (or log if not configured)
+    await sendPasswordResetEmail(normalizedEmail, token, userType);
     
     res.json({ 
       success: true, 
