@@ -329,14 +329,22 @@ export function PlanSelectorCards({
     );
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent, planType: PlanType) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      onPlanSelect(planType);
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" role="status" aria-label="Loading plan options">
         <div className="grid md:grid-cols-3 gap-4">
           {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-80" />
+            <Skeleton key={i} className="h-80" aria-hidden="true" />
           ))}
         </div>
+        <span className="sr-only">Loading advertising plan options...</span>
       </div>
     );
   }
@@ -344,11 +352,16 @@ export function PlanSelectorCards({
   return (
     <div className="space-y-6">
       {currentStateDisaster && (
-        <Card className="bg-amber-500/10 border-amber-500/30">
+        <Card 
+          className="bg-amber-500/10 border-amber-500/30"
+          role="alert"
+          aria-live="polite"
+        >
           <CardContent className="py-3 flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" aria-hidden="true" />
             <div>
               <p className="text-sm text-amber-200 font-medium">
+                <span className="sr-only">Warning: </span>
                 Active Disaster Declaration: {currentStateDisaster.region}
               </p>
               <p className="text-xs text-amber-300/80">
@@ -360,20 +373,259 @@ export function PlanSelectorCards({
         </Card>
       )}
 
-      <div className="grid md:grid-cols-3 gap-4">
-        {renderPlanCard('build_your_own', planConfigs.build_your_own)}
-        {renderPlanCard('standard', planConfigs.standard)}
-        {renderPlanCard('premium', planConfigs.premium)}
-      </div>
+      <fieldset className="border-0 p-0 m-0">
+        <legend className="sr-only">Select your advertising plan</legend>
+        <div 
+          className="grid md:grid-cols-3 gap-4"
+          role="radiogroup" 
+          aria-label="Advertising plan options"
+        >
+          {(['build_your_own', 'standard', 'premium'] as const).map((planType) => {
+            const config = planConfigs[planType];
+            const Icon = config.icon;
+            const isSelected = selectedPlan === planType;
+            const rec = recommendations[planType];
+            
+            const priceDisplay = typeof config.price === 'function' 
+              ? config.price(rec?.totalBudget || 300)
+              : config.price;
 
-      <div className="pt-4 border-t border-slate-800">
-        <p className="text-xs text-slate-500 mb-3 text-center">
+            return (
+              <div key={planType} className="relative">
+                <input
+                  type="radio"
+                  id={`plan-${planType}`}
+                  name="advertising-plan"
+                  value={planType}
+                  checked={isSelected}
+                  onChange={() => onPlanSelect(planType)}
+                  className="sr-only peer"
+                  data-testid={`radio-plan-${planType}`}
+                  aria-describedby={`plan-${planType}-description`}
+                />
+                <label
+                  htmlFor={`plan-${planType}`}
+                  className="block cursor-pointer"
+                  onKeyDown={(e) => handleKeyDown(e, planType)}
+                >
+                  <Card
+                    className={`relative transition-all duration-200 ${
+                      isSelected 
+                        ? `${config.borderColor} border-2 shadow-lg shadow-${config.iconColor.replace('text-', '')}/20` 
+                        : 'border-slate-700 hover:border-slate-600 peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2'
+                    } bg-gradient-to-br ${config.bgGradient}`}
+                    data-testid={`card-plan-${planType}`}
+                    role="radio"
+                    aria-checked={isSelected}
+                    tabIndex={-1}
+                  >
+                    {config.badge && (
+                      <Badge 
+                        className={`absolute -top-2.5 right-4 ${
+                          planType === 'standard' ? 'bg-purple-500' : 'bg-amber-500'
+                        } text-white border-0`}
+                        data-testid={`badge-plan-${planType}`}
+                      >
+                        {config.badge}
+                      </Badge>
+                    )}
+                    
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg bg-slate-800/80`}>
+                            <Icon className={`w-5 h-5 ${config.iconColor}`} aria-hidden="true" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg text-slate-100">{config.title}</CardTitle>
+                            <CardDescription className="text-slate-400 text-sm" id={`plan-${planType}-description`}>
+                              {config.subtitle}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-xl font-bold ${planType === 'free' ? 'text-emerald-400' : 'text-slate-100'}`}>
+                            {priceDisplay}
+                          </div>
+                          {planType !== 'free' && rec && (
+                            <div className="text-xs text-slate-400">
+                              <span className="sr-only">Estimated </span>~{rec.estimatedMonthlyLeads} leads/mo
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      <ul className="space-y-2" aria-label={`${config.title} plan features`}>
+                        {config.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                            <Check className={`w-4 h-4 flex-shrink-0 mt-0.5 ${config.iconColor}`} aria-hidden="true" />
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      
+                      {rec && planType !== 'free' && (
+                        <div className="pt-3 border-t border-slate-700/50 space-y-2">
+                          <div className="flex items-center justify-between text-xs text-slate-400 gap-2 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-3 h-3" aria-hidden="true" />
+                              <span className="sr-only">Home region: </span>
+                              {rec.homeRegion}, {rec.state}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3" aria-hidden="true" />
+                              <span className="sr-only">Competitiveness score: </span>
+                              {rec.competitivenessScore}% competitive
+                            </span>
+                          </div>
+                          
+                          {rec.regions.length > 1 && (
+                            <div className="flex flex-wrap gap-1" aria-label="Included regions">
+                              {rec.regions.slice(0, 3).map((r, i) => (
+                                <Badge 
+                                  key={i}
+                                  variant="secondary" 
+                                  className="text-xs bg-slate-700/50 text-slate-300"
+                                >
+                                  {r.region.length > 15 ? `${r.region.substring(0, 15)}...` : r.region}
+                                </Badge>
+                              ))}
+                              {rec.regions.length > 3 && (
+                                <Badge variant="secondary" className="text-xs bg-slate-700/50 text-slate-300">
+                                  +{rec.regions.length - 3} more regions
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {planType === 'build_your_own' && onOpenRegionPicker && isSelected && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-2 border-sky-500/50 text-sky-400 hover:bg-sky-500/10 min-h-[44px]"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onOpenRegionPicker();
+                          }}
+                          data-testid="button-open-region-picker"
+                          aria-label="Configure your custom regions for the Build Your Own plan"
+                        >
+                          <MapPin className="w-4 h-4 mr-2" aria-hidden="true" />
+                          Configure Regions
+                          <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
+                        </Button>
+                      )}
+
+                      {isSelected && (
+                        <div className="flex items-center justify-center pt-2">
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                            <Check className="w-3 h-3 mr-1" aria-hidden="true" />
+                            Selected
+                          </Badge>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </label>
+              </div>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="pt-4 border-t border-slate-800 border-l-0 border-r-0 border-b-0 p-0 m-0">
+        <legend className="sr-only">Free plan option for trade association members</legend>
+        <p className="text-xs text-slate-500 mb-3 text-center" aria-hidden="true">
           Trade association members may qualify for free listing
         </p>
         <div className="max-w-md mx-auto opacity-75 hover:opacity-100 transition-opacity">
-          {renderPlanCard('free', planConfigs.free)}
+          {(() => {
+            const planType = 'free' as const;
+            const config = planConfigs[planType];
+            const Icon = config.icon;
+            const isSelected = selectedPlan === planType;
+
+            return (
+              <div className="relative">
+                <input
+                  type="radio"
+                  id={`plan-${planType}`}
+                  name="advertising-plan"
+                  value={planType}
+                  checked={isSelected}
+                  onChange={() => onPlanSelect(planType)}
+                  className="sr-only peer"
+                  data-testid={`radio-plan-${planType}`}
+                  aria-describedby={`plan-${planType}-description`}
+                />
+                <label
+                  htmlFor={`plan-${planType}`}
+                  className="block cursor-pointer"
+                  onKeyDown={(e) => handleKeyDown(e, planType)}
+                >
+                  <Card
+                    className={`relative transition-all duration-200 ${
+                      isSelected 
+                        ? `${config.borderColor} border-2 shadow-lg` 
+                        : 'border-slate-700 hover:border-slate-600 peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2'
+                    } bg-gradient-to-br ${config.bgGradient}`}
+                    data-testid={`card-plan-${planType}`}
+                    role="radio"
+                    aria-checked={isSelected}
+                    tabIndex={-1}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg bg-slate-800/80`}>
+                            <Icon className={`w-5 h-5 ${config.iconColor}`} aria-hidden="true" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-lg text-slate-100">{config.title}</CardTitle>
+                            <CardDescription className="text-slate-400 text-sm" id={`plan-${planType}-description`}>
+                              {config.subtitle}
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-emerald-400">
+                            {config.price as string}
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      <ul className="space-y-2" aria-label="Free plan features">
+                        {config.features.map((feature, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                            <Check className={`w-4 h-4 flex-shrink-0 mt-0.5 ${config.iconColor}`} aria-hidden="true" />
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {isSelected && (
+                        <div className="flex items-center justify-center pt-2">
+                          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                            <Check className="w-3 h-3 mr-1" aria-hidden="true" />
+                            Selected
+                          </Badge>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </label>
+              </div>
+            );
+          })()}
         </div>
-      </div>
+      </fieldset>
 
       {standardRec?.recommendation?.suggestion && selectedPlan === 'standard' && (
         <Card className="bg-slate-800/50 border-slate-700">

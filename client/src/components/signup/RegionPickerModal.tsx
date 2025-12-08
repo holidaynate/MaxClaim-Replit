@@ -158,75 +158,108 @@ export function RegionPickerModal({
 
   const isLoading = loadingRegions || loadingDemand;
 
+  const handleRegionKeyDown = (e: React.KeyboardEvent, region: string, isHome: boolean) => {
+    if (isHome) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      handleRegionToggle(region);
+    }
+  };
+
   const renderRegionItem = (region: string, type: 'home' | 'adjacent' | 'other') => {
     const demand = getRegionDemand(region);
     const isSelected = localRegions.includes(region);
     const isHome = type === 'home';
+    const regionId = `region-${region.toLowerCase().replace(/\s+/g, '-')}`;
+    
+    const demandLevelText = demand?.demandIndex 
+      ? demand.demandIndex >= 80 ? 'Very High' 
+        : demand.demandIndex >= 60 ? 'High' 
+        : demand.demandIndex >= 40 ? 'Medium' 
+        : 'Low'
+      : null;
     
     return (
       <div 
         key={region}
-        className={`p-3 rounded-lg border transition-all ${
+        className={`p-3 rounded-lg border transition-all min-h-[48px] ${
           isSelected 
             ? 'border-purple-500 bg-purple-500/10' 
             : 'border-slate-700 hover:border-slate-600 bg-slate-800/50'
         } ${isHome ? 'cursor-default' : 'cursor-pointer'}`}
         onClick={() => !isHome && handleRegionToggle(region)}
+        onKeyDown={(e) => handleRegionKeyDown(e, region, isHome)}
+        tabIndex={isHome ? -1 : 0}
+        role={isHome ? undefined : "checkbox"}
+        aria-checked={isHome ? undefined : isSelected}
+        aria-label={isHome 
+          ? `${region} - Your home region (always included)` 
+          : `${region}${type === 'adjacent' ? ' - Adjacent region' : ''}${demand?.disasterDeclaration ? ', Active disaster declaration' : ''}${demandLevelText ? `, ${demandLevelText} demand` : ''}`
+        }
         data-testid={`region-item-${region.toLowerCase().replace(/\s+/g, '-')}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             {!isHome ? (
               <Checkbox 
+                id={regionId}
                 checked={isSelected}
-                className="mt-1"
+                className="mt-1 min-w-[20px] min-h-[20px]"
                 onCheckedChange={() => handleRegionToggle(region)}
+                tabIndex={-1}
+                aria-hidden="true"
               />
             ) : (
-              <div className="mt-1 w-4 h-4 rounded bg-emerald-500/20 flex items-center justify-center">
+              <div className="mt-1 w-5 h-5 min-w-[20px] min-h-[20px] rounded bg-emerald-500/20 flex items-center justify-center" aria-hidden="true">
                 <Check className="w-3 h-3 text-emerald-400" />
               </div>
             )}
             <div className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-slate-200">{region}</span>
                 {isHome && (
                   <Badge variant="secondary" className="text-xs bg-emerald-500/20 text-emerald-400">
                     Home
+                    <span className="sr-only"> region - always included</span>
                   </Badge>
                 )}
                 {type === 'adjacent' && (
                   <Badge variant="secondary" className="text-xs bg-sky-500/20 text-sky-400">
                     Adjacent
+                    <span className="sr-only"> region - lower acquisition cost</span>
                   </Badge>
                 )}
                 {demand?.disasterDeclaration && (
                   <Badge className="text-xs bg-amber-500/20 text-amber-400 border-amber-500/30">
-                    <AlertTriangle className="w-3 h-3 mr-1" />
-                    Disaster
+                    <AlertTriangle className="w-3 h-3 mr-1" aria-hidden="true" />
+                    <span>Disaster</span>
+                    <span className="sr-only"> declaration active - high demand area</span>
                   </Badge>
                 )}
               </div>
               
               {demand && (
-                <div className="flex items-center gap-4 mt-1 text-xs text-slate-400">
+                <div className="flex items-center gap-4 mt-1 text-xs text-slate-400 flex-wrap">
                   <span className="flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3" />
-                    Demand: {demand.demandIndex}/100
+                    <TrendingUp className="w-3 h-3" aria-hidden="true" />
+                    <span aria-label={`Demand index: ${demand.demandIndex} out of 100, ${demandLevelText}`}>
+                      Demand: {demand.demandIndex}/100
+                      <span className="sr-only"> ({demandLevelText})</span>
+                    </span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3" />
-                    {demand.competitorCount} competitors
+                    <Users className="w-3 h-3" aria-hidden="true" />
+                    <span>{demand.competitorCount} competitors</span>
                   </span>
                   <span className="flex items-center gap-1">
-                    <DollarSign className="w-3 h-3" />
-                    ${demand.avgContractorBudget}/mo avg
+                    <DollarSign className="w-3 h-3" aria-hidden="true" />
+                    <span>${demand.avgContractorBudget}/mo avg</span>
                   </span>
                 </div>
               )}
               
               {demand?.primaryHazards && demand.primaryHazards.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="flex flex-wrap gap-1 mt-2" aria-label="Primary hazards in this region">
                   {demand.primaryHazards.map(hazard => (
                     <Badge 
                       key={hazard}
@@ -246,7 +279,10 @@ export function RegionPickerModal({
               <div className="text-sm font-medium text-slate-200">
                 {demand.baseMultiplier}x
               </div>
-              <div className="text-xs text-slate-500">cost mult.</div>
+              <div className="text-xs text-slate-500">
+                cost mult.
+                <span className="sr-only">iplier - affects advertising cost</span>
+              </div>
             </div>
           )}
         </div>
@@ -268,10 +304,11 @@ export function RegionPickerModal({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="space-y-4 py-4">
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
+          <div className="space-y-4 py-4" role="status" aria-label="Loading available regions">
+            <Skeleton className="h-20" aria-hidden="true" />
+            <Skeleton className="h-20" aria-hidden="true" />
+            <Skeleton className="h-20" aria-hidden="true" />
+            <span className="sr-only">Loading available regions for your area...</span>
           </div>
         ) : availableData ? (
           <div className="space-y-6 py-4">
@@ -329,20 +366,23 @@ export function RegionPickerModal({
 
             <div className="pt-4 border-t border-slate-700 space-y-4">
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-slate-300">Monthly Budget</Label>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <Label htmlFor="budget-input" className="text-slate-300">Monthly Budget</Label>
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-400">$</span>
+                    <span className="text-slate-400" aria-hidden="true">$</span>
                     <Input
+                      id="budget-input"
                       type="number"
                       value={localBudget}
                       onChange={(e) => setLocalBudget(Number(e.target.value))}
-                      className="w-24 bg-slate-800 border-slate-700 text-right"
+                      className="w-24 bg-slate-800 border-slate-700 text-right min-h-[44px]"
                       min={100}
                       max={10000}
                       data-testid="input-budget"
+                      aria-label="Monthly advertising budget in dollars"
+                      aria-describedby="budget-range-hint"
                     />
-                    <span className="text-slate-400">/mo</span>
+                    <span className="text-slate-400" aria-hidden="true">/mo</span>
                   </div>
                 </div>
                 <Slider
@@ -352,42 +392,61 @@ export function RegionPickerModal({
                   max={5000}
                   step={50}
                   className="py-2"
+                  aria-label="Adjust monthly budget"
+                  aria-valuemin={100}
+                  aria-valuemax={5000}
+                  aria-valuenow={localBudget}
+                  aria-valuetext={`$${localBudget} per month`}
                 />
-                <div className="flex justify-between text-xs text-slate-500">
+                <div className="flex justify-between text-xs text-slate-500" id="budget-range-hint">
                   <span>$100</span>
                   <span>$5,000+</span>
                 </div>
               </div>
 
-              <Card className="bg-slate-800/50 border-slate-700">
+              <Card className="bg-slate-800/50 border-slate-700" aria-live="polite" aria-atomic="true">
                 <CardContent className="py-3">
-                  <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="grid grid-cols-3 gap-4 text-center" role="group" aria-label="Selection summary">
                     <div>
                       <div className="text-lg font-bold text-purple-400">
                         {localRegions.length}
                       </div>
-                      <div className="text-xs text-slate-400">Regions</div>
+                      <div className="text-xs text-slate-400">
+                        Regions
+                        <span className="sr-only"> selected</span>
+                      </div>
                     </div>
                     <div>
                       <div className="text-lg font-bold text-emerald-400">
                         ${localBudget}
                       </div>
-                      <div className="text-xs text-slate-400">Monthly</div>
+                      <div className="text-xs text-slate-400">
+                        Monthly
+                        <span className="sr-only"> budget</span>
+                      </div>
                     </div>
                     <div>
                       <div className="text-lg font-bold text-sky-400">
                         ~{calculateEstimatedLeads()}
                       </div>
-                      <div className="text-xs text-slate-400">Est. Leads</div>
+                      <div className="text-xs text-slate-400">
+                        Est. Leads
+                        <span className="sr-only"> per month</span>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               {calculateEstimatedCost() > localBudget && (
-                <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 p-2 rounded">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <div 
+                  className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 p-2 rounded"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                   <span>
+                    <span className="sr-only">Warning: </span>
                     Your budget may be below competitive levels for {localRegions.length} regions. 
                     Consider increasing to ${calculateEstimatedCost()} or selecting fewer regions.
                   </span>
@@ -406,14 +465,17 @@ export function RegionPickerModal({
             variant="ghost" 
             onClick={() => onOpenChange(false)}
             data-testid="button-cancel-regions"
+            aria-label="Cancel region selection and close dialog"
+            className="min-h-[44px]"
           >
             Cancel
           </Button>
           <Button 
             onClick={handleConfirm}
-            className="bg-purple-600 hover:bg-purple-700"
+            className="bg-purple-600 hover:bg-purple-700 min-h-[44px]"
             disabled={localRegions.length === 0}
             data-testid="button-confirm-regions"
+            aria-label={`Confirm selection of ${localRegions.length} region${localRegions.length !== 1 ? 's' : ''} with $${localBudget} monthly budget`}
           >
             Confirm Selection ({localRegions.length} regions)
           </Button>
