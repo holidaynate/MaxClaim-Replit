@@ -1109,7 +1109,16 @@ export const proOrgCategory = pgEnum("pro_org_category", [
   "disaster_recovery",
   "regulator",
   "disaster",
-  "licensing"
+  "licensing",
+  "plumbers",
+  "electricians",
+  "hvac",
+  "flooring",
+  "painters",
+  "restoration",
+  "windows_doors",
+  "tree_services",
+  "appliance_repair"
 ]);
 
 // Disaster Risk Tiers for state prioritization

@@ -1756,6 +1756,423 @@ const proOrganizationsData = [
     priority: 4,
     primaryHazards: ["severe_storm", "flood"],
     notes: "DC lawyer referral"
+  },
+
+  // =====================
+  // PLUMBERS
+  // =====================
+  {
+    name: "Plumbing-Heating-Cooling Contractors Association (PHCC)",
+    category: "plumbers" as const,
+    scope: "national" as const,
+    website: "https://www.phccweb.org",
+    memberDirectoryUrl: "https://www.phccweb.org/find-a-contractor",
+    directoryUrl: "https://www.phccweb.org/find-a-contractor",
+    priority: 1,
+    notes: "National plumbing association - Find a Contractor tool"
+  },
+  {
+    name: "United Association of Plumbers & Pipefitters (UA)",
+    category: "plumbers" as const,
+    scope: "national" as const,
+    website: "https://www.ua.org",
+    memberDirectoryUrl: "https://www.ua.org/local-unions",
+    priority: 1,
+    notes: "National union - Local union directory"
+  },
+  {
+    name: "Texas State Board of Plumbing Examiners",
+    category: "plumbers" as const,
+    scope: "state" as const,
+    state: "TX",
+    states: ["TX"],
+    website: "https://www.tsbpe.texas.gov",
+    directoryUrl: "https://www.tsbpe.texas.gov/verification",
+    priority: 1,
+    primaryHazards: ["flood", "hurricane", "severe_storm"],
+    notes: "Texas plumber license verification"
+  },
+  {
+    name: "Florida Plumbing Contractors - DBPR",
+    category: "plumbers" as const,
+    scope: "state" as const,
+    state: "FL",
+    states: ["FL"],
+    website: "https://www.myfloridalicense.com",
+    directoryUrl: "https://www.myfloridalicense.com/wl11.asp",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"],
+    notes: "Florida plumber license lookup"
+  },
+  {
+    name: "California CSLB - Plumbing Contractors",
+    category: "plumbers" as const,
+    scope: "state" as const,
+    state: "CA",
+    states: ["CA"],
+    website: "https://www.cslb.ca.gov",
+    directoryUrl: "https://www.cslb.ca.gov/OnlineServices/CheckLicenseII/CheckLicense.aspx",
+    priority: 1,
+    primaryHazards: ["flood", "earthquake", "wildfire"],
+    notes: "California C-36 plumbing contractor lookup"
+  },
+
+  // =====================
+  // ELECTRICIANS
+  // =====================
+  {
+    name: "National Electrical Contractors Association (NECA)",
+    category: "electricians" as const,
+    scope: "national" as const,
+    website: "https://www.necanet.org",
+    memberDirectoryUrl: "https://www.necanet.org/find-a-contractor",
+    directoryUrl: "https://www.necanet.org/find-a-contractor",
+    priority: 1,
+    notes: "National electrical contractors - Find a Contractor tool"
+  },
+  {
+    name: "International Brotherhood of Electrical Workers (IBEW)",
+    category: "electricians" as const,
+    scope: "national" as const,
+    website: "https://www.ibew.org",
+    memberDirectoryUrl: "https://www.ibew.org/Local-Unions",
+    priority: 1,
+    notes: "National electrical union - Local directory"
+  },
+  {
+    name: "Independent Electrical Contractors (IEC)",
+    category: "electricians" as const,
+    scope: "national" as const,
+    website: "https://www.ieci.org",
+    memberDirectoryUrl: "https://www.ieci.org/find-an-iec-chapter",
+    priority: 2,
+    notes: "Independent electrical contractor chapters"
+  },
+  {
+    name: "Texas Dept of Licensing - Electricians",
+    category: "electricians" as const,
+    scope: "state" as const,
+    state: "TX",
+    states: ["TX"],
+    website: "https://www.tdlr.texas.gov",
+    directoryUrl: "https://www.tdlr.texas.gov/LicenseSearch/",
+    priority: 1,
+    primaryHazards: ["tornado", "hurricane", "severe_storm"],
+    notes: "Texas electrician license search"
+  },
+  {
+    name: "Florida Electrical Contractors - DBPR",
+    category: "electricians" as const,
+    scope: "state" as const,
+    state: "FL",
+    states: ["FL"],
+    website: "https://www.myfloridalicense.com",
+    directoryUrl: "https://www.myfloridalicense.com/wl11.asp",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood", "severe_storm"],
+    notes: "Florida electrical contractor license lookup"
+  },
+  {
+    name: "California CSLB - Electrical Contractors",
+    category: "electricians" as const,
+    scope: "state" as const,
+    state: "CA",
+    states: ["CA"],
+    website: "https://www.cslb.ca.gov",
+    directoryUrl: "https://www.cslb.ca.gov/OnlineServices/CheckLicenseII/CheckLicense.aspx",
+    priority: 1,
+    primaryHazards: ["wildfire", "earthquake"],
+    notes: "California C-10 electrical contractor lookup"
+  },
+
+  // =====================
+  // HVAC
+  // =====================
+  {
+    name: "Air Conditioning Contractors of America (ACCA)",
+    category: "hvac" as const,
+    scope: "national" as const,
+    website: "https://www.acca.org",
+    memberDirectoryUrl: "https://www.acca.org/find-a-contractor",
+    directoryUrl: "https://www.acca.org/find-a-contractor",
+    priority: 1,
+    notes: "National HVAC association - Find a Contractor tool"
+  },
+  {
+    name: "Sheet Metal and Air Conditioning Contractors (SMACNA)",
+    category: "hvac" as const,
+    scope: "national" as const,
+    website: "https://www.smacna.org",
+    memberDirectoryUrl: "https://www.smacna.org/membership/find-a-contractor",
+    priority: 1,
+    notes: "Sheet metal and HVAC contractors national association"
+  },
+  {
+    name: "Heating, Air-conditioning & Refrigeration Distributors International (HARDI)",
+    category: "hvac" as const,
+    scope: "national" as const,
+    website: "https://www.hardinet.org",
+    priority: 2,
+    notes: "HVAC distributor network with contractor referrals"
+  },
+  {
+    name: "Texas HVAC Contractors - TDLR",
+    category: "hvac" as const,
+    scope: "state" as const,
+    state: "TX",
+    states: ["TX"],
+    website: "https://www.tdlr.texas.gov",
+    directoryUrl: "https://www.tdlr.texas.gov/LicenseSearch/",
+    priority: 1,
+    primaryHazards: ["tornado", "hurricane", "severe_storm"],
+    notes: "Texas HVAC license verification"
+  },
+  {
+    name: "Florida HVAC Contractors - DBPR",
+    category: "hvac" as const,
+    scope: "state" as const,
+    state: "FL",
+    states: ["FL"],
+    website: "https://www.myfloridalicense.com",
+    directoryUrl: "https://www.myfloridalicense.com/wl11.asp",
+    priority: 1,
+    primaryHazards: ["hurricane", "flood"],
+    notes: "Florida HVAC contractor license lookup"
+  },
+  {
+    name: "California CSLB - HVAC Contractors",
+    category: "hvac" as const,
+    scope: "state" as const,
+    state: "CA",
+    states: ["CA"],
+    website: "https://www.cslb.ca.gov",
+    directoryUrl: "https://www.cslb.ca.gov/OnlineServices/CheckLicenseII/CheckLicense.aspx",
+    priority: 1,
+    primaryHazards: ["wildfire", "earthquake"],
+    notes: "California C-20 HVAC contractor lookup"
+  },
+
+  // =====================
+  // FLOORING
+  // =====================
+  {
+    name: "National Wood Flooring Association (NWFA)",
+    category: "flooring" as const,
+    scope: "national" as const,
+    website: "https://www.nwfa.org",
+    memberDirectoryUrl: "https://www.nwfa.org/find-a-professional.aspx",
+    directoryUrl: "https://www.nwfa.org/find-a-professional.aspx",
+    priority: 1,
+    notes: "National wood flooring contractors - Find a Professional tool"
+  },
+  {
+    name: "World Floor Covering Association (WFCA)",
+    category: "flooring" as const,
+    scope: "national" as const,
+    website: "https://www.wfca.org",
+    memberDirectoryUrl: "https://www.wfca.org/members",
+    priority: 1,
+    notes: "National flooring retailer and installer association"
+  },
+  {
+    name: "International Certified Floorcovering Installers Association (CFI)",
+    category: "flooring" as const,
+    scope: "national" as const,
+    website: "https://www.cfiinstallers.org",
+    memberDirectoryUrl: "https://www.cfiinstallers.org/find-an-installer",
+    directoryUrl: "https://www.cfiinstallers.org/find-an-installer",
+    priority: 1,
+    notes: "Certified flooring installers directory"
+  },
+  {
+    name: "Floor Covering Installation Contractors Association (FCICA)",
+    category: "flooring" as const,
+    scope: "national" as const,
+    website: "https://www.fcica.com",
+    memberDirectoryUrl: "https://www.fcica.com/membership-directory",
+    priority: 2,
+    notes: "Commercial flooring installation contractors"
+  },
+
+  // =====================
+  // PAINTERS
+  // =====================
+  {
+    name: "Painting Contractors Association (PCA)",
+    category: "painters" as const,
+    scope: "national" as const,
+    website: "https://www.pcapainted.org",
+    memberDirectoryUrl: "https://www.pcapainted.org/find-a-painter",
+    directoryUrl: "https://www.pcapainted.org/find-a-painter",
+    priority: 1,
+    notes: "National painting contractors - Find a Painter tool"
+  },
+  {
+    name: "International Union of Painters and Allied Trades (IUPAT)",
+    category: "painters" as const,
+    scope: "national" as const,
+    website: "https://www.iupat.org",
+    memberDirectoryUrl: "https://www.iupat.org/locals/",
+    priority: 1,
+    notes: "National painting union - Local union directory"
+  },
+  {
+    name: "Society for Protective Coatings (SSPC)",
+    category: "painters" as const,
+    scope: "national" as const,
+    website: "https://www.sspc.org",
+    memberDirectoryUrl: "https://www.sspc.org/find-a-contractor",
+    priority: 2,
+    notes: "Protective coatings and industrial painters"
+  },
+
+  // =====================
+  // RESTORATION (Fire/Water/Mold)
+  // =====================
+  {
+    name: "Restoration Industry Association (RIA)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.restorationindustry.org",
+    memberDirectoryUrl: "https://www.restorationindustry.org/find-a-restorer",
+    directoryUrl: "https://www.restorationindustry.org/find-a-restorer",
+    priority: 1,
+    notes: "National restoration association - Find a Restorer tool"
+  },
+  {
+    name: "Institute of Inspection, Cleaning and Restoration Certification (IICRC)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.iicrc.org",
+    memberDirectoryUrl: "https://www.iicrc.org/find-an-iicrc-certified-professional",
+    directoryUrl: "https://www.iicrc.org/find-an-iicrc-certified-professional",
+    priority: 1,
+    notes: "Certified restoration professionals - Water/Fire/Mold"
+  },
+  {
+    name: "National Organization of Remediators and Mold Inspectors (NORMI)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.normi.org",
+    memberDirectoryUrl: "https://www.normi.org/find-a-professional",
+    directoryUrl: "https://www.normi.org/find-a-professional",
+    priority: 1,
+    notes: "Mold remediation and inspection professionals"
+  },
+  {
+    name: "American Council for Accredited Certification (ACAC)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.acac.org",
+    memberDirectoryUrl: "https://www.acac.org/find-a-professional",
+    priority: 2,
+    notes: "Indoor environmental professionals - mold, water damage"
+  },
+
+  // =====================
+  // WINDOWS & DOORS
+  // =====================
+  {
+    name: "Window & Door Manufacturers Association (WDMA)",
+    category: "windows_doors" as const,
+    scope: "national" as const,
+    website: "https://www.wdma.com",
+    memberDirectoryUrl: "https://www.wdma.com/members",
+    priority: 1,
+    notes: "National window and door manufacturers and installers"
+  },
+  {
+    name: "American Architectural Manufacturers Association (AAMA)",
+    category: "windows_doors" as const,
+    scope: "national" as const,
+    website: "https://www.aamanet.org",
+    memberDirectoryUrl: "https://www.aamanet.org/member-directory",
+    priority: 1,
+    notes: "Window, door, skylight manufacturers - certification directory"
+  },
+  {
+    name: "National Glass Association (NGA)",
+    category: "windows_doors" as const,
+    scope: "national" as const,
+    website: "https://www.glass.org",
+    memberDirectoryUrl: "https://www.glass.org/find-a-glass-company",
+    directoryUrl: "https://www.glass.org/find-a-glass-company",
+    priority: 1,
+    notes: "Glass and window professionals - Find a Glass Company tool"
+  },
+  {
+    name: "Door and Hardware Institute (DHI)",
+    category: "windows_doors" as const,
+    scope: "national" as const,
+    website: "https://www.dhi.org",
+    memberDirectoryUrl: "https://portal.dhi.org/DHI/Directory/DHI/Directory/Directory.aspx",
+    priority: 2,
+    notes: "Door and hardware professionals directory"
+  },
+
+  // =====================
+  // TREE SERVICES
+  // =====================
+  {
+    name: "Tree Care Industry Association (TCIA)",
+    category: "tree_services" as const,
+    scope: "national" as const,
+    website: "https://www.tcia.org",
+    memberDirectoryUrl: "https://www.tcia.org/TCIA/Hire_A_Pro/TCIA/HireaPro/TCIA_Accredited_Companies.aspx",
+    directoryUrl: "https://www.tcia.org/TCIA/Hire_A_Pro/TCIA/HireaPro/TCIA_Accredited_Companies.aspx",
+    priority: 1,
+    notes: "Accredited tree care companies - Hire a Pro tool"
+  },
+  {
+    name: "International Society of Arboriculture (ISA)",
+    category: "tree_services" as const,
+    scope: "national" as const,
+    website: "https://www.isa-arbor.com",
+    memberDirectoryUrl: "https://www.treesaregood.org/findanarborist",
+    directoryUrl: "https://www.treesaregood.org/findanarborist",
+    priority: 1,
+    notes: "Certified arborists - Find an Arborist tool"
+  },
+  {
+    name: "American Society of Consulting Arborists (ASCA)",
+    category: "tree_services" as const,
+    scope: "national" as const,
+    website: "https://www.asca-consultants.org",
+    memberDirectoryUrl: "https://www.asca-consultants.org/search/custom.asp?id=3818",
+    priority: 2,
+    notes: "Consulting arborists for insurance claims and assessments"
+  },
+
+  // =====================
+  // APPLIANCE REPAIR
+  // =====================
+  {
+    name: "United Appliance Servicers Association (UASA)",
+    category: "appliance_repair" as const,
+    scope: "national" as const,
+    website: "https://www.uasa.org",
+    memberDirectoryUrl: "https://www.uasa.org/find-a-servicer",
+    directoryUrl: "https://www.uasa.org/find-a-servicer",
+    priority: 1,
+    notes: "Appliance repair professionals - Find a Servicer tool"
+  },
+  {
+    name: "Professional Service Association (PSA)",
+    category: "appliance_repair" as const,
+    scope: "national" as const,
+    website: "https://www.psaworld.com",
+    memberDirectoryUrl: "https://www.psaworld.com/find-a-servicer",
+    priority: 1,
+    notes: "Appliance and consumer electronics repair network"
+  },
+  {
+    name: "National Appliance Service Technician Certification (NASTeC)",
+    category: "appliance_repair" as const,
+    scope: "national" as const,
+    website: "https://www.nastec.org",
+    memberDirectoryUrl: "https://www.nastec.org/certified-technicians",
+    priority: 2,
+    notes: "Certified appliance technicians directory"
   }
 ];
 
