@@ -137,12 +137,16 @@ export default function VerifyEmail() {
             </div>
             <div>
               <p className="text-slate-300 text-base mb-2">
-                Your email has been verified successfully.
+                {data?.autoApproved 
+                  ? 'Your email has been verified and your account is now approved!'
+                  : 'Your email has been verified successfully.'}
               </p>
               <p className="text-slate-400 text-sm">
                 {data?.userType === 'agent' 
                   ? 'You can now access your advocate dashboard and start earning commissions!'
-                  : 'You can now access your partner dashboard.'}
+                  : data?.autoApproved
+                    ? 'Your partner account is ready to use. Start advertising to homeowners in your area!'
+                    : 'You can now access your partner dashboard.'}
               </p>
             </div>
             <Link href={data?.userType === 'agent' ? '/agent-dashboard' : '/partner-dashboard'}>

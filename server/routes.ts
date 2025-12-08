@@ -40,7 +40,7 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import { auditCache } from "./cache/auditCache";
 import { batchQueue } from "./queue/batchQueue";
-import { sendPasswordResetEmail, sendEmailVerificationEmail } from "./services/emailService";
+import { sendPasswordResetEmail, sendEmailVerificationEmail, sendWelcomeEmail } from "./services/emailService";
 import { generatePlanRecommendation, getTradeTypes, getTierComparison } from "./services/planBuilder";
 import { 
   calculateRegionCostBreakdown, 
@@ -602,11 +602,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(400).json({ success: false, error: "This verification link has expired" });
     }
     
-    // Mark email as verified for the user
+    // Mark email as verified for the user and auto-approve if applicable
+    let userName: string | undefined;
+    let wasAutoApproved = false;
+    
     if (verifyToken.userType === 'agent') {
       await storage.updateAgentEmailVerified(verifyToken.userId, true);
+      const agent = await storage.getSalesAgent(verifyToken.userId);
+      userName = agent?.name;
     } else if (verifyToken.userType === 'partner') {
       await storage.updatePartnerEmailVerified(verifyToken.userId, true);
+      
+      // Auto-approve partner after email verification
+      const partner = await storage.getPartner(verifyToken.userId);
+      if (partner && partner.status === 'pending') {
+        await storage.updatePartnerStatus(verifyToken.userId, 'approved');
+        wasAutoApproved = true;
+        console.log(`[AUTO-APPROVAL] Partner ${partner.companyName} auto-approved after email verification`);
+      }
+      userName = partner?.companyName;
     }
     
     // Mark token as verified
@@ -614,10 +628,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     console.log(`[EMAIL VERIFICATION] Email verified for ${verifyToken.email}`);
     
+    // Send welcome email after successful verification
+    await sendWelcomeEmail(verifyToken.email, verifyToken.userType, userName);
+    
     res.json({ 
       success: true, 
-      message: "Email verified successfully!",
-      userType: verifyToken.userType
+      message: wasAutoApproved 
+        ? "Email verified and account approved! You're ready to start."
+        : "Email verified successfully!",
+      userType: verifyToken.userType,
+      autoApproved: wasAutoApproved
     });
   }));
 

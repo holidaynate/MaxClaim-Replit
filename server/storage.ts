@@ -1584,17 +1584,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Update email verified status for agents and partners
+  // Note: Database uses integer columns with $type<boolean>() annotation
+  // The $type<boolean>() annotation is for TypeScript only; actual DB values are 0/1
   async updateAgentEmailVerified(id: string, verified: boolean): Promise<void> {
     await db
       .update(salesAgents)
-      .set({ emailVerified: verified, updatedAt: new Date() })
+      .set({ emailVerified: verified ? (1 as any) : (0 as any), updatedAt: new Date() })
       .where(eq(salesAgents.id, id));
   }
 
   async updatePartnerEmailVerified(id: string, verified: boolean): Promise<void> {
     await db
       .update(partners)
-      .set({ emailVerified: verified, updatedAt: new Date() })
+      .set({ emailVerified: verified ? (1 as any) : (0 as any), updatedAt: new Date() })
       .where(eq(partners.id, id));
   }
 
