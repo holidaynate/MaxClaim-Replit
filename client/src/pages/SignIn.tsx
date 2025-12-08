@@ -89,12 +89,14 @@ export default function SignIn() {
       const roleData = await detectRoleMutation.mutateAsync(email);
 
       if (!roleData.role) {
+        setError("We couldn't find an account with that email. Please verify your credentials and select your account type below.");
         setShowRoleSelector(true);
         return;
       }
 
       signInMutation.mutate({ email, password, role: roleData.role });
     } catch {
+      setError("We couldn't verify your account. Please select your account type below.");
       setShowRoleSelector(true);
     }
   };
