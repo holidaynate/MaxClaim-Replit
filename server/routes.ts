@@ -3147,6 +3147,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ===== LOCAL PROS API (Enhanced organization endpoint for ContractorPanel) =====
+
+  // POST /api/local-pros - Fetch relevant orgs for a region with smart prioritization
+  app.post("/api/local-pros", asyncHandler(async (req, res) => {
+    const data = z.object({
+      zip: z.string().min(5).max(10).optional(),
+      state: z.string().length(2).optional(),
+      trade: z.string().optional(),
+      limit: z.number().min(1).max(20).default(6),
+    }).parse(req.body);
+
+    let stateCode = data.state?.toUpperCase();
+    
+    if (!stateCode && data.zip) {
+      stateCode = getStateFromZip(data.zip) || undefined;
+    }
+    
+    if (!stateCode) {
+      res.status(400).json({ error: "Either valid ZIP or state code required" });
+      return;
+    }
+
+    const allOrgs = await storage.getOrgsForState(stateCode, data.trade);
+    
+    const prioritizedOrgs = [...allOrgs].sort((a, b) => {
+      const scopePriority: Record<string, number> = {
+        'local': 1,
+        'state': 2,
+        'regional': 3,
+        'national': 4,
+      };
+      
+      const scopeDiff = (scopePriority[a.scope] || 5) - (scopePriority[b.scope] || 5);
+      if (scopeDiff !== 0) return scopeDiff;
+      
+      const priorityDiff = (b.priority || 1) - (a.priority || 1);
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      return a.name.localeCompare(b.name);
+    });
+
+    const limitedOrgs = prioritizedOrgs.slice(0, data.limit);
+
+    res.json({
+      zip: data.zip,
+      state: stateCode,
+      trade: data.trade,
+      organizations: limitedOrgs.map(org => ({
+        id: org.id,
+        name: org.name,
+        category: org.category,
+        scope: org.scope,
+        website: org.website,
+        memberDirectoryUrl: org.memberDirectoryUrl,
+        directoryUrl: org.directoryUrl,
+        chapterMapUrl: org.chapterMapUrl,
+        priority: org.priority,
+      })),
+      total: limitedOrgs.length,
+      available: allOrgs.length,
+    });
+  }));
+
+  // GET /api/organizations/:id - Get single organization details
+  app.get("/api/organizations/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const org = await storage.getProOrganization(id);
+    if (!org) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+    res.json(org);
+  }));
+
+  // POST /api/organizations/request - Submit a request for a new organization
+  app.post("/api/organizations/request", asyncHandler(async (req, res) => {
+    const data = z.object({
+      organizationName: z.string().min(2),
+      category: z.string().optional(),
+      website: z.string().url().optional(),
+      submitterEmail: z.string().email().optional(),
+      notes: z.string().optional(),
+    }).parse(req.body);
+
+    console.log("[OrgRequest] New organization request received:", data.organizationName);
+    
+    res.status(201).json({
+      success: true,
+      message: "Thank you! Your organization request has been submitted for review.",
+      requestData: data,
+    });
+  }));
+
+  // GET /api/admin/organizations - Admin view of all organizations with full details
+  app.get("/api/admin/organizations", requireAdmin, asyncHandler(async (req, res) => {
+    const { category, state, scope, search } = req.query;
+    
+    let orgs = await storage.getProOrganizations({
+      category: category as string,
+      state: state as string,
+      scope: scope as string,
+    });
+    
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      orgs = orgs.filter(org => 
+        org.name.toLowerCase().includes(searchLower) ||
+        org.category.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    const byCategory = orgs.reduce((acc, org) => {
+      acc[org.category] = (acc[org.category] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const byScope = orgs.reduce((acc, org) => {
+      acc[org.scope] = (acc[org.scope] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    res.json({
+      organizations: orgs,
+      total: orgs.length,
+      stats: {
+        byCategory,
+        byScope,
+      },
+    });
+  }));
+
   // Get single pro organization
   app.get("/api/pro-organizations/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;
