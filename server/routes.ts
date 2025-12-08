@@ -270,7 +270,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       region: data.region || "national",
       agentRefCode: refCode,
       status: "active",
+      emailVerified: false,
     });
+    
+    // Generate email verification token
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    
+    await storage.createEmailVerificationToken({
+      token: verifyToken,
+      email: data.email.toLowerCase(),
+      userType: 'agent',
+      userId: agent.id,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(data.email.toLowerCase(), verifyToken, 'agent', data.name);
     
     // Store session
     (req.session as any).agentId = agent.id;
@@ -279,6 +295,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ 
       success: true, 
       refCode: agent.agentRefCode,
+      emailVerificationSent: true,
       user: {
         id: agent.id,
         email: agent.email,
@@ -331,7 +348,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       licenseNumber: data.licenseNumber || null,
       signingAgentId,
       status: "pending", // Partners need approval
+      emailVerified: false,
     });
+    
+    // Generate email verification token
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    
+    await storage.createEmailVerificationToken({
+      token: verifyToken,
+      email: data.email.toLowerCase(),
+      userType: 'partner',
+      userId: partner.id,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(data.email.toLowerCase(), verifyToken, 'partner', data.companyName);
     
     // Store session
     (req.session as any).partnerId = partner.id;
@@ -339,6 +372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     res.json({ 
       success: true,
+      emailVerificationSent: true,
       user: {
         id: partner.id,
         email: partner.email,
@@ -518,6 +552,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log(`[PASSWORD RESET] Password updated for ${resetToken.email}`);
     
     res.json({ success: true, message: "Your password has been reset successfully. You can now sign in with your new password." });
+  }));
+
+  // ============================================
+  // EMAIL VERIFICATION FLOW
+  // ============================================
+
+  // Verify Email - Verify email using token
+  app.get("/api/auth/verify-email/:token", asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({ success: false, error: "Token is required" });
+    }
+    
+    const verifyToken = await storage.getEmailVerificationTokenByToken(token);
+    
+    if (!verifyToken) {
+      return res.status(400).json({ success: false, error: "Invalid or expired verification link" });
+    }
+    
+    // Check if already verified
+    if (verifyToken.verifiedAt) {
+      return res.json({ success: true, message: "Email already verified", alreadyVerified: true });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(verifyToken.expiresAt)) {
+      return res.status(400).json({ success: false, error: "This verification link has expired" });
+    }
+    
+    // Mark email as verified for the user
+    if (verifyToken.userType === 'agent') {
+      await storage.updateAgentEmailVerified(verifyToken.userId, true);
+    } else if (verifyToken.userType === 'partner') {
+      await storage.updatePartnerEmailVerified(verifyToken.userId, true);
+    }
+    
+    // Mark token as verified
+    await storage.markEmailVerified(verifyToken.id);
+    
+    console.log(`[EMAIL VERIFICATION] Email verified for ${verifyToken.email}`);
+    
+    res.json({ 
+      success: true, 
+      message: "Email verified successfully!",
+      userType: verifyToken.userType
+    });
+  }));
+
+  // Resend Verification Email
+  app.post("/api/auth/resend-verification", asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Find user by email
+    let userType: 'agent' | 'partner' | null = null;
+    let userId: string | null = null;
+    let userName: string | undefined;
+    let emailVerified = false;
+    
+    // Find agent by email
+    const allAgents = await storage.getSalesAgents({});
+    const matchedAgent = allAgents.find(a => a.email?.toLowerCase() === normalizedEmail);
+    if (matchedAgent) {
+      userType = 'agent';
+      userId = matchedAgent.id;
+      userName = matchedAgent.name;
+      emailVerified = matchedAgent.emailVerified || false;
+    }
+    
+    // Find partner by email
+    const allPartners = await storage.getPartners({});
+    const matchedPartner = allPartners.find(p => p.email?.toLowerCase() === normalizedEmail);
+    if (matchedPartner) {
+      userType = 'partner';
+      userId = matchedPartner.id;
+      userName = matchedPartner.companyName;
+      emailVerified = matchedPartner.emailVerified || false;
+    }
+    
+    // Always return success to prevent email enumeration
+    if (!userType || !userId) {
+      return res.json({ 
+        success: true, 
+        message: "If this email exists in our system, you will receive a verification email shortly." 
+      });
+    }
+    
+    if (emailVerified) {
+      return res.json({ 
+        success: true, 
+        message: "Email is already verified.",
+        alreadyVerified: true
+      });
+    }
+    
+    // Generate new verification token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    
+    await storage.createEmailVerificationToken({
+      token,
+      email: normalizedEmail,
+      userType,
+      userId,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(normalizedEmail, token, userType, userName);
+    
+    res.json({ 
+      success: true, 
+      message: "If this email exists in our system, you will receive a verification email shortly." 
+    });
+  }));
+
+  // Check email verification status
+  app.get("/api/auth/verification-status", asyncHandler(async (req, res) => {
+    const session = req.session as any;
+    
+    if (!session.agentId && !session.partnerId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    
+    let emailVerified = false;
+    let email = '';
+    
+    if (session.agentId) {
+      const agent = await storage.getSalesAgent(session.agentId);
+      if (agent) {
+        emailVerified = agent.emailVerified || false;
+        email = agent.email || '';
+      }
+    } else if (session.partnerId) {
+      const partner = await storage.getPartner(session.partnerId);
+      if (partner) {
+        emailVerified = partner.emailVerified || false;
+        email = partner.email || '';
+      }
+    }
+    
+    res.json({ emailVerified, email });
   }));
 
   // Get sales agent by ID (for agent dashboard)

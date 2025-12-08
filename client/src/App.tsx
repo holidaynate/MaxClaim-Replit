@@ -22,6 +22,7 @@ import SignIn from "@/pages/SignIn";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import VerifyEmail from "@/pages/VerifyEmail";
 import AgentDashboard from "@/pages/AgentDashboard";
 import PartnerDashboard from "@/pages/PartnerDashboard";
 import NotFound from "@/pages/not-found";
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/signup" component={Signup} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/agent-dashboard" component={AgentDashboard} />
       <Route path="/partner-dashboard" component={PartnerDashboard} />
       <Route path="/attributions" component={AttributionsPage} />

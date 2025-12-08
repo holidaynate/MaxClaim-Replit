@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Eye, MousePointer, TrendingUp, LogOut, ArrowLeft } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 export default function PartnerDashboard() {
   const [, setLocation] = useLocation();
@@ -112,6 +113,8 @@ export default function PartnerDashboard() {
             Sign Out
           </Button>
         </div>
+
+        <EmailVerificationBanner />
 
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-900/80 border-slate-700">

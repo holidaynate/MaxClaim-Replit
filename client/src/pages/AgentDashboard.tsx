@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, Users, TrendingUp, Copy, LogOut, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 
 export default function AgentDashboard() {
   const [, setLocation] = useLocation();
@@ -109,6 +110,8 @@ export default function AgentDashboard() {
             Sign Out
           </Button>
         </div>
+
+        <EmailVerificationBanner />
 
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-slate-900/80 border-slate-700">
