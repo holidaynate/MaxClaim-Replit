@@ -64,6 +64,23 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
 - **Data Flow**: Document upload triggers OCR and text parsing; user input and external data drive FMV calculation; results are displayed, and pricing data points stored.
 - **Supported Categories**: Roofing, Flooring, Drywall, Painting, Plumbing, Electrical, HVAC, Windows & Doors, Appliances, Cabinets, and 'Other'.
 
+## Intellectual Property Protection
+
+MaxClaim is an original SaaS implementation with comprehensive IP protection:
+
+- **COPYRIGHT.md**: Ownership statement, all-rights-reserved license, patent notice
+- **THIRD_PARTY_NOTICES.md**: Full open source attribution for 75+ npm dependencies, Replit platform, data sources, and AI assistance disclosure
+- **Source File Headers**: Copyright comments in core backend files (routes.ts, baselinePricing.ts, pricingCitation.ts, pricing-data.ts) and frontend files (App.tsx, SingleScreenClaim.tsx, ResultsStep.tsx, AttributionsPage.tsx)
+- **Attributions Page**: Public-facing /attributions page with ownership section and open source credits
+
+Key IP Claims:
+- Business logic (claim auditing, multi-carrier pricing aggregation)
+- Geo-targeted partner matching with weighted promotions
+- "Pay what you want" monetized promotion tiers
+- Multi-source pricing citation framework with confidence levels
+
+All third-party libraries use permissive licenses (MIT, Apache-2.0, ISC) compatible with commercial use.
+
 ## External Dependencies
 - **OCR.space API**: Primary OCR service.
 - **Tesseract.js**: Local OCR library fallback.
