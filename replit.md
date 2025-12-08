@@ -31,6 +31,14 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
 - **Partner Matching Algorithm**: Prioritizes local contractors with scoring based on ZIP/area code matches, local business bonuses, and payment tier multipliers.
 - **Location Utilities**: Privacy-first, ZIP-based location mapping for coarse metro area detection.
 - **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth, storing session and user data in PostgreSQL.
+- **Credential-Based Auth System**: Role-based authentication for Agents and Partners:
+  - **Sign In**: Email/password login with automatic role detection via email lookup
+  - **Agent Signup**: Multi-step onboarding with commission pitch (15-40% sliding scale), bcrypt password hashing (12 salt rounds)
+  - **Partner Signup**: Tier selection (FREE for trade associations, $500-$2,000/mo for paid tiers), pending approval status
+  - **Session Management**: Express session with role-based properties (agentId, partnerId, isAdmin)
+  - **Agent Dashboard**: View referral code, total/YTD earnings, status
+  - **Partner Dashboard**: View company info, status, tier
+  - **API Endpoints**: `/api/auth/detect-role`, `/api/auth/signin`, `/api/auth/signup/agent`, `/api/auth/signup/partner`, `/api/auth/me`, `/api/auth/logout`, `/api/sales-agents/:id`, `/api/partners/:id`
 - **User Claims Dashboard**: Authenticated users can view their claim history and access stored PDF reports.
 - **Protected File Access**: Ensures ownership verification for file access.
 - **Monetization System**: Complete partner monetization with sales agent reference codes for lead tracking, commission management (15-40% sliding scale), Stripe integration for payments and payouts, ad impression analytics, and renewal automation.

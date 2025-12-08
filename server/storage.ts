@@ -167,6 +167,7 @@ export interface IStorage {
   createPartnershipLOI(data: InsertPartnershipLOI, zipCodes: string[]): Promise<PartnershipLOI>;
   getPartners(filters?: { status?: string; type?: string; tier?: string }): Promise<Partner[]>;
   getPartner(id: string): Promise<Partner | undefined>;
+  getPartnerByEmail(email: string): Promise<Partner | undefined>;
   updatePartnerStatus(id: string, status: "pending" | "approved" | "rejected" | "suspended", reviewerId?: string): Promise<void>;
   getPartnersByZipCode(zipCode: string, filters?: { status?: string; tier?: string }): Promise<Array<Partner & { priority: number }>>;
   createPartnerLead(data: InsertPartnerLead): Promise<PartnerLead>;
@@ -646,6 +647,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPartner(id: string): Promise<Partner | undefined> {
     const [partner] = await db.select().from(partners).where(eq(partners.id, id));
+    return partner || undefined;
+  }
+
+  async getPartnerByEmail(email: string): Promise<Partner | undefined> {
+    const [partner] = await db.select().from(partners).where(eq(partners.email, email));
     return partner || undefined;
   }
 

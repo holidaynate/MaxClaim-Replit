@@ -381,6 +381,7 @@ export const partners = pgTable("partners", {
   tier: partnerTier("tier").default("advertiser").notNull(),
   contactPerson: text("contact_person").notNull(),
   email: text("email").notNull(),
+  password: text("password"), // Hashed password for credential login
   phone: text("phone").notNull(),
   website: text("website"),
   licenseNumber: text("license_number"),
@@ -652,6 +653,7 @@ export const salesAgents = pgTable("sales_agents", {
   agentRefCode: text("agent_ref_code").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  password: text("password"), // Hashed password for credential login
   phone: text("phone"),
   region: text("region"),
   birthYear: integer("birth_year"),

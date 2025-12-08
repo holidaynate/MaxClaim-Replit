@@ -116,6 +116,292 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ isAdmin: !!req.session?.isAdmin });
   });
 
+  // ========== CREDENTIAL-BASED AUTH ENDPOINTS ==========
+  
+  // Secure password hashing using bcrypt
+  const bcrypt = await import("bcrypt");
+  const SALT_ROUNDS = 12; // Industry-standard work factor
+  
+  async function hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, SALT_ROUNDS);
+  }
+  
+  async function verifyPassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  // Detect role from email (checks agents, partners, and admin users)
+  app.post("/api/auth/detect-role", asyncHandler(async (req, res) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    
+    // Check if email exists in sales_agents
+    const agent = await storage.getSalesAgentByEmail(email);
+    if (agent) {
+      return res.json({ role: "agent", found: true });
+    }
+    
+    // Check if email exists in partners
+    const partner = await storage.getPartnerByEmail(email);
+    if (partner) {
+      return res.json({ role: "partner", found: true });
+    }
+    
+    // Check admin users table
+    const adminUser = await storage.getUserByUsername(email);
+    if (adminUser) {
+      return res.json({ role: "admin", found: true });
+    }
+    
+    // No match found - let frontend show role selector
+    res.json({ role: null, found: false });
+  }));
+
+  // Sign in with credentials
+  app.post("/api/auth/signin", asyncHandler(async (req, res) => {
+    const { email, password, role } = z.object({
+      email: z.string().email(),
+      password: z.string().min(1),
+      role: z.enum(["agent", "partner", "admin"]),
+    }).parse(req.body);
+    
+    if (role === "admin") {
+      // Admin uses ADMIN_PASSWORD env var
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      if (password === adminPassword) {
+        req.session.isAdmin = true;
+        return res.json({ 
+          success: true, 
+          role: "admin",
+          user: { email, name: "Admin" }
+        });
+      }
+      return res.json({ success: false, message: "Invalid admin credentials" });
+    }
+    
+    if (role === "agent") {
+      const agent = await storage.getSalesAgentByEmail(email);
+      if (!agent || !agent.password) {
+        return res.json({ success: false, message: "Agent not found or password not set" });
+      }
+      if (!(await verifyPassword(password, agent.password))) {
+        return res.json({ success: false, message: "Invalid password" });
+      }
+      // Store agent session
+      (req.session as any).agentId = agent.id;
+      (req.session as any).userRole = "agent";
+      return res.json({ 
+        success: true, 
+        role: "agent",
+        user: { 
+          id: agent.id,
+          email: agent.email, 
+          name: agent.name,
+          refCode: agent.agentRefCode
+        }
+      });
+    }
+    
+    if (role === "partner") {
+      const partner = await storage.getPartnerByEmail(email);
+      if (!partner || !partner.password) {
+        return res.json({ success: false, message: "Partner not found or password not set" });
+      }
+      if (!(await verifyPassword(password, partner.password))) {
+        return res.json({ success: false, message: "Invalid password" });
+      }
+      // Store partner session
+      (req.session as any).partnerId = partner.id;
+      (req.session as any).userRole = "partner";
+      return res.json({ 
+        success: true, 
+        role: "partner",
+        user: { 
+          id: partner.id,
+          email: partner.email, 
+          name: partner.contactPerson,
+          companyName: partner.companyName
+        }
+      });
+    }
+    
+    res.json({ success: false, message: "Invalid role" });
+  }));
+
+  // Agent signup
+  app.post("/api/auth/signup/agent", asyncHandler(async (req, res) => {
+    const data = z.object({
+      name: z.string().min(2),
+      email: z.string().email(),
+      password: z.string().min(8),
+      phone: z.string().optional(),
+      birthYear: z.number().min(1940).max(2010).optional(),
+      region: z.string().optional(),
+    }).parse(req.body);
+    
+    // Check if email already exists
+    const existingAgent = await storage.getSalesAgentByEmail(data.email);
+    if (existingAgent) {
+      return res.json({ success: false, message: "Email already registered as an agent" });
+    }
+    
+    // Generate unique ref code from name and birth year
+    const nameParts = data.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "agent";
+    const lastName = nameParts[1] || "user";
+    const birthYear = data.birthYear || 1990;
+    const joinedYear = new Date().getFullYear();
+    
+    // Get existing codes to ensure uniqueness
+    const existingAgents = await storage.getSalesAgents({});
+    const existingCodes = existingAgents.map(a => a.agentRefCode || "");
+    
+    const refCode = await generateUniqueAgentRefCode(firstName, lastName, birthYear, joinedYear, existingCodes);
+    
+    // Create agent with hashed password
+    const hashedPassword = await hashPassword(data.password);
+    const agent = await storage.createSalesAgent({
+      name: data.name,
+      email: data.email,
+      password: hashedPassword,
+      phone: data.phone || null,
+      birthYear: data.birthYear || null,
+      region: data.region || "national",
+      agentRefCode: refCode,
+      status: "active",
+    });
+    
+    // Store session
+    (req.session as any).agentId = agent.id;
+    (req.session as any).userRole = "agent";
+    
+    res.json({ 
+      success: true, 
+      refCode: agent.agentRefCode,
+      user: {
+        id: agent.id,
+        email: agent.email,
+        name: agent.name,
+      }
+    });
+  }));
+
+  // Partner signup
+  app.post("/api/auth/signup/partner", asyncHandler(async (req, res) => {
+    const data = z.object({
+      companyName: z.string().min(2),
+      type: z.enum(["contractor", "adjuster", "agency"]),
+      contactPerson: z.string().min(2),
+      email: z.string().email(),
+      password: z.string().min(8),
+      phone: z.string().min(10),
+      website: z.string().optional(),
+      licenseNumber: z.string().optional(),
+      pricingTier: z.enum(["free", "standard", "premium"]).optional(),
+      referralCode: z.string().optional(),
+    }).parse(req.body);
+    
+    // Check if email already exists
+    const existingPartner = await storage.getPartnerByEmail(data.email);
+    if (existingPartner) {
+      return res.json({ success: false, message: "Email already registered as a partner" });
+    }
+    
+    // Look up signing agent if referral code provided
+    let signingAgentId: string | null = null;
+    if (data.referralCode) {
+      const agent = await storage.getSalesAgentByRefCode(data.referralCode);
+      if (agent) {
+        signingAgentId = agent.id;
+      }
+    }
+    
+    // Create partner with hashed password
+    const hashedPassword = await hashPassword(data.password);
+    const partner = await storage.createPartner({
+      companyName: data.companyName,
+      type: data.type,
+      tier: "advertiser",
+      contactPerson: data.contactPerson,
+      email: data.email,
+      password: hashedPassword,
+      phone: data.phone,
+      website: data.website || null,
+      licenseNumber: data.licenseNumber || null,
+      signingAgentId,
+      status: "pending", // Partners need approval
+    });
+    
+    // Store session
+    (req.session as any).partnerId = partner.id;
+    (req.session as any).userRole = "partner";
+    
+    res.json({ 
+      success: true,
+      user: {
+        id: partner.id,
+        email: partner.email,
+        companyName: partner.companyName,
+        status: partner.status,
+      }
+    });
+  }));
+
+  // Get current user session info
+  app.get("/api/auth/me", (req, res) => {
+    const session = req.session as any;
+    if (session.isAdmin) {
+      return res.json({ authenticated: true, role: "admin" });
+    }
+    if (session.agentId) {
+      return res.json({ authenticated: true, role: "agent", id: session.agentId });
+    }
+    if (session.partnerId) {
+      return res.json({ authenticated: true, role: "partner", id: session.partnerId });
+    }
+    res.json({ authenticated: false });
+  });
+
+  // Logout
+  app.post("/api/auth/logout", (req, res) => {
+    const session = req.session as any;
+    session.isAdmin = false;
+    session.agentId = null;
+    session.partnerId = null;
+    session.userRole = null;
+    res.json({ success: true });
+  });
+
+  // Get sales agent by ID (for agent dashboard)
+  app.get("/api/sales-agents/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const session = req.session as any;
+    
+    // Only allow access to own agent data or admin access
+    if (!session.isAdmin && session.agentId !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const agent = await storage.getSalesAgent(id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    
+    // Return agent data without sensitive fields
+    res.json({
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        agentRefCode: agent.agentRefCode,
+        totalEarned: agent.totalEarned || 0,
+        ytdEarnings: agent.ytdEarnings || 0,
+        status: agent.status,
+        region: agent.region,
+        joinedAt: agent.joinedAt,
+      }
+    });
+  }));
+
   // Helper to normalize claim items - derive both unitPrice and quotedPrice (subtotal)
   // Throws error if quantity is invalid
   function normalizeClaimItem(item: {
@@ -804,10 +1090,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single partner
+  // Get single partner (protected - only own partner data or admin)
   app.get("/api/partners/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const session = req.session as any;
+      
+      // Only allow access to own partner data or admin access
+      if (!session.isAdmin && session.partnerId !== id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
       const partner = await storage.getPartner(id);
 
       if (!partner) {

@@ -18,12 +18,20 @@ import Home from "@/pages/home";
 import AttributionsPage from "@/pages/AttributionsPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import MyClaims from "@/pages/MyClaims";
+import SignIn from "@/pages/SignIn";
+import Signup from "@/pages/Signup";
+import AgentDashboard from "@/pages/AgentDashboard";
+import PartnerDashboard from "@/pages/PartnerDashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/signin" component={SignIn} />
+      <Route path="/signup" component={Signup} />
+      <Route path="/agent-dashboard" component={AgentDashboard} />
+      <Route path="/partner-dashboard" component={PartnerDashboard} />
       <Route path="/attributions" component={AttributionsPage} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/my-claims" component={MyClaims} />
