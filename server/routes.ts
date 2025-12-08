@@ -290,7 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       region: data.region || "national",
       agentRefCode: refCode,
       status: "active",
-      emailVerified: false,
+      emailVerified: 0, // Integer 0 for false since DB column is integer
     });
     
     // Generate email verification token
@@ -368,7 +368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       licenseNumber: data.licenseNumber || null,
       signingAgentId,
       status: "pending", // Partners need approval
-      emailVerified: false,
+      emailVerified: 0, // Integer 0 for false since DB column is integer
     });
     
     // Generate email verification token
