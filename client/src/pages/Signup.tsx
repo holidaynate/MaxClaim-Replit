@@ -23,13 +23,26 @@ interface RoleCardProps {
 }
 
 function RoleCard({ title, subtitle, benefits, icon: Icon, iconColor, buttonText, buttonGradient, onSelect }: RoleCardProps) {
+  const roleType = title.toLowerCase().includes('advocate') ? 'agent' : 'partner';
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect();
+    }
+  };
+
   return (
     <Card 
       className="bg-slate-900/80 border-slate-700 hover:border-sky-500/50 transition-all cursor-pointer hover:shadow-xl hover:shadow-sky-500/10 hover:-translate-y-1"
       onClick={onSelect}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`${title}: ${subtitle}`}
+      data-testid={`card-role-${roleType}`}
     >
       <CardContent className="p-6">
-        <div className={`text-5xl mb-4 ${iconColor}`}>
+        <div className={`text-5xl mb-4 ${iconColor}`} aria-hidden="true">
           <Icon className="w-12 h-12" />
         </div>
         <h2 className="text-xl font-bold mb-2 text-slate-100">
@@ -38,17 +51,19 @@ function RoleCard({ title, subtitle, benefits, icon: Icon, iconColor, buttonText
         <p className="text-slate-400 mb-5 text-sm">
           {subtitle}
         </p>
-        <ul className="space-y-2 mb-6 text-sm">
+        <ul className="space-y-2 mb-6 text-sm" aria-label={`Benefits of ${title}`}>
           {benefits.map((benefit, idx) => (
             <li key={idx} className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
               <span className="text-slate-300">{benefit.text}</span>
             </li>
           ))}
         </ul>
         <Button 
-          className={`w-full ${buttonGradient} text-white font-semibold`}
-          data-testid={`button-select-${title.toLowerCase().includes('advocate') ? 'agent' : 'partner'}`}
+          className={`w-full ${buttonGradient} text-white font-semibold min-h-[44px]`}
+          data-testid={`button-select-${roleType}`}
+          aria-label={`${buttonText} - Select ${title} role`}
+          tabIndex={-1}
         >
           {buttonText}
         </Button>
@@ -76,17 +91,17 @@ function RoleSelector({ onSelect }: { onSelect: (role: SignupRole) => void }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-900 via-slate-950 to-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-3xl w-full">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-slate-100 mb-2">
+      <div className="max-w-3xl w-full" role="main" aria-labelledby="signup-heading">
+        <header className="text-center mb-10">
+          <h1 id="signup-heading" className="text-4xl font-bold text-slate-100 mb-2">
             Join MaxClaim
           </h1>
           <p className="text-slate-400 text-lg">
             Choose your path to make an impact on disaster recovery
           </p>
-        </div>
+        </header>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-2 gap-6" role="group" aria-label="Role selection options">
           <RoleCard
             title="Become an Advocate"
             subtitle="Earn recurring commissions (15-40%) by connecting contractors, adjusters, and legal professionals to MaxClaim. Build a passive income stream."
@@ -135,16 +150,19 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-900 via-slate-950 to-slate-900 p-4">
-      <div className="max-w-2xl mx-auto">
-        <Button
-          variant="ghost"
-          onClick={() => setRole(null)}
-          className="text-slate-400 hover:text-slate-200 mb-4"
-          data-testid="button-back-to-roles"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Choose different path
-        </Button>
+      <div className="max-w-2xl mx-auto" role="main" aria-label={`${role === 'agent' ? 'Advocate' : 'Partner'} signup form`}>
+        <nav aria-label="Signup navigation">
+          <Button
+            variant="ghost"
+            onClick={() => setRole(null)}
+            className="text-slate-400 hover:text-slate-200 mb-4 min-h-[44px]"
+            data-testid="button-back-to-roles"
+            aria-label="Go back to role selection"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
+            Choose different path
+          </Button>
+        </nav>
         
         {role === "agent" ? (
           <AgentSignupFlow />

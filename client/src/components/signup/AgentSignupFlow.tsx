@@ -22,10 +22,10 @@ interface AgentFormData {
 
 function CommissionPitchPage({ onNext }: { onNext: () => void }) {
   return (
-    <Card className="bg-slate-900/90 border-slate-700">
+    <Card className="bg-slate-900/90 border-slate-700" role="region" aria-labelledby="commission-heading">
       <CardHeader>
-        <CardTitle className="text-2xl text-slate-100 flex items-center gap-2">
-          <DollarSign className="w-7 h-7 text-emerald-400" />
+        <CardTitle id="commission-heading" className="text-2xl text-slate-100 flex items-center gap-2">
+          <DollarSign className="w-7 h-7 text-emerald-400" aria-hidden="true" />
           Build Your Commission Empire
         </CardTitle>
       </CardHeader>
@@ -53,20 +53,21 @@ Example: Close a $500/mo premium partner → $1,250 year 1 (25% × $500 × 12), 
           description="Every month a partner renews with MaxClaim, you get paid. Most insurance carriers pay agents ongoing commissions forever — MaxClaim does the same. Build passive income that compounds year over year."
         />
 
-        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4" role="region" aria-label="Commission projection example">
           <h4 className="font-semibold text-emerald-400 mb-2">Real Example: 5-Year Projection</h4>
           <div className="text-sm text-slate-300 space-y-1">
-            <p>• Year 1: Close 5 partners @ $500/mo = <span className="text-emerald-300 font-mono">$6,000</span></p>
-            <p>• Year 2: 5 renewals + 5 new = <span className="text-emerald-300 font-mono">$9,750</span></p>
-            <p>• Year 3: 10 renewals + 5 new = <span className="text-emerald-300 font-mono">$13,500</span></p>
-            <p>• Year 5: 20 renewals + 5 new = <span className="text-emerald-300 font-mono">$21,000+</span></p>
+            <p>Year 1: Close 5 partners at $500 per month = <span className="text-emerald-300 font-mono">$6,000</span></p>
+            <p>Year 2: 5 renewals + 5 new = <span className="text-emerald-300 font-mono">$9,750</span></p>
+            <p>Year 3: 10 renewals + 5 new = <span className="text-emerald-300 font-mono">$13,500</span></p>
+            <p>Year 5: 20 renewals + 5 new = <span className="text-emerald-300 font-mono">$21,000+</span></p>
           </div>
         </div>
 
         <Button 
           onClick={onNext}
-          className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white py-5 text-lg font-semibold"
+          className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white py-5 text-lg font-semibold min-h-[52px]"
           data-testid="button-continue-to-form"
+          aria-label="Continue to agent registration form"
         >
           I'm Ready to Earn — Let's Go
         </Button>
@@ -77,13 +78,13 @@ Example: Close a $500/mo premium partner → $1,250 year 1 (25% × $500 × 12), 
 
 function Section({ icon: Icon, title, description }: { icon: typeof Target; title: string; description: string }) {
   return (
-    <div className="space-y-2">
+    <section className="space-y-2">
       <div className="flex items-center gap-2">
-        <Icon className="w-5 h-5 text-sky-400" />
+        <Icon className="w-5 h-5 text-sky-400" aria-hidden="true" />
         <h3 className="font-semibold text-slate-100">{title}</h3>
       </div>
       <p className="text-slate-400 text-sm whitespace-pre-line pl-7">{description}</p>
-    </div>
+    </section>
   );
 }
 
@@ -106,12 +107,16 @@ function AgentFormPage({ data, setData, onSubmit, isLoading }: {
   ];
 
   return (
-    <Card className="bg-slate-900/90 border-slate-700">
+    <Card className="bg-slate-900/90 border-slate-700" role="region" aria-labelledby="agent-form-heading">
       <CardHeader>
-        <CardTitle className="text-xl text-slate-100">Create Your Agent Account</CardTitle>
+        <CardTitle id="agent-form-heading" className="text-xl text-slate-100">Create Your Agent Account</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
+        <form 
+          onSubmit={(e) => { e.preventDefault(); onSubmit(); }} 
+          className="space-y-4"
+          aria-label="Agent registration form"
+        >
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
@@ -218,17 +223,19 @@ function AgentFormPage({ data, setData, onSubmit, isLoading }: {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white py-5 font-semibold"
+              className="w-full bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white py-5 font-semibold min-h-[52px]"
               data-testid="button-submit-agent-signup"
+              aria-label={isLoading ? "Creating your account, please wait" : "Create Agent Account"}
+              aria-busy={isLoading}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating your account...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  <span role="status">Creating your account...</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" />
                   Create Agent Account
                 </>
               )}

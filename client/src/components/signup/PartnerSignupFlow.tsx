@@ -77,39 +77,62 @@ const tierInfo: Record<PricingTier, { title: string; price: string; icon: typeof
 };
 
 function TierSelector({ selected, onSelect }: { selected: PricingTier; onSelect: (tier: PricingTier) => void }) {
+  const handleKeyDown = (e: React.KeyboardEvent, tier: PricingTier) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      onSelect(tier);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <Label className="text-slate-300 text-base font-medium">Choose Your Plan</Label>
-      <RadioGroup value={selected} onValueChange={(v) => onSelect(v as PricingTier)}>
+    <fieldset className="space-y-4 border-0 p-0 m-0">
+      <legend className="text-slate-300 text-base font-medium mb-2">Choose Your Plan</legend>
+      <RadioGroup 
+        value={selected} 
+        onValueChange={(v) => onSelect(v as PricingTier)}
+        aria-label="Select pricing tier"
+      >
         {(["free", "standard", "premium"] as PricingTier[]).map((tier) => {
           const info = tierInfo[tier];
           const Icon = info.icon;
           return (
             <div
               key={tier}
-              className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
+              className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all min-h-[48px] ${
                 selected === tier 
                   ? "border-purple-500 bg-purple-500/10" 
                   : "border-slate-700 hover:border-slate-600"
               }`}
               onClick={() => onSelect(tier)}
+              onKeyDown={(e) => handleKeyDown(e, tier)}
+              tabIndex={0}
+              role="radio"
+              aria-checked={selected === tier}
+              aria-label={`${info.title}: ${info.price}. ${info.features.join('. ')}`}
             >
               <div className="flex items-start gap-4">
-                <RadioGroupItem value={tier} id={tier} className="mt-1" data-testid={`radio-tier-${tier}`} />
+                <RadioGroupItem 
+                  value={tier} 
+                  id={tier} 
+                  className="mt-1" 
+                  data-testid={`radio-tier-${tier}`}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
                 <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Icon className={`w-5 h-5 ${tier === 'premium' ? 'text-amber-400' : tier === 'standard' ? 'text-purple-400' : 'text-emerald-400'}`} />
+                      <Icon className={`w-5 h-5 ${tier === 'premium' ? 'text-amber-400' : tier === 'standard' ? 'text-purple-400' : 'text-emerald-400'}`} aria-hidden="true" />
                       <span className="font-semibold text-slate-100">{info.title}</span>
                     </div>
                     <span className={`font-bold ${tier === 'free' ? 'text-emerald-400' : 'text-slate-100'}`}>
                       {info.price}
                     </span>
                   </div>
-                  <ul className="text-sm text-slate-400 space-y-1">
+                  <ul className="text-sm text-slate-400 space-y-1" aria-label={`${info.title} features`}>
                     {info.features.map((feature, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" aria-hidden="true" />
                         {feature}
                       </li>
                     ))}
@@ -120,7 +143,7 @@ function TierSelector({ selected, onSelect }: { selected: PricingTier; onSelect:
           );
         })}
       </RadioGroup>
-    </div>
+    </fieldset>
   );
 }
 
@@ -215,24 +238,32 @@ export default function PartnerSignupFlow() {
   ];
 
   return (
-    <Card className="bg-slate-900/90 border-slate-700">
+    <Card className="bg-slate-900/90 border-slate-700" role="region" aria-labelledby="partner-form-heading">
       <CardHeader>
-        <CardTitle className="text-xl text-slate-100 flex items-center gap-2">
+        <CardTitle id="partner-form-heading" className="text-xl text-slate-100 flex items-center gap-2">
           {step === 3 ? (
-            <Sparkles className="w-6 h-6 text-purple-400" />
+            <Sparkles className="w-6 h-6 text-purple-400" aria-hidden="true" />
           ) : (
-            <Building2 className="w-6 h-6 text-purple-400" />
+            <Building2 className="w-6 h-6 text-purple-400" aria-hidden="true" />
           )}
           {getStepTitle()}
         </CardTitle>
-        <div className="flex gap-2 mt-2">
-          <div className={`h-1 flex-1 rounded ${step >= 1 ? 'bg-purple-500' : 'bg-slate-700'}`} />
-          <div className={`h-1 flex-1 rounded ${step >= 2 ? 'bg-purple-500' : 'bg-slate-700'}`} />
-          <div className={`h-1 flex-1 rounded ${step >= 3 ? 'bg-purple-500' : 'bg-slate-700'}`} />
+        <div 
+          className="flex gap-2 mt-2" 
+          role="progressbar" 
+          aria-valuenow={step} 
+          aria-valuemin={1} 
+          aria-valuemax={3}
+          aria-label={`Step ${step} of 3: ${getStepTitle()}`}
+        >
+          <div className={`h-1 flex-1 rounded ${step >= 1 ? 'bg-purple-500' : 'bg-slate-700'}`} aria-hidden="true" />
+          <div className={`h-1 flex-1 rounded ${step >= 2 ? 'bg-purple-500' : 'bg-slate-700'}`} aria-hidden="true" />
+          <div className={`h-1 flex-1 rounded ${step >= 3 ? 'bg-purple-500' : 'bg-slate-700'}`} aria-hidden="true" />
         </div>
+        <span className="sr-only">Step {step} of 3</span>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-label="Partner registration form">
           {step === 1 ? (
             <>
               <div className="space-y-2">
@@ -408,34 +439,37 @@ export default function PartnerSignupFlow() {
                 type="button"
                 variant="outline"
                 onClick={() => setStep(step - 1)}
-                className="border-slate-600 text-slate-300"
+                className="border-slate-600 text-slate-300 min-h-[44px]"
                 data-testid="button-back"
+                aria-label={`Go back to ${step === 2 ? 'Company Information' : 'Choose Your Plan'}`}
               >
-                <ArrowLeft className="w-4 h-4 mr-2" />
+                <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
                 Back
               </Button>
             )}
             <Button
               type="submit"
               disabled={signupMutation.isPending}
-              className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold"
+              className="flex-1 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold min-h-[44px]"
               data-testid={step === 1 ? "button-continue-to-pricing" : step === 2 ? "button-continue-to-plan" : "button-submit-partner-signup"}
+              aria-label={signupMutation.isPending ? "Creating account, please wait" : step === 1 ? "Continue to pricing selection" : step === 2 ? "View your AI-recommended plan" : "Create partner account"}
+              aria-busy={signupMutation.isPending}
             >
               {signupMutation.isPending ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating account...
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                  <span role="status">Creating account...</span>
                 </>
               ) : step === 1 ? (
                 "Continue to Pricing"
               ) : step === 2 ? (
                 <>
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  <Sparkles className="w-4 h-4 mr-2" aria-hidden="true" />
                   See Your AI Plan
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  <CheckCircle2 className="w-4 h-4 mr-2" aria-hidden="true" />
                   Create Partner Account
                 </>
               )}
