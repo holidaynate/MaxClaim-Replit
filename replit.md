@@ -19,7 +19,7 @@ Key features include:
 - **v2.0 Audit Engine**: Compares entered prices against RRC_COST and INS_MAX_COST ranges, flagging discrepancies and providing batch audit summaries.
 - **Document Upload & OCR**: Supports various image and PDF formats with a dual OCR engine.
 - **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data for FMV adjustments.
-- **Comprehensive Accessibility**: Includes text size toggle, high contrast mode, ARIA labels, and keyboard navigation.
+- **Comprehensive Accessibility**: Includes text size toggle (normal/large/extra-large), font style selection (sans-serif/serif/dyslexia-friendly), high contrast mode, reduce motion toggle, ARIA labels, and keyboard navigation. All settings persist via localStorage.
 - **Privacy Architecture**: Collects only anonymous data; no PII stored.
 - **Monetization Infrastructure**: Partnership system for contractors/adjusters with various pricing models, ZIP targeting, and lead tracking.
 - **Credential-Based Auth System**: Role-based authentication for Contacts/Advocates and Partners with dashboards.
