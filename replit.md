@@ -42,6 +42,15 @@ Max-Claim is a full-stack web application. The frontend is built with React 18, 
   - Priority 4 (Low/Green): ME, NH, VT, MA, CT, RI, NJ, DE, MD, WV, DC - minimal disaster activity (22 orgs)
   Includes primaryHazards array with normalized taxonomy (tornado, hurricane, flood, wildfire, earthquake, hail, severe_storm). Admin Dashboard shows color-coded P1/P2/P3/P4 badges and hazard indicators per organization.
 - **Email Templates System**: 4 vendor outreach email templates (Property Management, Public Adjuster, Roofing Contractor, Insurance Attorney) with placeholder support for personalization. Admin dashboard tab with view/copy functionality for easy agent use. Placeholders include [YOUR_NAME], [COMPANY_NAME], [ADJUSTER_NAME], etc.
+- **Performance & Caching Infrastructure**: Enterprise-grade caching and async processing:
+  - **Audit Result Cache**: 1-hour TTL caching for audit results using node-cache with LRU eviction
+  - **Batch Audit Queue**: p-queue based async processing with 10 concurrent workers and 100 requests/minute rate limit
+  - **Database-Backed Job Storage**: batch_jobs table persists queue results across server restarts
+  - **Cache Statistics**: Hit/miss/eviction tracking exposed via admin metrics API
+  - **Async Batch Endpoints**: `POST /api/batch-audit` (submit), `GET /api/batch-audit/:id` (poll status)
+  - **Admin Metrics Dashboard**: Real-time server health, cache stats, and queue status in AdminDashboard.tsx Metrics tab
+  - **Cache Key Strategy**: Combines item name + ZIP code for regional pricing accuracy
+  - **Partial Cache Support**: Mixed cached/computed results properly merged with accurate summary aggregation
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates:
   - **Primary Source**: RSMeans/NRCA industry-standard baseline pricing with labor/material breakdowns
   - **Secondary Source**: Regional cost adjustments via HUD CBSA indices and BLS CPI data (50+ metro areas)
