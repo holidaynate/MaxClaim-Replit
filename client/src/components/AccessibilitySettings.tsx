@@ -1,4 +1,4 @@
-import { Settings, Type, Contrast, Languages, Zap, Keyboard } from 'lucide-react';
+import { Settings, Type, Contrast, Languages, Zap, Keyboard, ALargeSmall } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -19,7 +19,9 @@ import {
 export function AccessibilitySettings() {
   const { 
     textSize, 
-    setTextSize, 
+    setTextSize,
+    fontStyle,
+    setFontStyle,
     highContrast, 
     setHighContrast, 
     reduceMotion,
@@ -81,6 +83,43 @@ export function AccessibilitySettings() {
                 <RadioGroupItem value="extra-large" id="size-extra-large" data-testid="radio-text-size-extra-large" />
                 <Label htmlFor="size-extra-large" className="text-lg cursor-pointer">
                   Extra Large
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <Separator />
+
+          {/* Font Style */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <ALargeSmall className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <Label htmlFor="font-style" className="text-sm font-medium">
+                Font Style
+              </Label>
+            </div>
+            <RadioGroup
+              id="font-style"
+              value={fontStyle}
+              onValueChange={(value) => setFontStyle(value as any)}
+              aria-label="Select font style"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="sans-serif" id="font-sans" data-testid="radio-font-sans-serif" />
+                <Label htmlFor="font-sans" className="text-sm cursor-pointer">
+                  Sans-serif (Default)
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="serif" id="font-serif" data-testid="radio-font-serif" />
+                <Label htmlFor="font-serif" className="text-sm cursor-pointer" style={{ fontFamily: 'Georgia, serif' }}>
+                  Serif
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="dyslexia-friendly" id="font-dyslexia" data-testid="radio-font-dyslexia" />
+                <Label htmlFor="font-dyslexia" className="text-sm cursor-pointer">
+                  Dyslexia-Friendly
                 </Label>
               </div>
             </RadioGroup>

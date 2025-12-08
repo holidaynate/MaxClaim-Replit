@@ -376,6 +376,26 @@
     font-size: 20px;
   }
 
+  /* Accessibility: Font Style Options */
+  :root[data-font-style="sans-serif"] {
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  :root[data-font-style="serif"] {
+    --font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+
+  :root[data-font-style="dyslexia-friendly"] {
+    --font-family: "OpenDyslexic", "Comic Sans MS", "Comic Sans", cursive, sans-serif;
+    letter-spacing: 0.05em;
+    word-spacing: 0.1em;
+    line-height: 1.6;
+  }
+
+  :root[data-font-style] body {
+    font-family: var(--font-family);
+  }
+
   /* Accessibility: High Contrast Mode */
   :root.high-contrast {
     --background: 0 0% 100%;
