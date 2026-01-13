@@ -8,9 +8,18 @@
  * 3. Missing item detection
  * 4. Carrier pattern analysis
  * 5. Final recommendation generation
+ * 
+ * Now integrated with versioned claim audit service for resilient fallback chain.
  */
 
 import { routeLLMRequest, analyzeClaimWithLLM, getLLMServiceStatus } from "./llmRouter";
+import { 
+  analyzeClaimWithFallback, 
+  getVersionStatuses, 
+  getActiveVersion, 
+  getServiceHealth,
+  type ClaimAuditInput 
+} from "./claimAudit";
 import { db } from "../db";
 import { pricingDataPoints, carrierTrends } from "@shared/schema";
 import { sql, eq } from "drizzle-orm";
@@ -401,15 +410,48 @@ export async function runClaimsAgent(context: ClaimContext): Promise<AgentResult
 }
 
 /**
+ * Run versioned claim audit with automatic fallback
+ * Uses the new versioned service architecture for resilient analysis
+ */
+export async function runVersionedClaimAudit(context: ClaimContext) {
+  const input: ClaimAuditInput = {
+    carrier: context.carrier,
+    zipCode: context.zipCode,
+    lineItems: context.lineItems.map(item => ({
+      description: item.description,
+      quotedPrice: item.quotedPrice,
+      category: item.category,
+      quantity: item.quantity,
+      unit: item.unit,
+    })),
+    documentText: context.documentText,
+    claimNumber: context.claimNumber,
+    lossDate: context.lossDate,
+  };
+
+  return analyzeClaimWithFallback(input);
+}
+
+/**
  * Get agent status
  */
 export function getAgentStatus() {
   const llmStatus = getLLMServiceStatus();
+  const versionedStatus = getServiceHealth();
+  const activeVersion = getActiveVersion();
+  
   return {
     enabled: true,
     llmAvailable: llmStatus.available.includes('openai') || llmStatus.available.includes('local-ai'),
     primaryProvider: llmStatus.available.includes('openai') ? 'openai' : 
                      llmStatus.available.includes('local-ai') ? 'localai' : 'rule-based',
+    versionedService: {
+      status: versionedStatus.status,
+      activeVersion: activeVersion.id,
+      role: activeVersion.role,
+      fallbackChain: activeVersion.fallbackChain,
+      recentFallbacks: versionedStatus.recentFallbacks,
+    },
     steps: [
       'extract_line_items',
       'validate_pricing',
@@ -423,6 +465,18 @@ export function getAgentStatus() {
       missingItemDetection: true,
       carrierAnalysis: true,
       recommendationGeneration: true,
+      versionedFallback: true,
     },
+  };
+}
+
+/**
+ * Get versioned service status details
+ */
+export function getVersionedServiceStatus() {
+  return {
+    versions: getVersionStatuses(),
+    active: getActiveVersion(),
+    health: getServiceHealth(),
   };
 }
