@@ -200,6 +200,7 @@ export interface IStorage {
   getSalesAgentByEmail(email: string): Promise<SalesAgent | undefined>;
   updateSalesAgentEarnings(id: string, amount: number): Promise<void>;
   updateSalesAgentStripeConnect(id: string, stripeConnectId: string): Promise<void>;
+  updateSalesAgentRegions(id: string, serviceRegions: string[], activeRegion: string): Promise<void>;
   
   // Partner Contracts
   createPartnerContract(data: InsertPartnerContract): Promise<PartnerContract>;
@@ -906,6 +907,13 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(salesAgents)
       .set({ stripeConnectId, updatedAt: new Date() })
+      .where(eq(salesAgents.id, id));
+  }
+
+  async updateSalesAgentRegions(id: string, serviceRegions: string[], activeRegion: string): Promise<void> {
+    await db
+      .update(salesAgents)
+      .set({ serviceRegions, activeRegion, updatedAt: new Date() })
       .where(eq(salesAgents.id, id));
   }
 

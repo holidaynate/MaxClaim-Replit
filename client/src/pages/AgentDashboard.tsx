@@ -1,17 +1,22 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, Users, TrendingUp, Copy, LogOut, ArrowLeft } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DollarSign, Users, TrendingUp, Copy, LogOut, ArrowLeft, Building2, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
+import { LocalResourcesTab } from "@/components/dashboard/LocalResourcesTab";
 
 export default function AgentDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [activeRegion, setActiveRegion] = useState("TX");
 
   const { data: authData, isLoading: authLoading } = useQuery<{
     authenticated: boolean;
@@ -113,106 +118,136 @@ export default function AgentDashboard() {
 
         <EmailVerificationBanner />
 
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-slate-900/80 border-slate-700">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
-              <CardTitle className="text-sm font-medium text-slate-400">Total Earned</CardTitle>
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-            </CardHeader>
-            <CardContent>
-              {agentLoading ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <div className="text-2xl font-bold text-emerald-400" data-testid="text-total-earned">
-                  ${(agentData?.totalEarned || 0).toLocaleString()}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="bg-slate-800/50 border border-slate-700 mb-6">
+            <TabsTrigger 
+              value="overview" 
+              className="data-[state=active]:bg-slate-700"
+              data-testid="tab-overview"
+            >
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger 
+              value="resources" 
+              className="data-[state=active]:bg-slate-700"
+              data-testid="tab-resources"
+            >
+              <Building2 className="w-4 h-4 mr-2" />
+              Local Resources
+            </TabsTrigger>
+          </TabsList>
 
-          <Card className="bg-slate-900/80 border-slate-700">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
-              <CardTitle className="text-sm font-medium text-slate-400">YTD Earnings</CardTitle>
-              <TrendingUp className="w-4 h-4 text-sky-400" />
-            </CardHeader>
-            <CardContent>
-              {agentLoading ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <div className="text-2xl font-bold text-sky-400" data-testid="text-ytd-earnings">
-                  ${(agentData?.ytdEarnings || 0).toLocaleString()}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid md:grid-cols-3 gap-6">
+              <Card className="bg-slate-900/80 border-slate-700">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
+                  <CardTitle className="text-sm font-medium text-slate-400">Total Earned</CardTitle>
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                </CardHeader>
+                <CardContent>
+                  {agentLoading ? (
+                    <Skeleton className="h-8 w-24" />
+                  ) : (
+                    <div className="text-2xl font-bold text-emerald-400" data-testid="text-total-earned">
+                      ${(agentData?.totalEarned || 0).toLocaleString()}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-          <Card className="bg-slate-900/80 border-slate-700">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
-              <CardTitle className="text-sm font-medium text-slate-400">Status</CardTitle>
-              <Users className="w-4 h-4 text-purple-400" />
-            </CardHeader>
-            <CardContent>
-              {agentLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <Badge 
-                  variant={agentData?.status === "active" ? "default" : "secondary"}
-                  className={agentData?.status === "active" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : ""}
-                  data-testid="badge-agent-status"
-                >
-                  {agentData?.status || "Unknown"}
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              <Card className="bg-slate-900/80 border-slate-700">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
+                  <CardTitle className="text-sm font-medium text-slate-400">YTD Earnings</CardTitle>
+                  <TrendingUp className="w-4 h-4 text-sky-400" />
+                </CardHeader>
+                <CardContent>
+                  {agentLoading ? (
+                    <Skeleton className="h-8 w-24" />
+                  ) : (
+                    <div className="text-2xl font-bold text-sky-400" data-testid="text-ytd-earnings">
+                      ${(agentData?.ytdEarnings || 0).toLocaleString()}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-        <Card className="bg-slate-900/80 border-slate-700 mb-8">
-          <CardHeader>
-            <CardTitle className="text-slate-100">Your Referral Code</CardTitle>
-            <CardDescription className="text-slate-400">
-              Share this code with partners. When they sign up with your code, you earn commissions!
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <div className="bg-slate-800 border border-slate-600 rounded-lg px-6 py-4 font-mono text-2xl text-sky-400" data-testid="text-ref-code">
-                {agentLoading ? <Skeleton className="h-8 w-32" /> : agentData?.agentRefCode || "N/A"}
-              </div>
-              <Button
-                variant="outline"
-                onClick={copyRefCode}
-                disabled={!agentData?.agentRefCode}
-                data-testid="button-copy-refcode"
-              >
-                <Copy className="w-4 h-4 mr-2" />
-                Copy Code
-              </Button>
+              <Card className="bg-slate-900/80 border-slate-700">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 gap-2">
+                  <CardTitle className="text-sm font-medium text-slate-400">Status</CardTitle>
+                  <Users className="w-4 h-4 text-purple-400" />
+                </CardHeader>
+                <CardContent>
+                  {agentLoading ? (
+                    <Skeleton className="h-8 w-20" />
+                  ) : (
+                    <Badge 
+                      variant={agentData?.status === "active" ? "default" : "secondary"}
+                      className={agentData?.status === "active" ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : ""}
+                      data-testid="badge-agent-status"
+                    >
+                      {agentData?.status || "Unknown"}
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card className="bg-slate-900/80 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-slate-100">Getting Started</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 text-slate-300">
-              <p>
-                <span className="font-semibold text-sky-400">1.</span> Share your referral code with contractors, adjusters, and attorneys.
-              </p>
-              <p>
-                <span className="font-semibold text-sky-400">2.</span> When they sign up as partners, you earn 15-40% commission on their subscription.
-              </p>
-              <p>
-                <span className="font-semibold text-sky-400">3.</span> Recurring commissions are paid monthly via Stripe Connect.
-              </p>
-              <p className="text-sm text-slate-500 mt-4">
-                Need help? Contact support@maxclaim.com
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            <Card className="bg-slate-900/80 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-slate-100">Your Referral Code</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Share this code with partners. When they sign up with your code, you earn commissions!
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <div className="bg-slate-800 border border-slate-600 rounded-lg px-6 py-4 font-mono text-2xl text-sky-400" data-testid="text-ref-code">
+                    {agentLoading ? <Skeleton className="h-8 w-32" /> : agentData?.agentRefCode || "N/A"}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={copyRefCode}
+                    disabled={!agentData?.agentRefCode}
+                    data-testid="button-copy-refcode"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Code
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-900/80 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-slate-100">Getting Started</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4 text-slate-300">
+                  <p>
+                    <span className="font-semibold text-sky-400">1.</span> Share your referral code with contractors, adjusters, and attorneys.
+                  </p>
+                  <p>
+                    <span className="font-semibold text-sky-400">2.</span> When they sign up as partners, you earn 15-40% commission on their subscription.
+                  </p>
+                  <p>
+                    <span className="font-semibold text-sky-400">3.</span> Recurring commissions are paid monthly via Stripe Connect.
+                  </p>
+                  <p className="text-sm text-slate-500 mt-4">
+                    Need help? Contact support@maxclaim.com
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="resources">
+            <LocalResourcesTab 
+              activeRegion={activeRegion}
+              onRegionChange={setActiveRegion}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

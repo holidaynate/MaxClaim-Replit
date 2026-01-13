@@ -768,9 +768,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ytdEarnings: agent.ytdEarnings || 0,
         status: agent.status,
         region: agent.region,
+        serviceRegions: agent.serviceRegions || [],
+        activeRegion: agent.activeRegion || agent.region,
         joinedAt: agent.joinedAt,
       }
     });
+  }));
+
+  // Update sales agent service regions
+  app.put("/api/sales-agents/:id/regions", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const session = req.session as any;
+    
+    // Only allow access to own agent data or admin access
+    if (!session.isAdmin && session.agentId !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const { serviceRegions, activeRegion } = req.body;
+    
+    if (!Array.isArray(serviceRegions) || serviceRegions.length === 0) {
+      return res.status(400).json({ error: "At least one service region is required" });
+    }
+    
+    if (!activeRegion || !serviceRegions.includes(activeRegion)) {
+      return res.status(400).json({ error: "Active region must be one of the selected service regions" });
+    }
+    
+    // Update the agent's regions
+    await storage.updateSalesAgentRegions(id, serviceRegions, activeRegion);
+    
+    res.json({ success: true, serviceRegions, activeRegion });
   }));
 
   // Helper to normalize claim items - derive both unitPrice and quotedPrice (subtotal)
