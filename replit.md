@@ -111,3 +111,12 @@ Located in `server/services/`:
 
 ## Configuration Files
 - `.replit-redundancy.json`: Service failover configuration and feature toggles.
+- `vitest.config.ts`: Server test configuration for running unit tests.
+
+## Testing
+- Run tests: `npx vitest run --config vitest.config.ts`
+- Test files located in `server/tests/`:
+  - `carrierIntel.test.ts`: Carrier intelligence confidence calculations and pattern analysis
+  - `distributionTest.test.ts`: Weighted rotation algorithm and chi-square validation
+  - `leadStore.test.ts`: Lead lifecycle transitions and commission calculations
+  - `healthCheck.test.ts`: Health check service structure and status validation
