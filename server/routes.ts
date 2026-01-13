@@ -70,6 +70,11 @@ import {
   getCombinedHealth,
 } from "./services/healthCheck";
 import { seedCarrierTrends } from "./seeds/carrierTrends";
+import { leadStore } from "./services/leadStore";
+import { carrierIntel } from "./services/carrierIntel";
+import { distributionTest } from "./services/distributionTest";
+import { scheduler } from "./services/scheduler";
+import { cacheService } from "./services/cacheService";
 
 // Extend Express session type
 declare module "express-session" {
@@ -2018,6 +2023,182 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get single lead by ID (admin only)
+  app.get("/api/leads/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await leadStore.getById(id);
+      
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      res.json(lead);
+    } catch (error: any) {
+      console.error('Get lead error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve lead',
+        details: error.message 
+      });
+    }
+  });
+
+  // Update lead status (lifecycle transition - admin only)
+  app.patch("/api/leads/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = z.object({
+        status: z.enum(["pending", "in_progress", "closed", "paid"]),
+        claimValue: z.number().optional(),
+        commissionRate: z.number().optional(),
+        metadata: z.any().optional(),
+      }).parse(req.body);
+
+      const updatedLead = await leadStore.updateStatus(id, updateData);
+      
+      if (!updatedLead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      res.json({
+        success: true,
+        lead: updatedLead,
+        message: `Lead status updated to ${updateData.status}`
+      });
+    } catch (error: any) {
+      console.error('Update lead status error:', error);
+      res.status(400).json({ 
+        error: 'Failed to update lead status',
+        details: error.message 
+      });
+    }
+  });
+
+  // Trigger payout for a lead
+  app.post("/api/leads/:id/payout", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await leadStore.getById(id);
+      
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      if (lead.status !== 'closed') {
+        return res.status(400).json({ 
+          error: 'Lead must be in closed status to trigger payout',
+          currentStatus: lead.status 
+        });
+      }
+      
+      const updatedLead = await leadStore.updateStatus(id, { status: 'paid' });
+      
+      res.json({
+        success: true,
+        lead: updatedLead,
+        message: 'Lead marked as paid',
+        commissionAmount: updatedLead?.commissionAmount
+      });
+    } catch (error: any) {
+      console.error('Trigger lead payout error:', error);
+      res.status(400).json({ 
+        error: 'Failed to trigger lead payout',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get partner lead statistics (requires auth)
+  app.get("/api/partners/:id/lead-stats", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: 'Partner not found' });
+      }
+      
+      const stats = await leadStore.getPartnerStats(partnerId);
+      
+      res.json({
+        partnerId,
+        ...stats
+      });
+    } catch (error: any) {
+      console.error('Get partner lead stats error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve lead statistics',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get leads ready for payout (admin)
+  app.get("/api/leads/ready-for-payout", requireAdmin, async (req, res) => {
+    try {
+      const { partnerId } = req.query;
+      
+      const leads = await leadStore.getLeadsReadyForPayout(
+        partnerId as string | undefined
+      );
+      
+      res.json({
+        count: leads.length,
+        leads,
+        totalCommission: leads.reduce((sum, l) => sum + (l.commissionAmount || 0), 0)
+      });
+    } catch (error: any) {
+      console.error('Get leads ready for payout error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve leads',
+        details: error.message 
+      });
+    }
+  });
+
+  // Batch mark leads as paid (admin)
+  app.post("/api/leads/batch-payout", requireAdmin, async (req, res) => {
+    try {
+      const { leadIds } = z.object({
+        leadIds: z.array(z.string()).min(1).max(100),
+      }).parse(req.body);
+      
+      const updatedCount = await leadStore.markAsPaid(leadIds);
+      
+      res.json({
+        success: true,
+        requested: leadIds.length,
+        updated: updatedCount,
+        message: `${updatedCount} leads marked as paid`
+      });
+    } catch (error: any) {
+      console.error('Batch payout error:', error);
+      res.status(400).json({ 
+        error: 'Failed to process batch payout',
+        details: error.message 
+      });
+    }
+  });
+
+  // Export partner leads to CSV (requires auth)
+  app.get("/api/partners/:id/leads/export", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      
+      const csv = await leadStore.exportToCSV(partnerId);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=leads-${partnerId}.csv`);
+      res.send(csv);
+    } catch (error: any) {
+      console.error('Export leads error:', error);
+      res.status(500).json({ 
+        error: 'Failed to export leads',
+        details: error.message 
+      });
+    }
+  });
+
   // Create price audit result for compliance tracking
   app.post("/api/price-audits", async (req, res) => {
     try {
@@ -3637,6 +3818,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const results = await query;
     res.json({ item, results });
   }));
+
+  // Carrier intelligence stats (aggregated metrics)
+  app.get("/api/carrier-stats", (req, res) => {
+    const { carrier } = req.query;
+    
+    if (carrier && typeof carrier === "string") {
+      const stats = carrierIntel.getCarrierStats(carrier);
+      if (!stats) {
+        return res.status(404).json({ error: "Carrier not found" });
+      }
+      res.json(stats);
+    } else {
+      const overallStats = carrierIntel.getOverallStats();
+      res.json(overallStats);
+    }
+  });
+
+  // Carrier analysis for claim items
+  app.post("/api/carrier-analyze", (req, res) => {
+    try {
+      const { carrier, lineItems } = z.object({
+        carrier: z.string(),
+        lineItems: z.array(z.string()).min(1),
+      }).parse(req.body);
+
+      const analysis = carrierIntel.analyzeClaimForCarrier(carrier, lineItems);
+      res.json({
+        carrier,
+        itemsAnalyzed: lineItems.length,
+        ...analysis,
+      });
+    } catch (error: any) {
+      res.status(400).json({ 
+        error: "Invalid request",
+        details: error.message 
+      });
+    }
+  });
+
+  // List all carriers with intelligence data
+  app.get("/api/carriers", (req, res) => {
+    const carriers = carrierIntel.getAllCarriers();
+    const stats = carriers.map(c => ({
+      name: c,
+      patterns: carrierIntel.getCarrierPatterns(c).length,
+    }));
+    res.json({ count: carriers.length, carriers: stats });
+  });
+
+  // Distribution test endpoint (admin/dev tool)
+  app.get("/api/test/distribution", (req, res) => {
+    try {
+      const iterations = parseInt(req.query.iterations as string) || 500;
+      const result = distributionTest.testDistribution(null, { 
+        iterations: Math.min(iterations, 5000) 
+      });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Distribution test failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Validate weight factors (admin/dev tool)
+  app.get("/api/test/weights", (req, res) => {
+    try {
+      const result = distributionTest.validateWeightFactors();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Weight validation failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Scheduler status endpoint
+  app.get("/api/scheduler/status", (req, res) => {
+    res.json(scheduler.getStatus());
+  });
+
+  // Run scheduler job manually (admin)
+  app.post("/api/scheduler/run/:jobName", requireAdmin, async (req, res) => {
+    const { jobName } = req.params;
+    const result = await scheduler.runJob(jobName);
+    res.json(result);
+  });
+
+  // Cache status endpoint
+  app.get("/api/cache/status", (req, res) => {
+    res.json({
+      stats: cacheService.getStats(),
+      provider: cacheService.getProviderStatus(),
+    });
+  });
+
+  // Start scheduler on server boot
+  scheduler.start();
 
   const httpServer = createServer(app);
   return httpServer;

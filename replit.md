@@ -36,20 +36,25 @@ Key features include:
 - **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal. Build Your Own plan includes partner-type budget validation (contractors: $200 min, adjusters: $50 min) with recommended $200/mo guidance.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
 
-### Service Redundancy Architecture (v3.1)
+### Service Redundancy Architecture (v3.2)
 The application implements a comprehensive failover system with cascading fallbacks:
 
 - **OCR Service Cascade**: PaddleOCR (GPU) → OCR.space → Tesseract.js → Manual Entry. Configured via `.replit-redundancy.json`.
 - **LLM Router Service**: OpenAI → LocalAI → Rule-based extraction with circuit breaker pattern and automatic failover.
 - **Health Check Endpoints**: `/api/health`, `/api/health/primary`, `/api/health/fallback`, `/api/health/features` for monitoring service status.
-- **Carrier Intelligence Database**: Historical underpayment patterns by major carriers (State Farm, Allstate, Liberty Mutual, Progressive, Farmers, USAA) with 20+ documented patterns.
+- **Carrier Intelligence Service**: Enhanced carrier pattern analysis with sample sizes, confidence calculations, and aggregated statistics. Includes `calculateConfidence()`, `getCarrierStats()`, and `analyzeClaimForCarrier()` functions.
+- **Carrier Intelligence Database**: Historical underpayment patterns by major carriers (State Farm, Allstate, Liberty Mutual, Progressive, Farmers, USAA) with 20+ documented patterns and risk scoring.
 - **Feature Toggle System**: Environment-based toggles for premium features (advanced-analytics, multi-agent-swarm, realtime-notifications, carrier-intelligence, local-ai-fallback).
-- **Unified Cache Service**: Redis (distributed) with node-cache (local) fallback. TTLs: audit results (7d), partner weights (1h), pricing data (24h).
+- **Unified Cache Service**: Redis (distributed) with node-cache (local) fallback. Full Redis client integration when REDIS_URL is configured. TTLs: audit results (7d), partner weights (1h), pricing data (24h).
 - **Pricing Scraper Service**: Crawl4AI-style scraping with synthetic pricing fallback for 10 categories across 5 regions.
+- **Scheduler Service**: Background job scheduler with daily pricing updates. Endpoints: `/api/scheduler/status`, `/api/scheduler/run/:jobName`.
+- **Lead Lifecycle Management**: Full lead status tracking (pending → in_progress → closed → paid) with commission calculation and batch payout processing.
+- **Distribution Testing Utility**: Statistical validation of weighted rotation algorithm using chi-square tests.
 
-### New Database Tables (v3.1)
+### New Database Tables (v3.2)
 - `carrier_trends`: Underpayment patterns by carrier with frequency, strategy, and confidence scores.
 - `feature_flags`: Premium feature toggles with tier-based activation.
+- `partner_leads` enhancements: Added `status` field (pending/in_progress/closed/paid), `claim_value`, `commission_rate`, `commission_amount`, `closed_at`, and `paid_at` columns.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
@@ -74,13 +79,35 @@ The application implements a comprehensive failover system with cascading fallba
 - **Stripe**: Payment processing and agent payouts.
 - **Redis**: Distributed caching layer (optional, via REDIS_URL).
 
-## New Services (v3.1)
+## New Services (v3.2)
 Located in `server/services/`:
 - `healthCheck.ts`: Service health monitoring with primary/fallback status.
 - `llmRouter.ts`: LLM orchestration with circuit breaker pattern.
 - `featureFlags.ts`: Tier-based feature toggle system.
 - `pricingScraper.ts`: Pricing data collection with synthetic fallback.
-- `cacheService.ts`: Unified Redis/node-cache with TTL presets.
+- `cacheService.ts`: Unified Redis/node-cache with full Redis client integration when REDIS_URL is configured.
+- `carrierIntel.ts`: Enhanced carrier intelligence with sample size thresholds, confidence calculations, and claim analysis.
+- `leadStore.ts`: Lead lifecycle management with status transitions, commission calculations, and batch payout processing.
+- `scheduler.ts`: Background job scheduler for daily pricing updates and future scheduled tasks.
+- `distributionTest.ts`: Statistical testing utility for weighted rotation algorithm validation.
+
+## New API Endpoints (v3.2)
+- `GET /api/leads/:id`: Retrieve single lead by ID.
+- `PATCH /api/leads/:id/status`: Update lead status with validation.
+- `POST /api/leads/:id/payout`: Trigger payout for closed leads (admin).
+- `GET /api/partners/:id/lead-stats`: Get partner lead statistics.
+- `GET /api/leads/ready-for-payout`: Query leads ready for payout (admin).
+- `POST /api/leads/batch-payout`: Batch mark leads as paid (admin).
+- `GET /api/partners/:id/leads/export`: Export partner leads to CSV.
+- `GET /api/carrier-stats`: Get overall carrier intelligence statistics.
+- `GET /api/carrier-stats?carrier=X`: Get specific carrier statistics.
+- `POST /api/carrier-analyze`: Analyze claim items for carrier-specific patterns.
+- `GET /api/carriers`: List all carriers with pattern counts.
+- `GET /api/test/distribution`: Run weighted rotation distribution test.
+- `GET /api/test/weights`: Validate rotation weight factors.
+- `GET /api/scheduler/status`: View scheduler status and job info.
+- `POST /api/scheduler/run/:jobName`: Manually run scheduler job (admin).
+- `GET /api/cache/status`: View cache provider status and statistics.
 
 ## Configuration Files
 - `.replit-redundancy.json`: Service failover configuration and feature toggles.

@@ -10,6 +10,7 @@
  */
 
 import NodeCache from "node-cache";
+import { createClient, type RedisClientType } from "redis";
 
 type CacheProvider = "redis" | "node-cache";
 
@@ -25,6 +26,7 @@ interface CacheStats {
   misses: number;
   keys: number;
   hitRate: number;
+  redisConnected?: boolean;
 }
 
 // TTL presets in seconds
@@ -49,9 +51,10 @@ export const CACHE_PREFIX = {
 
 class CacheService {
   private localCache: NodeCache;
-  private redisClient: any = null;
+  private redisClient: RedisClientType | null = null;
   private provider: CacheProvider = "node-cache";
   private stats = { hits: 0, misses: 0 };
+  private redisConnected = false;
 
   constructor() {
     this.localCache = new NodeCache({
@@ -68,17 +71,36 @@ class CacheService {
 
     if (redisUrl) {
       try {
-        // Dynamic import for optional Redis dependency
-        // In production, install 'redis' package
-        console.log("[CacheService] Redis URL configured, would initialize Redis");
-        // For now, use local cache as Redis requires additional setup
+        console.log("[CacheService] Initializing Redis connection...");
+        
+        this.redisClient = createClient({ url: redisUrl });
+        
+        this.redisClient.on("error", (err) => {
+          console.error("[CacheService] Redis error:", err.message);
+          this.redisConnected = false;
+        });
+        
+        this.redisClient.on("connect", () => {
+          console.log("[CacheService] Redis connected");
+          this.redisConnected = true;
+        });
+        
+        this.redisClient.on("reconnecting", () => {
+          console.log("[CacheService] Redis reconnecting...");
+        });
+        
+        await this.redisClient.connect();
+        this.provider = "redis";
+        this.redisConnected = true;
+        console.log("[CacheService] Using Redis as cache provider");
+      } catch (error: any) {
+        console.warn("[CacheService] Redis connection failed:", error.message);
+        console.log("[CacheService] Falling back to local node-cache");
         this.provider = "node-cache";
-      } catch (error) {
-        console.warn("[CacheService] Redis connection failed, using local cache");
-        this.provider = "node-cache";
+        this.redisClient = null;
       }
     } else {
-      console.log("[CacheService] Using local node-cache");
+      console.log("[CacheService] No REDIS_URL configured, using local node-cache");
       this.provider = "node-cache";
     }
   }
@@ -221,6 +243,7 @@ class CacheService {
       misses: this.stats.misses,
       keys,
       hitRate,
+      redisConnected: this.redisConnected,
     };
   }
 
@@ -230,13 +253,22 @@ class CacheService {
   getProviderStatus(): {
     provider: CacheProvider;
     redisConfigured: boolean;
+    redisConnected: boolean;
     healthy: boolean;
   } {
     return {
       provider: this.provider,
       redisConfigured: !!process.env.REDIS_URL,
-      healthy: true,
+      redisConnected: this.redisConnected,
+      healthy: this.provider === "redis" ? this.redisConnected : true,
     };
+  }
+
+  /**
+   * Check if Redis is connected and healthy
+   */
+  isRedisHealthy(): boolean {
+    return this.provider === "redis" && this.redisConnected && this.redisClient !== null;
   }
 }
 

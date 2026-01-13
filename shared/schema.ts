@@ -21,6 +21,7 @@ export const partnerType = pgEnum("partner_type", ["contractor", "adjuster", "ag
 export const partnerTier = pgEnum("partner_tier", ["advertiser", "affiliate", "partner"]);
 export const partnerStatus = pgEnum("partner_status", ["pending", "approved", "rejected", "suspended"]);
 export const leadType = pgEnum("lead_type", ["click", "referral", "conversion"]);
+export const leadStatus = pgEnum("lead_status", ["pending", "in_progress", "closed", "paid"]);
 export const auditFlag = pgEnum("audit_flag", [
   "OK",
   "Below market minimum",
@@ -499,15 +500,22 @@ export const partnerLeads = pgTable("partner_leads", {
   sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
   claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
   leadType: leadType("lead_type").notNull(),
+  status: leadStatus("status").default("pending").notNull(),
+  claimValue: numeric("claim_value", { precision: 12, scale: 2 }).$type<number>(),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).$type<number>(),
+  commissionAmount: numeric("commission_amount", { precision: 12, scale: 2 }).$type<number>(),
   zipCode: varchar("zip_code", { length: 5 }),
   metadata: jsonb("metadata"),
   clickedAt: timestamp("clicked_at", { withTimezone: true }),
   convertedAt: timestamp("converted_at", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   partnerIdx: index("partner_leads_partner_idx").on(table.partnerId),
   sessionIdx: index("partner_leads_session_idx").on(table.sessionId),
   typeIdx: index("partner_leads_type_idx").on(table.leadType),
+  statusIdx: index("partner_leads_status_idx").on(table.status),
   createdAtIdx: index("partner_leads_created_at_idx").on(table.createdAt),
   clickedAtIdx: index("partner_leads_clicked_at_idx").on(table.clickedAt),
 }));
