@@ -54,19 +54,19 @@ export default function PartnerDashboard() {
       status: string;
     };
   }>({
-    queryKey: [`/api/partners/${authData?.id}`],
+    queryKey: ["/api/partners", authData?.id],
     enabled: !!authData?.id && authData?.role === "partner",
   });
 
   const partnerData = partnerResponse?.partner;
 
   const { data: leadStats, isLoading: statsLoading } = useQuery<LeadStats>({
-    queryKey: [`/api/partners/${authData?.id}/lead-stats`],
+    queryKey: ["/api/partners", authData?.id, "lead-stats"],
     enabled: !!authData?.id && authData?.role === "partner",
   });
 
   const { data: leadsResponse, isLoading: leadsLoading } = useQuery<{ leads: PartnerLead[] }>({
-    queryKey: [`/api/partners/${authData?.id}/leads`],
+    queryKey: ["/api/partners", authData?.id, "leads"],
     enabled: !!authData?.id && authData?.role === "partner",
   });
 
