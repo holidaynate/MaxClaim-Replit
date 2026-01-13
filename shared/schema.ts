@@ -692,6 +692,8 @@ export const salesAgents = pgTable("sales_agents", {
   emailVerified: integer("email_verified").default(0).$type<boolean>(), // Email verification status
   phone: text("phone"),
   region: text("region"),
+  serviceRegions: text("service_regions").array(), // Multiple service areas for Local Resources
+  activeRegion: text("active_region"), // Currently active region for dashboard view
   birthYear: integer("birth_year"),
   commissionTierId: varchar("commission_tier_id").references(() => agentCommissionTiers.id),
   stripeConnectId: text("stripe_connect_id").unique(),
