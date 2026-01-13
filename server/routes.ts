@@ -2133,6 +2133,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get partner leads list (requires auth)
+  app.get("/api/partners/:id/leads", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      const session = req.session as any;
+      
+      // Only allow access to own leads or admin access
+      if (!session.isAdmin && session.partnerId !== partnerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: 'Partner not found' });
+      }
+      
+      const leads = await leadStore.getByPartner(partnerId);
+      
+      res.json({ leads });
+    } catch (error: any) {
+      console.error('Get partner leads error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve leads',
+        details: error.message 
+      });
+    }
+  });
+
   // Get leads ready for payout (admin)
   app.get("/api/leads/ready-for-payout", requireAdmin, async (req, res) => {
     try {
