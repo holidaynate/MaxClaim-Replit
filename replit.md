@@ -90,12 +90,15 @@ Located in `server/services/`:
 - `leadStore.ts`: Lead lifecycle management with status transitions, commission calculations, and batch payout processing.
 - `scheduler.ts`: Background job scheduler for daily pricing updates and future scheduled tasks.
 - `distributionTest.ts`: Statistical testing utility for weighted rotation algorithm validation.
+- `claimValidator.ts`: Trade-specific validation for claim line items with unit normalization (SQ, SF, LF, EA), quantity range checking, price warnings, and 12 trade rule sets.
+- `partnerRouter.ts`: Routes claims to partners based on trade matching, geographic coverage, tier-based scoring, and weighted selection algorithm.
 
 ## New API Endpoints (v3.2)
 - `GET /api/leads/:id`: Retrieve single lead by ID.
 - `PATCH /api/leads/:id/status`: Update lead status with validation.
 - `POST /api/leads/:id/payout`: Trigger payout for closed leads (admin).
 - `GET /api/partners/:id/lead-stats`: Get partner lead statistics.
+- `GET /api/partners/:id/leads`: Get partner leads list with auth checks.
 - `GET /api/leads/ready-for-payout`: Query leads ready for payout (admin).
 - `POST /api/leads/batch-payout`: Batch mark leads as paid (admin).
 - `GET /api/partners/:id/leads/export`: Export partner leads to CSV.
@@ -115,8 +118,10 @@ Located in `server/services/`:
 
 ## Testing
 - Run tests: `npx vitest run --config vitest.config.ts`
-- Test files located in `server/tests/`:
-  - `carrierIntel.test.ts`: Carrier intelligence confidence calculations and pattern analysis
-  - `distributionTest.test.ts`: Weighted rotation algorithm and chi-square validation
-  - `leadStore.test.ts`: Lead lifecycle transitions and commission calculations
-  - `healthCheck.test.ts`: Health check service structure and status validation
+- Test files located in `server/tests/` (144 tests total):
+  - `carrierIntel.test.ts`: Carrier intelligence confidence calculations and pattern analysis (23 tests)
+  - `distributionTest.test.ts`: Weighted rotation algorithm and chi-square validation (19 tests)
+  - `leadStore.test.ts`: Lead lifecycle transitions and commission calculations (33 tests)
+  - `healthCheck.test.ts`: Health check service structure and status validation (22 tests)
+  - `claimValidator.test.ts`: Trade-specific validation, unit normalization, and quantity checks (20 tests)
+  - `partnerRouter.test.ts`: Trade matching, location matching, and weighted selection (27 tests)
