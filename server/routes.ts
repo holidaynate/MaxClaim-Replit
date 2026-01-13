@@ -75,6 +75,8 @@ import { carrierIntel } from "./services/carrierIntel";
 import { distributionTest } from "./services/distributionTest";
 import { scheduler } from "./services/scheduler";
 import { cacheService } from "./services/cacheService";
+import { claimValidator, type LineItemInput, type ValidationResult } from "./services/claimValidator";
+import { partnerRouter, type RoutingCriteria, type RoutingResult, type RoutingAnalysis } from "./services/partnerRouter";
 
 // Extend Express session type
 declare module "express-session" {
@@ -2463,6 +2465,207 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         console.error('Audit batch error:', error);
         res.status(500).json({ error: 'Failed to audit claim batch' });
+      }
+    }
+  });
+
+  // ========== CLAIM VALIDATION ENDPOINTS ==========
+
+  // Validate single line item with trade-specific rules
+  app.post("/api/validate/item", (req, res) => {
+    try {
+      const input = z.object({
+        itemName: z.string().min(1, "Item name is required"),
+        quantity: z.number().positive("Quantity must be positive"),
+        unit: z.string().min(1, "Unit is required"),
+        price: z.number().min(0, "Price cannot be negative"),
+        category: z.string().optional(),
+      }).parse(req.body);
+
+      const result = claimValidator.validateLineItem(input);
+      const detectedTrade = claimValidator.detectTrade(input.itemName, input.category);
+
+      res.json({
+        ...result,
+        detectedTrade,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Validate item error:', error);
+        res.status(500).json({ error: 'Failed to validate item' });
+      }
+    }
+  });
+
+  // Validate batch of line items
+  app.post("/api/validate/batch", (req, res) => {
+    try {
+      const { items } = z.object({
+        items: z.array(z.object({
+          itemName: z.string().min(1),
+          quantity: z.number(),
+          unit: z.string(),
+          price: z.number(),
+          category: z.string().optional(),
+        })).min(1, "At least one item is required").max(100, "Maximum 100 items"),
+      }).parse(req.body);
+
+      const batchResult = claimValidator.validateBatchItems(items);
+
+      res.json(batchResult);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Validate batch error:', error);
+        res.status(500).json({ error: 'Failed to validate batch' });
+      }
+    }
+  });
+
+  // Get trade rules for a specific trade
+  app.get("/api/validate/trades", (req, res) => {
+    const tradeRules = claimValidator.getTradeRules();
+    const trades = Object.keys(tradeRules).map(trade => ({
+      trade,
+      expectedUnits: tradeRules[trade].expectedUnits,
+      quantityRange: {
+        min: tradeRules[trade].minQuantity,
+        max: tradeRules[trade].maxQuantity
+      },
+      priceRange: {
+        min: tradeRules[trade].priceRangeMin,
+        max: tradeRules[trade].priceRangeMax
+      },
+      keywords: tradeRules[trade].keywords
+    }));
+    res.json({ trades });
+  });
+
+  // Get supported unit aliases
+  app.get("/api/validate/units", (req, res) => {
+    res.json({ 
+      unitAliases: claimValidator.getUnitAliases(),
+      supportedUnits: ['SQ', 'SF', 'LF', 'EA', 'CT', 'GAL', 'HR', 'JOB']
+    });
+  });
+
+  // ========== PARTNER ROUTING ENDPOINTS ==========
+
+  // Route claim to best matching partners
+  app.post("/api/route/claim", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+      priority: z.enum(['budget', 'rating', 'distance']).optional(),
+    }).parse(req.body);
+
+    // Fetch approved partners from database
+    const allPartners = await storage.getPartners({ status: 'approved' });
+
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    res.json({
+      criteria,
+      ...routingResult,
+    });
+  }));
+
+  // Get best single partner for a claim
+  app.post("/api/route/claim/best", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+    }).parse(req.body);
+
+    const allPartners = await storage.getPartners({ status: 'approved' });
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    const bestMatch = partnerRouter.selectWinningPartner(
+      routingResult.eligiblePartners,
+      'highest_score'
+    );
+
+    if (!bestMatch) {
+      return res.json({
+        criteria,
+        match: null,
+        message: "No matching partners found for this claim"
+      });
+    }
+
+    res.json({
+      criteria,
+      match: bestMatch
+    });
+  }));
+
+  // Get weighted random partner selection (for rotation)
+  app.post("/api/route/claim/weighted", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+    }).parse(req.body);
+
+    const allPartners = await storage.getPartners({ status: 'approved' });
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    const selectedMatch = partnerRouter.selectWinningPartner(
+      routingResult.eligiblePartners,
+      'weighted_random'
+    );
+
+    if (!selectedMatch) {
+      return res.json({
+        criteria,
+        match: null,
+        message: "No matching partners found for this claim"
+      });
+    }
+
+    res.json({
+      criteria,
+      match: selectedMatch,
+      selectionMethod: "weighted_random"
+    });
+  }));
+
+  // Extract trades from claim items
+  app.post("/api/route/extract-trades", (req, res) => {
+    try {
+      const { items } = z.object({
+        items: z.array(z.object({
+          itemName: z.string(),
+          category: z.string().optional(),
+        })).min(1),
+      }).parse(req.body);
+
+      const trades = partnerRouter.extractTradesFromClaimItems(items);
+
+      res.json({ trades });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Extract trades error:', error);
+        res.status(500).json({ error: 'Failed to extract trades' });
       }
     }
   });
