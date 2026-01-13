@@ -1307,3 +1307,69 @@ export const insertEmailVerificationTokenSchema = createInsertSchema(emailVerifi
 
 export type InsertEmailVerificationToken = z.infer<typeof insertEmailVerificationTokenSchema>;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+// ============================================
+// CARRIER TRENDS - Underpayment Intelligence Database
+// ============================================
+
+// Carrier underpayment strategy enum
+export const carrierStrategy = pgEnum("carrier_strategy", [
+  "OMIT",
+  "UNDERVALUE", 
+  "DENY_COVERAGE",
+  "DENY_MODIFIER",
+  "ZERO_COST"
+]);
+
+// Carrier Trends - Historical underpayment patterns by carrier
+export const carrierTrends = pgTable("carrier_trends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  carrierName: text("carrier_name").notNull(),
+  lineItemDescription: text("line_item_description").notNull(),
+  underpaymentRate: numeric("underpayment_rate", { precision: 5, scale: 2 }).notNull().$type<number>(),
+  frequency: numeric("frequency", { precision: 5, scale: 2 }).notNull().$type<number>(),
+  typicalGaps: text("typical_gaps").array(),
+  commonStrategy: carrierStrategy("common_strategy").notNull(),
+  historicalCount: integer("historical_count").default(0).notNull(),
+  confidence: integer("confidence").default(80).notNull(),
+  monthYear: timestamp("month_year", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  carrierIdx: index("carrier_trends_carrier_idx").on(table.carrierName),
+  itemIdx: index("carrier_trends_item_idx").on(table.lineItemDescription),
+  carrierItemIdx: index("carrier_trends_carrier_item_idx").on(table.carrierName, table.lineItemDescription),
+}));
+
+export const insertCarrierTrendSchema = createInsertSchema(carrierTrends).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCarrierTrend = z.infer<typeof insertCarrierTrendSchema>;
+export type CarrierTrend = typeof carrierTrends.$inferSelect;
+
+// ============================================
+// FEATURE FLAGS - Premium Feature Toggles
+// ============================================
+
+export const featureFlags = pgTable("feature_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  enabled: integer("enabled").default(0).$type<boolean>(),
+  requiredTier: text("required_tier").default("free"),
+  activationConditions: jsonb("activation_conditions").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+export type FeatureFlag = typeof featureFlags.$inferSelect;

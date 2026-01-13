@@ -36,21 +36,51 @@ Key features include:
 - **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal. Build Your Own plan includes partner-type budget validation (contractors: $200 min, adjusters: $50 min) with recommended $200/mo guidance.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
 
+### Service Redundancy Architecture (v3.1)
+The application implements a comprehensive failover system with cascading fallbacks:
+
+- **OCR Service Cascade**: PaddleOCR (GPU) → OCR.space → Tesseract.js → Manual Entry. Configured via `.replit-redundancy.json`.
+- **LLM Router Service**: OpenAI → LocalAI → Rule-based extraction with circuit breaker pattern and automatic failover.
+- **Health Check Endpoints**: `/api/health`, `/api/health/primary`, `/api/health/fallback`, `/api/health/features` for monitoring service status.
+- **Carrier Intelligence Database**: Historical underpayment patterns by major carriers (State Farm, Allstate, Liberty Mutual, Progressive, Farmers, USAA) with 20+ documented patterns.
+- **Feature Toggle System**: Environment-based toggles for premium features (advanced-analytics, multi-agent-swarm, realtime-notifications, carrier-intelligence, local-ai-fallback).
+- **Unified Cache Service**: Redis (distributed) with node-cache (local) fallback. TTLs: audit results (7d), partner weights (1h), pricing data (24h).
+- **Pricing Scraper Service**: Crawl4AI-style scraping with synthetic pricing fallback for 10 categories across 5 regions.
+
+### New Database Tables (v3.1)
+- `carrier_trends`: Underpayment patterns by carrier with frequency, strategy, and confidence scores.
+- `feature_flags`: Premium feature toggles with tier-based activation.
+
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
 - **Backend Stack**: Node.js, Express, TypeScript, PostgreSQL, Drizzle ORM.
 - **Database Schema**: Normalized PostgreSQL for sessions, claims, line items, pricing data, sources, and session usage.
-- **OCR Service**: Utilizes both cloud-based and local engines for robustness.
+- **OCR Service**: Cascading fallback with PaddleOCR (GPU), OCR.space (cloud), Tesseract.js (local), and manual entry fallback.
 - **Pricing Engine**: PostgreSQL-backed with regional multipliers and data collection for future refinement.
 - **Data Flow**: Document upload triggers OCR and text parsing; user input and external data drive FMV calculation; results are displayed, and pricing data points stored.
 - **Supported Categories**: Roofing, Flooring, Drywall, Painting, Plumbing, Electrical, HVAC, Windows & Doors, Appliances, Cabinets, and 'Other'.
 
 ## External Dependencies
-- **OCR.space API**: Primary OCR service.
+- **PaddleOCR API**: GPU-accelerated OCR (optional, via PADDLEOCR_API_URL).
+- **OCR.space API**: Cloud OCR service fallback.
 - **Tesseract.js**: Local OCR library fallback.
+- **OpenAI API**: Primary LLM for claim analysis (optional, via OPENAI_API_KEY).
+- **LocalAI**: Self-hosted LLM fallback (optional, via LOCAL_AI_URL).
 - **FEMA NFIP Claims API**: Historical flood insurance claims data.
 - **BLS Construction PPI**: Construction cost inflation adjustments.
 - **Texas DOI Complaints**: Public complaint data for insurance companies.
 - **jsPDF**: Client-side PDF generation.
 - **SendGrid**: Email sending.
 - **Stripe**: Payment processing and agent payouts.
+- **Redis**: Distributed caching layer (optional, via REDIS_URL).
+
+## New Services (v3.1)
+Located in `server/services/`:
+- `healthCheck.ts`: Service health monitoring with primary/fallback status.
+- `llmRouter.ts`: LLM orchestration with circuit breaker pattern.
+- `featureFlags.ts`: Tier-based feature toggle system.
+- `pricingScraper.ts`: Pricing data collection with synthetic fallback.
+- `cacheService.ts`: Unified Redis/node-cache with TTL presets.
+
+## Configuration Files
+- `.replit-redundancy.json`: Service failover configuration and feature toggles.

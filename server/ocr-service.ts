@@ -1,14 +1,85 @@
 // OCR Service for processing insurance claim documents
-// Uses OCR.space API (primary) and Tesseract.js (fallback)
+// Cascading fallback: PaddleOCR → OCR.space → Tesseract.js → Manual Entry
 
 import { createWorker } from 'tesseract.js';
 import * as pdfParse from 'pdf-parse';
 import fs from 'fs/promises';
 
+export type OCRSource = 'paddle-ocr' | 'ocr.space' | 'tesseract' | 'pdf-text' | 'manual-entry';
+
 interface OCRResult {
   text: string;
   confidence?: number;
-  source: 'ocr.space' | 'tesseract' | 'pdf-text';
+  source: OCRSource;
+  processingTimeMs?: number;
+  requiresManualEntry?: boolean;
+  metadata?: {
+    engineVersion?: string;
+    fallbackReason?: string;
+  };
+}
+
+// PaddleOCR via HTTP API (GPU-accelerated, highest accuracy)
+// Requires: PADDLEOCR_API_URL environment variable
+async function paddleOCR(filePath: string): Promise<OCRResult | null> {
+  const apiUrl = process.env.PADDLEOCR_API_URL;
+  if (!apiUrl) {
+    return null;
+  }
+
+  const startTime = Date.now();
+  try {
+    const fileBuffer = await fs.readFile(filePath);
+    const formData = new FormData();
+    formData.append('file', new Blob([fileBuffer]));
+    formData.append('ocr_type', 'ocr'); // ocr, structure, or table
+
+    const response = await fetch(`${apiUrl}/ocr/predict`, {
+      method: 'POST',
+      body: formData,
+      signal: AbortSignal.timeout(15000), // 15 second timeout
+    });
+
+    if (!response.ok) {
+      console.warn(`PaddleOCR API returned status ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    if (!data.result || !Array.isArray(data.result)) {
+      console.warn('PaddleOCR returned unexpected format');
+      return null;
+    }
+
+    // PaddleOCR returns array of [bbox, [text, confidence]]
+    const textParts = data.result.map((item: any) => {
+      if (Array.isArray(item) && item[1] && Array.isArray(item[1])) {
+        return item[1][0]; // Extract text
+      }
+      return '';
+    }).filter(Boolean);
+
+    const avgConfidence = data.result.reduce((acc: number, item: any) => {
+      if (Array.isArray(item) && item[1] && Array.isArray(item[1])) {
+        return acc + (item[1][1] || 0);
+      }
+      return acc;
+    }, 0) / Math.max(data.result.length, 1);
+
+    return {
+      text: textParts.join('\n'),
+      confidence: avgConfidence * 100,
+      source: 'paddle-ocr',
+      processingTimeMs: Date.now() - startTime,
+      metadata: {
+        engineVersion: 'PaddleOCR v2.7',
+      },
+    };
+  } catch (error) {
+    console.error('PaddleOCR API error:', error);
+    return null;
+  }
 }
 
 // OCR.space API (Free tier: 500 requests/day)
@@ -98,37 +169,97 @@ async function extractPDFText(filePath: string): Promise<OCRResult | null> {
   }
 }
 
-// Main OCR function with smart routing
+// Main OCR function with cascading fallback:
+// PaddleOCR → OCR.space → Tesseract.js → Manual Entry
 export async function performOCR(filePath: string, mimeType: string): Promise<OCRResult> {
-  console.log(`Processing OCR for file: ${filePath}, type: ${mimeType}`);
+  console.log(`[OCR] Processing file: ${filePath}, type: ${mimeType}`);
+  const startTime = Date.now();
+  let fallbackReason = '';
   
   // Strategy 1: If PDF, try text extraction first (fastest)
   if (mimeType === 'application/pdf') {
     const pdfText = await extractPDFText(filePath);
     if (pdfText) {
-      console.log('PDF text extraction successful');
-      return pdfText;
+      console.log('[OCR] PDF text extraction successful');
+      return {
+        ...pdfText,
+        processingTimeMs: Date.now() - startTime,
+      };
     }
-    console.log('PDF is scanned, falling back to OCR');
+    console.log('[OCR] PDF is scanned, falling back to OCR');
+    fallbackReason = 'PDF is scanned/image-based';
   }
 
-  // Strategy 2: Try OCR.space API (fast, accurate, but rate limited)
+  // Strategy 2: Try PaddleOCR (GPU-accelerated, highest accuracy)
+  if (process.env.PADDLEOCR_API_URL) {
+    const paddleResult = await paddleOCR(filePath);
+    if (paddleResult) {
+      console.log('[OCR] PaddleOCR successful');
+      return paddleResult;
+    }
+    fallbackReason = 'PaddleOCR unavailable';
+    console.log('[OCR] PaddleOCR failed, trying OCR.space');
+  }
+
+  // Strategy 3: Try OCR.space API (fast, accurate, but rate limited)
   const ocrSpaceResult = await ocrSpaceAPI(filePath);
   if (ocrSpaceResult) {
-    console.log('OCR.space successful');
-    return ocrSpaceResult;
+    console.log('[OCR] OCR.space successful');
+    return {
+      ...ocrSpaceResult,
+      processingTimeMs: Date.now() - startTime,
+      metadata: {
+        fallbackReason,
+      },
+    };
   }
+  fallbackReason = fallbackReason || 'OCR.space unavailable or rate limited';
 
-  // Strategy 3: Fallback to Tesseract.js (local, no limits, slower)
-  console.log('Falling back to Tesseract.js');
+  // Strategy 4: Fallback to Tesseract.js (local, no limits, slower)
+  console.log('[OCR] Falling back to Tesseract.js');
   const tesseractResult = await tesseractOCR(filePath);
   if (tesseractResult) {
-    console.log('Tesseract OCR successful');
-    return tesseractResult;
+    console.log('[OCR] Tesseract.js successful');
+    return {
+      ...tesseractResult,
+      processingTimeMs: Date.now() - startTime,
+      metadata: {
+        fallbackReason,
+      },
+    };
   }
 
-  // If all fail, throw error
-  throw new Error('OCR processing failed with all available engines');
+  // Strategy 5: Return manual entry flag (UI will show form)
+  console.log('[OCR] All OCR engines failed, requesting manual entry');
+  return {
+    text: '',
+    source: 'manual-entry',
+    requiresManualEntry: true,
+    processingTimeMs: Date.now() - startTime,
+    metadata: {
+      fallbackReason: 'All OCR engines failed',
+    },
+  };
+}
+
+// Get OCR service status for health checks
+export function getOCRServiceStatus(): {
+  primary: string;
+  fallbacks: string[];
+  configured: boolean;
+} {
+  const hasPaddleOCR = !!process.env.PADDLEOCR_API_URL;
+  const hasOCRSpace = !!process.env.OCR_SPACE_API_KEY;
+
+  return {
+    primary: hasPaddleOCR ? 'PaddleOCR' : hasOCRSpace ? 'OCR.space' : 'Tesseract.js',
+    fallbacks: [
+      ...(hasPaddleOCR ? ['OCR.space', 'Tesseract.js', 'Manual Entry'] : []),
+      ...(!hasPaddleOCR && hasOCRSpace ? ['Tesseract.js', 'Manual Entry'] : []),
+      ...(!hasPaddleOCR && !hasOCRSpace ? ['Manual Entry'] : []),
+    ],
+    configured: hasPaddleOCR || hasOCRSpace,
+  };
 }
 
 // Parse extracted text to identify claim items and costs

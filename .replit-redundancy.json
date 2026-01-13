@@ -1,0 +1,101 @@
+{
+  "version": "1.0",
+  "app": "MaxClaim v3.1",
+  "redundancy_philosophy": "optional-redundancy-backup",
+  "contradiction_resolution": "cascading-fallbacks",
+  
+  "services": {
+    "claim-audit": {
+      "primary": { "type": "ai-llm", "provider": "openai", "model": "gpt-4" },
+      "fallback": { "type": "rule-engine", "provider": "local" },
+      "behavior": "automatic-switchover",
+      "timeout_ms": 10000
+    },
+    "ocr-parsing": {
+      "primary": { "type": "paddle-ocr", "resources": "gpu" },
+      "fallback_chain": [
+        { "type": "tesseract-js", "resources": "cpu", "priority": 1 },
+        { "type": "ocr-space-api", "resources": "external", "priority": 2 },
+        { "type": "manual-entry", "resources": "user", "priority": 3 }
+      ],
+      "behavior": "cascading-fallback",
+      "timeout_ms": 5000
+    },
+    "lead-routing": {
+      "primary": { "type": "weighted-algorithm", "source": "database" },
+      "fallback": { "type": "cached-snapshot", "source": "node-cache" },
+      "behavior": "switchover-on-db-failure",
+      "cache_ttl_seconds": 3600
+    },
+    "payments": {
+      "primary": { "type": "stripe-api" },
+      "fallback": { "type": "local-queue", "retry_policy": "exponential-backoff" },
+      "behavior": "queue-and-retry"
+    },
+    "authentication": {
+      "primary": { "type": "replit-auth" },
+      "fallback": { "type": "credential-auth", "storage": "postgresql" },
+      "behavior": "provider-swap"
+    },
+    "pricing-data": {
+      "primary": { "type": "external-apis", "sources": ["bls", "fema", "xactimate"] },
+      "fallback": { "type": "cached-database", "storage": "postgresql" },
+      "behavior": "cache-first",
+      "cache_ttl_seconds": 86400
+    }
+  },
+
+  "feature_toggles": {
+    "advanced-analytics": {
+      "deployed": true,
+      "default": "disabled",
+      "activation": "user-plan-and-service-health",
+      "env_var": "ENABLE_ADVANCED_ANALYTICS"
+    },
+    "multi-agent-swarm": {
+      "deployed": true,
+      "default": "disabled",
+      "activation": "enterprise-tier-only",
+      "env_var": "ENABLE_MULTI_AGENT_SWARM"
+    },
+    "realtime-notifications": {
+      "deployed": true,
+      "default": "disabled",
+      "activation": "browser-and-user-preference",
+      "env_var": "ENABLE_REALTIME_NOTIFICATIONS"
+    },
+    "carrier-intelligence": {
+      "deployed": true,
+      "default": "enabled",
+      "activation": "always-on",
+      "env_var": "ENABLE_CARRIER_INTELLIGENCE"
+    },
+    "local-ai-fallback": {
+      "deployed": true,
+      "default": "disabled",
+      "activation": "enterprise-or-cost-savings",
+      "env_var": "ENABLE_LOCAL_AI"
+    }
+  },
+
+  "monitoring": {
+    "check_interval_seconds": 30,
+    "alert_on_failure": true,
+    "auto_failover": true,
+    "cost_optimization": true,
+    "health_endpoints": {
+      "primary": "/api/health/primary",
+      "fallback": "/api/health/fallback",
+      "features": "/api/health/features",
+      "combined": "/api/health"
+    }
+  },
+
+  "thresholds": {
+    "openai_timeout_ms": 10000,
+    "ocr_timeout_ms": 5000,
+    "db_health_check_interval_ms": 5000,
+    "stripe_retry_backoff_seconds": [5, 10, 30, 60],
+    "max_retry_attempts": 3
+  }
+}

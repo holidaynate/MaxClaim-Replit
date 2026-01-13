@@ -21,7 +21,9 @@ import { analyzeClaimItem, analyzeClaimItemWithCitation, getCategoryLineItems, g
 import { aggregateSources, type CitedPriceEstimate, type PricingSource } from "./utils/pricingCitation";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
-import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
+import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema, carrierTrends as carrierTrendsTable } from "@shared/schema";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 import { auditClaimItem, auditBatch, getAllItems, getMarketData, type AuditResult, type BatchAuditResult } from "@shared/priceAudit";
 import { asyncHandler, validateClaimInput, validateFileUpload, validateAdminLogin, sanitizeString } from "./utils/validation";
 import { priceDBCache } from "./utils/priceDBCache";
@@ -61,6 +63,13 @@ import {
   getCompetitiveInsights,
   type PartnerAdConfig 
 } from "./services/competitiveRotation";
+import {
+  getPrimaryHealth,
+  getFallbackHealth,
+  getFeatureStatus,
+  getCombinedHealth,
+} from "./services/healthCheck";
+import { seedCarrierTrends } from "./seeds/carrierTrends";
 
 // Extend Express session type
 declare module "express-session" {
@@ -3551,6 +3560,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (error) {
     console.error("[ProOrgsDB] Failed to seed pro organizations/templates:", error);
   }
+
+  // Seed carrier trends on startup
+  try {
+    await seedCarrierTrends();
+  } catch (error) {
+    console.error("[CarrierTrends] Failed to seed carrier trends:", error);
+  }
+
+  // ===========================================
+  // HEALTH CHECK ENDPOINTS - Service Redundancy
+  // ===========================================
+
+  // Primary services health
+  app.get("/api/health/primary", asyncHandler(async (req, res) => {
+    const health = await getPrimaryHealth();
+    const statusCode = health.status === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Fallback services health
+  app.get("/api/health/fallback", asyncHandler(async (req, res) => {
+    const health = await getFallbackHealth();
+    const statusCode = health.status === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Feature flags status
+  app.get("/api/health/features", (req, res) => {
+    const features = getFeatureStatus();
+    res.json({
+      timestamp: new Date().toISOString(),
+      features,
+    });
+  });
+
+  // Combined health check (primary + fallback + features)
+  app.get("/api/health", asyncHandler(async (req, res) => {
+    const health = await getCombinedHealth();
+    const statusCode = health.overall === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Carrier trends endpoint (intelligence data)
+  app.get("/api/carrier-trends", asyncHandler(async (req, res) => {
+    const { carrier } = req.query;
+    
+    if (carrier && typeof carrier === "string") {
+      const trends = await db.select()
+        .from(carrierTrendsTable)
+        .where(sql`lower(carrier_name) = ${carrier.toLowerCase()}`);
+      res.json({ carrier, patterns: trends });
+    } else {
+      const trends = await db.select().from(carrierTrendsTable);
+      res.json({ count: trends.length, trends });
+    }
+  }));
+
+  // Carrier lookup by line item
+  app.get("/api/carrier-trends/lookup", asyncHandler(async (req, res) => {
+    const { item, carrier } = req.query;
+    
+    if (!item || typeof item !== "string") {
+      res.status(400).json({ error: "item query parameter required" });
+      return;
+    }
+    
+    let query = db.select().from(carrierTrendsTable)
+      .where(sql`lower(line_item_description) LIKE ${`%${item.toLowerCase()}%`}`);
+    
+    if (carrier && typeof carrier === "string") {
+      query = db.select().from(carrierTrendsTable)
+        .where(sql`lower(line_item_description) LIKE ${`%${item.toLowerCase()}%`} AND lower(carrier_name) = ${carrier.toLowerCase()}`);
+    }
+    
+    const results = await query;
+    res.json({ item, results });
+  }));
 
   const httpServer = createServer(app);
   return httpServer;
