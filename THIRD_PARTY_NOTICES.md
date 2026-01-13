@@ -117,7 +117,6 @@ All Radix UI packages: https://www.radix-ui.com
 | jspdf | https://github.com/parallax/jsPDF | MIT | PDF generation |
 | pdf-parse | https://github.com/nicknisi/pdf-parse | MIT | PDF text extraction |
 | tesseract.js | https://tesseract.projectnaptha.com | Apache-2.0 | OCR processing |
-| xlsx | https://sheetjs.com | Apache-2.0 | Excel file processing |
 
 ### External Services
 
