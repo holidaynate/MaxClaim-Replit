@@ -1,0 +1,203 @@
+{
+  "name": "MaxClaim Lead Routing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/lead-submitted",
+        "options": {}
+      },
+      "id": "webhook-lead-submitted",
+      "name": "Lead Submitted Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.leadType }}",
+              "operation": "equals",
+              "value2": "conversion"
+            }
+          ]
+        }
+      },
+      "id": "check-lead-type",
+      "name": "Check Lead Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MAXCLAIM_API_URL }}/api/partners/match",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "zipCode",
+              "value": "={{ $json.zipCode }}"
+            },
+            {
+              "name": "tradeType",
+              "value": "={{ $json.claimCategory }}"
+            },
+            {
+              "name": "claimId",
+              "value": "={{ $json.claimId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "match-partners",
+      "name": "Match Partners API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [500, 150]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MAXCLAIM_API_URL }}/api/leads",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "partnerId",
+              "value": "={{ $json.matchedPartner.id }}"
+            },
+            {
+              "name": "claimId",
+              "value": "={{ $json.claimId }}"
+            },
+            {
+              "name": "type",
+              "value": "referral"
+            },
+            {
+              "name": "status",
+              "value": "pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-lead",
+      "name": "Create Lead Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 150]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SENDGRID_FROM_EMAIL }}",
+        "toEmail": "={{ $json.matchedPartner.email }}",
+        "subject": "New Lead from MaxClaim - {{ $json.claimCategory }}",
+        "text": "You have a new lead!\n\nClaim Category: {{ $json.claimCategory }}\nZIP Code: {{ $json.zipCode }}\nEstimated Value: ${{ $json.estimatedValue }}\n\nLogin to your MaxClaim dashboard to view details and respond."
+      },
+      "id": "notify-partner",
+      "name": "Notify Partner via Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [900, 150],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-credentials",
+          "name": "SendGrid API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const lead = $input.first().json;\nconst now = new Date();\n\nreturn {\n  json: {\n    success: true,\n    leadId: lead.id,\n    partnerId: lead.partnerId,\n    processedAt: now.toISOString(),\n    workflowName: 'lead-routing'\n  }\n};"
+      },
+      "id": "log-result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1100, 150]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log click-type leads for analytics\nconst lead = $input.first().json;\nreturn {\n  json: {\n    type: 'click',\n    leadData: lead,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "log-click",
+      "name": "Log Click Lead",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    }
+  ],
+  "connections": {
+    "Lead Submitted Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Lead Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lead Type": {
+      "main": [
+        [
+          {
+            "node": "Match Partners API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Click Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Partners API": {
+      "main": [
+        [
+          {
+            "node": "Create Lead Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Lead Record": {
+      "main": [
+        [
+          {
+            "node": "Notify Partner via Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Partner via Email": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["maxclaim", "leads", "automation"]
+}

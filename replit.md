@@ -34,6 +34,12 @@ Key features include:
 - **Competitive Rotation Algorithm**: A budget-weighted ad placement priority system with tier multipliers, budget factors, and demand bonuses.
 - **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
+- **Partner Reviews System**: Customer feedback collection with ratings and review statistics per partner.
+- **Available Grants Database**: 15+ federal/state/nonprofit disaster recovery programs with eligibility matching.
+- **1099-NEC Tax Form Generation**: IRS-compliant tax form generation for partners with $600+ annual compensation.
+- **Claims Analysis Agent**: LangGraph-style multi-step claim analysis with pricing validation, missing item detection, and carrier pattern analysis.
+- **n8n Workflow Automation**: Pre-built workflows for lead routing and partner onboarding.
+- **Docker Deployment Stack**: Production-ready containerized deployment with Redis, PostgreSQL, n8n, and PaddleOCR services.
 
 ### Service Redundancy Architecture
 The application implements a comprehensive failover system with cascading fallbacks for critical services:
@@ -48,6 +54,10 @@ The application implements a comprehensive failover system with cascading fallba
 - **Lead Lifecycle Management**: Full lead status tracking with commission calculation and batch payout processing.
 - **ClaimValidator Service**: Trade-specific validation for claim line items with unit normalization, quantity range checking, price warnings, and 12 trade rule sets.
 - **PartnerRouter Service**: Routes claims to partners based on trade matching, geographic coverage, tier-based scoring, and a weighted selection algorithm.
+- **Grant Scraper Service**: Curated database of disaster recovery grants from FEMA, SBA, USDA, HUD, state programs, and nonprofits with eligibility matching.
+- **Tax Form Generator Service**: 1099-NEC generation with IRS compliance checking ($600 threshold), batch processing, and partner compensation tracking.
+- **PaddleOCR Service**: GPU-accelerated OCR integration with health checking and fallback support for high-volume document processing.
+- **Claims Analysis Agent**: 5-step agent pipeline (extraction, validation, missing item detection, carrier analysis, recommendations) with LLM integration.
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
@@ -69,5 +79,7 @@ The application implements a comprehensive failover system with cascading fallba
 - **Texas DOI Complaints**: Public complaint data for insurance companies.
 - **jsPDF**: Client-side PDF generation.
 - **SendGrid**: Email sending.
-- **Stripe**: Payment processing and agent payouts.
+- **Stripe**: Payment processing, agent payouts, and partner Connect payouts.
 - **Redis**: Distributed caching layer.
+- **n8n**: Workflow automation for lead routing and partner onboarding.
+- **Docker**: Containerized deployment infrastructure.

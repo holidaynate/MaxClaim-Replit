@@ -58,6 +58,12 @@ import {
   type InsertPasswordResetToken,
   type EmailVerificationToken,
   type InsertEmailVerificationToken,
+  type PartnerReview,
+  type InsertPartnerReview,
+  type AvailableGrant,
+  type InsertAvailableGrant,
+  type TaxForm,
+  type InsertTaxForm,
   users,
   replitUsers,
   userClaims,
@@ -89,9 +95,12 @@ import {
   batchJobs,
   passwordResetTokens,
   emailVerificationTokens,
+  partnerReviews,
+  availableGrants,
+  taxForms,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and, inArray, like, gte, lte } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, like, gte, lte, isNotNull } from "drizzle-orm";
 
 // Analytics data (no PII - only ZIP codes and aggregate data)
 interface ClaimAnalysis {
@@ -178,6 +187,9 @@ export interface IStorage {
   getPartnersByZipCode(zipCode: string, filters?: { status?: string; tier?: string }): Promise<Array<Partner & { priority: number }>>;
   createPartnerLead(data: InsertPartnerLead): Promise<PartnerLead>;
   getPartnerLeads(partnerId: string): Promise<PartnerLead[]>;
+  getPartnerLead(id: string): Promise<PartnerLead | undefined>;
+  updatePartnerLeadStatus(id: string, status: string, paidAt?: Date): Promise<void>;
+  getApprovedLeadsForPayout(limit?: number): Promise<PartnerLead[]>;
   
   // Price audit results for compliance and reporting
   createPriceAuditResult(data: InsertPriceAuditResult): Promise<PriceAuditResult>;
@@ -304,7 +316,36 @@ export interface IStorage {
   updatePartnerPassword(id: string, hashedPassword: string): Promise<void>;
   
   // Stripe integration
-  updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<void>;
+  updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string; stripeConnectId?: string }): Promise<void>;
+  
+  // ============================================
+  // PARTNER REVIEWS - Customer feedback system
+  // ============================================
+  createPartnerReview(data: InsertPartnerReview): Promise<PartnerReview>;
+  getPartnerReviews(partnerId: string): Promise<PartnerReview[]>;
+  getPartnerReview(id: string): Promise<PartnerReview | undefined>;
+  updatePartnerReview(id: string, data: Partial<InsertPartnerReview>): Promise<void>;
+  deletePartnerReview(id: string): Promise<void>;
+  getPartnerReviewStats(partnerId: string): Promise<{ avgRating: number; count: number; distribution: Record<number, number> }>;
+  
+  // ============================================
+  // AVAILABLE GRANTS - Disaster recovery programs
+  // ============================================
+  createAvailableGrant(data: InsertAvailableGrant): Promise<AvailableGrant>;
+  getAvailableGrants(filters?: { source?: string; disasterType?: string; state?: string; isActive?: boolean }): Promise<AvailableGrant[]>;
+  getAvailableGrant(id: string): Promise<AvailableGrant | undefined>;
+  updateAvailableGrant(id: string, data: Partial<InsertAvailableGrant>): Promise<void>;
+  deleteAvailableGrant(id: string): Promise<void>;
+  searchGrants(searchTerm: string): Promise<AvailableGrant[]>;
+  
+  // ============================================
+  // TAX FORMS - 1099-NEC generation
+  // ============================================
+  createTaxForm(data: InsertTaxForm): Promise<TaxForm>;
+  getTaxForms(filters?: { partnerId?: string; taxYear?: number; status?: string }): Promise<TaxForm[]>;
+  getTaxForm(id: string): Promise<TaxForm | undefined>;
+  updateTaxFormStatus(id: string, status: string): Promise<void>;
+  getPartnerAnnualEarnings(partnerId: string, year: number): Promise<number>;
 }
 
 // Reference: javascript_database integration blueprint for PostgreSQL storage implementation
@@ -767,6 +808,36 @@ export class DatabaseStorage implements IStorage {
       .from(partnerLeads)
       .where(eq(partnerLeads.partnerId, partnerId))
       .orderBy(desc(partnerLeads.createdAt));
+  }
+
+  async getPartnerLead(id: string): Promise<PartnerLead | undefined> {
+    const [lead] = await db
+      .select()
+      .from(partnerLeads)
+      .where(eq(partnerLeads.id, id));
+    return lead;
+  }
+
+  async updatePartnerLeadStatus(id: string, status: string, paidAt?: Date): Promise<void> {
+    const updateData: Record<string, any> = { status };
+    if (paidAt) {
+      updateData.paidAt = paidAt;
+    }
+    await db
+      .update(partnerLeads)
+      .set(updateData)
+      .where(eq(partnerLeads.id, id));
+  }
+
+  async getApprovedLeadsForPayout(limit: number = 50): Promise<PartnerLead[]> {
+    return await db
+      .select()
+      .from(partnerLeads)
+      .where(and(
+        eq(partnerLeads.status, "approved"),
+        isNotNull(partnerLeads.commissionAmount)
+      ))
+      .limit(limit);
   }
 
   // Price audit results for compliance and reporting
@@ -1624,7 +1695,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Stripe integration
-  async updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<void> {
+  async updatePartnerStripeInfo(id: string, info: { stripeCustomerId?: string; stripeSubscriptionId?: string; stripeConnectId?: string }): Promise<void> {
     const updateData: Record<string, any> = { updatedAt: new Date() };
     if (info.stripeCustomerId) {
       updateData.stripeCustomerId = info.stripeCustomerId;
@@ -1632,10 +1703,196 @@ export class DatabaseStorage implements IStorage {
     if (info.stripeSubscriptionId) {
       updateData.stripeSubscriptionId = info.stripeSubscriptionId;
     }
+    if (info.stripeConnectId) {
+      updateData.stripeConnectId = info.stripeConnectId;
+    }
     await db
       .update(partners)
       .set(updateData)
       .where(eq(partners.id, id));
+  }
+
+  // ============================================
+  // PARTNER REVIEWS - Customer feedback system
+  // ============================================
+  async createPartnerReview(data: InsertPartnerReview): Promise<PartnerReview> {
+    const [review] = await db.insert(partnerReviews).values(data).returning();
+    return review;
+  }
+
+  async getPartnerReviews(partnerId: string): Promise<PartnerReview[]> {
+    return await db
+      .select()
+      .from(partnerReviews)
+      .where(eq(partnerReviews.partnerId, partnerId))
+      .orderBy(desc(partnerReviews.createdAt));
+  }
+
+  async getPartnerReview(id: string): Promise<PartnerReview | undefined> {
+    const [review] = await db
+      .select()
+      .from(partnerReviews)
+      .where(eq(partnerReviews.id, id));
+    return review;
+  }
+
+  async updatePartnerReview(id: string, data: Partial<InsertPartnerReview>): Promise<void> {
+    await db
+      .update(partnerReviews)
+      .set(data)
+      .where(eq(partnerReviews.id, id));
+  }
+
+  async deletePartnerReview(id: string): Promise<void> {
+    await db.delete(partnerReviews).where(eq(partnerReviews.id, id));
+  }
+
+  async getPartnerReviewStats(partnerId: string): Promise<{ avgRating: number; count: number; distribution: Record<number, number> }> {
+    const reviews = await this.getPartnerReviews(partnerId);
+    const count = reviews.length;
+    
+    if (count === 0) {
+      return { avgRating: 0, count: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
+    }
+    
+    const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
+    const avgRating = Math.round((sum / count) * 10) / 10;
+    
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    reviews.forEach(r => {
+      distribution[r.rating] = (distribution[r.rating] || 0) + 1;
+    });
+    
+    return { avgRating, count, distribution };
+  }
+
+  // ============================================
+  // AVAILABLE GRANTS - Disaster recovery programs
+  // ============================================
+  async createAvailableGrant(data: InsertAvailableGrant): Promise<AvailableGrant> {
+    const [grant] = await db.insert(availableGrants).values(data).returning();
+    return grant;
+  }
+
+  async getAvailableGrants(filters?: { source?: string; disasterType?: string; state?: string; isActive?: boolean }): Promise<AvailableGrant[]> {
+    const conditions = [];
+    
+    if (filters?.source) {
+      conditions.push(eq(availableGrants.source, filters.source));
+    }
+    if (filters?.disasterType) {
+      conditions.push(eq(availableGrants.disasterType, filters.disasterType));
+    }
+    if (filters?.state) {
+      conditions.push(sql`${availableGrants.states} @> ARRAY[${filters.state}]::text[]`);
+    }
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(availableGrants.isActive, filters.isActive ? 1 : 0));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(availableGrants).orderBy(desc(availableGrants.createdAt));
+    }
+    
+    return await db
+      .select()
+      .from(availableGrants)
+      .where(and(...conditions))
+      .orderBy(desc(availableGrants.createdAt));
+  }
+
+  async getAvailableGrant(id: string): Promise<AvailableGrant | undefined> {
+    const [grant] = await db
+      .select()
+      .from(availableGrants)
+      .where(eq(availableGrants.id, id));
+    return grant;
+  }
+
+  async updateAvailableGrant(id: string, data: Partial<InsertAvailableGrant>): Promise<void> {
+    await db
+      .update(availableGrants)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(availableGrants.id, id));
+  }
+
+  async deleteAvailableGrant(id: string): Promise<void> {
+    await db.delete(availableGrants).where(eq(availableGrants.id, id));
+  }
+
+  async searchGrants(searchTerm: string): Promise<AvailableGrant[]> {
+    const term = `%${searchTerm.toLowerCase()}%`;
+    return await db
+      .select()
+      .from(availableGrants)
+      .where(and(
+        eq(availableGrants.isActive, 1),
+        sql`(LOWER(${availableGrants.name}) LIKE ${term} OR LOWER(${availableGrants.description}) LIKE ${term})`
+      ));
+  }
+
+  // ============================================
+  // TAX FORMS - 1099-NEC generation
+  // ============================================
+  async createTaxForm(data: InsertTaxForm): Promise<TaxForm> {
+    const [form] = await db.insert(taxForms).values(data).returning();
+    return form;
+  }
+
+  async getTaxForms(filters?: { partnerId?: string; taxYear?: number; status?: string }): Promise<TaxForm[]> {
+    const conditions = [];
+    
+    if (filters?.partnerId) {
+      conditions.push(eq(taxForms.partnerId, filters.partnerId));
+    }
+    if (filters?.taxYear) {
+      conditions.push(eq(taxForms.taxYear, filters.taxYear));
+    }
+    if (filters?.status) {
+      conditions.push(eq(taxForms.status, filters.status as any));
+    }
+    
+    if (conditions.length === 0) {
+      return await db.select().from(taxForms).orderBy(desc(taxForms.generatedAt));
+    }
+    
+    return await db
+      .select()
+      .from(taxForms)
+      .where(and(...conditions))
+      .orderBy(desc(taxForms.generatedAt));
+  }
+
+  async getTaxForm(id: string): Promise<TaxForm | undefined> {
+    const [form] = await db
+      .select()
+      .from(taxForms)
+      .where(eq(taxForms.id, id));
+    return form;
+  }
+
+  async updateTaxFormStatus(id: string, status: string): Promise<void> {
+    await db
+      .update(taxForms)
+      .set({ status: status as any })
+      .where(eq(taxForms.id, id));
+  }
+
+  async getPartnerAnnualEarnings(partnerId: string, year: number): Promise<number> {
+    const startDate = new Date(year, 0, 1);
+    const endDate = new Date(year + 1, 0, 1);
+    
+    const leads = await db
+      .select()
+      .from(partnerLeads)
+      .where(and(
+        eq(partnerLeads.partnerId, partnerId),
+        eq(partnerLeads.status, 'paid'),
+        gte(partnerLeads.paidAt, startDate),
+        sql`${partnerLeads.paidAt} < ${endDate}`
+      ));
+    
+    return leads.reduce((sum, lead) => sum + (Number(lead.commissionAmount) || 0), 0);
   }
 }
 

@@ -417,6 +417,306 @@ export class StripePaymentService {
       stripeSubscriptionId: (session.subscription as any)?.id,
     });
   }
+
+  // Partner Connect (for contractors receiving referral payouts)
+  async createPartnerConnectAccount(partnerId: string, email: string): Promise<string> {
+    const stripe = await getUncachableStripeClient();
+    
+    const account = await stripe.accounts.create({
+      type: 'express',
+      email,
+      metadata: {
+        partnerId,
+        source: 'max-claim-partner',
+        accountType: 'contractor',
+      },
+      capabilities: {
+        transfers: { requested: true },
+      },
+    });
+    
+    await storage.updatePartnerStripeInfo(partnerId, {
+      stripeConnectId: account.id,
+    });
+    
+    return account.id;
+  }
+
+  async createPartnerConnectOnboardingLink(
+    stripeConnectId: string,
+    returnUrl: string,
+    refreshUrl: string
+  ): Promise<string> {
+    const stripe = await getUncachableStripeClient();
+    
+    const accountLink = await stripe.accountLinks.create({
+      account: stripeConnectId,
+      refresh_url: refreshUrl,
+      return_url: returnUrl,
+      type: 'account_onboarding',
+    });
+    
+    return accountLink.url;
+  }
+
+  async getPartnerConnectDashboardLink(stripeConnectId: string): Promise<string> {
+    const stripe = await getUncachableStripeClient();
+    const loginLink = await stripe.accounts.createLoginLink(stripeConnectId);
+    return loginLink.url;
+  }
+
+  // Process lead-based partner payouts
+  async processLeadPayout(
+    leadId: string,
+    partnerId: string,
+    amount: number,
+    description: string
+  ): Promise<{ success: boolean; transferId?: string; error?: string }> {
+    const partner = await storage.getPartner(partnerId);
+    if (!partner) {
+      return { success: false, error: 'Partner not found' };
+    }
+
+    // Check if partner has Stripe Connect
+    const stripeConnectId = (partner as any).stripeConnectId;
+    if (!stripeConnectId) {
+      return { success: false, error: 'Partner not connected to Stripe for payouts' };
+    }
+
+    try {
+      const stripe = await getUncachableStripeClient();
+
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(amount * 100),
+        currency: 'usd',
+        destination: stripeConnectId,
+        description,
+        metadata: {
+          partnerId,
+          leadId,
+          source: 'max-claim-lead-payout',
+        },
+      });
+
+      return {
+        success: true,
+        transferId: transfer.id,
+      };
+    } catch (error: any) {
+      console.error('[StripePayout] Lead payout failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Batch payout processing
+  async processBatchPayouts(
+    payouts: Array<{ partnerId: string; amount: number; description: string; leadId?: string }>
+  ): Promise<{ processed: number; failed: number; results: Array<{ partnerId: string; success: boolean; error?: string }> }> {
+    const results: Array<{ partnerId: string; success: boolean; error?: string }> = [];
+    let processed = 0;
+    let failed = 0;
+
+    for (const payout of payouts) {
+      const result = await this.processLeadPayout(
+        payout.leadId || '',
+        payout.partnerId,
+        payout.amount,
+        payout.description
+      );
+
+      if (result.success) {
+        processed++;
+      } else {
+        failed++;
+      }
+
+      results.push({
+        partnerId: payout.partnerId,
+        success: result.success,
+        error: result.error,
+      });
+    }
+
+    return { processed, failed, results };
+  }
+
+  // Get partner payout balance from Stripe
+  async getPartnerPayoutBalance(stripeConnectId: string): Promise<{ available: number; pending: number }> {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const balance = await stripe.balance.retrieve({
+        stripeAccount: stripeConnectId,
+      });
+
+      const available = balance.available.reduce((sum, b) => sum + (b.amount / 100), 0);
+      const pending = balance.pending.reduce((sum, b) => sum + (b.amount / 100), 0);
+
+      return { available, pending };
+    } catch (error) {
+      return { available: 0, pending: 0 };
+    }
+  }
+
+  // Check if partner's Connect account is fully onboarded
+  async isPartnerConnectComplete(stripeConnectId: string): Promise<boolean> {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const account = await stripe.accounts.retrieve(stripeConnectId);
+      return account.details_submitted && !account.requirements?.currently_due?.length;
+    } catch (error) {
+      return false;
+    }
+  }
 }
 
 export const stripePaymentService = new StripePaymentService();
+
+// ============================================
+// STANDALONE EXPORTS FOR PARTNER CONNECT
+// ============================================
+
+/**
+ * Create a Stripe Connect account for a partner and persist the account ID
+ */
+export async function createPartnerConnectAccount(
+  partnerId: string,
+  email: string,
+  companyName: string
+): Promise<{ success: boolean; accountId?: string; error?: string }> {
+  try {
+    const accountId = await stripePaymentService.createPartnerConnectAccount(partnerId, email);
+    return { success: true, accountId };
+  } catch (error: any) {
+    console.error('[StripeConnect] Account creation failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Create an onboarding link for partner Connect account
+ */
+export async function createOnboardingLink(
+  stripeConnectId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const url = await stripePaymentService.createPartnerConnectOnboardingLink(
+      stripeConnectId,
+      returnUrl,
+      refreshUrl
+    );
+    return { success: true, url };
+  } catch (error: any) {
+    console.error('[StripeConnect] Onboarding link failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get Connect account dashboard link
+ */
+export async function getConnectDashboardLink(
+  stripeConnectId: string
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  try {
+    const url = await stripePaymentService.getPartnerConnectDashboardLink(stripeConnectId);
+    return { success: true, url };
+  } catch (error: any) {
+    console.error('[StripeConnect] Dashboard link failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get Connect account balance
+ */
+export async function getConnectAccountBalance(
+  stripeConnectId: string
+): Promise<{ success: boolean; balance?: { available: number; pending: number }; error?: string }> {
+  try {
+    const balance = await stripePaymentService.getPartnerPayoutBalance(stripeConnectId);
+    return { success: true, balance };
+  } catch (error: any) {
+    console.error('[StripeConnect] Balance check failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Process payout for a specific lead
+ */
+export async function processLeadPayout(
+  leadId: string
+): Promise<{ success: boolean; transferId?: string; amount?: number; error?: string }> {
+  try {
+    // Get lead details via storage abstraction
+    const lead = await storage.getPartnerLead(leadId);
+    if (!lead) {
+      return { success: false, error: 'Lead not found' };
+    }
+    
+    if (lead.status === 'paid') {
+      return { success: false, error: 'Lead already paid' };
+    }
+    
+    const amount = Number(lead.commissionAmount) || 0;
+    if (amount <= 0) {
+      return { success: false, error: 'No commission amount to pay' };
+    }
+    
+    const result = await stripePaymentService.processLeadPayout(
+      leadId,
+      lead.partnerId,
+      amount,
+      `Lead payout for claim referral`
+    );
+    
+    if (result.success) {
+      // Update lead status to paid via storage abstraction
+      await storage.updatePartnerLeadStatus(leadId, 'paid', new Date());
+    }
+    
+    return {
+      success: result.success,
+      transferId: result.transferId,
+      amount,
+      error: result.error,
+    };
+  } catch (error: any) {
+    console.error('[StripeConnect] Lead payout failed:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Batch process payouts for approved leads
+ */
+export async function batchProcessPayouts(
+  maxPayouts: number = 50
+): Promise<{ processed: number; failed: number; totalAmount: number }> {
+  try {
+    // Get approved leads via storage abstraction
+    const leads = await storage.getApprovedLeadsForPayout(maxPayouts);
+    
+    let processed = 0;
+    let failed = 0;
+    let totalAmount = 0;
+    
+    for (const lead of leads) {
+      const result = await processLeadPayout(lead.id);
+      if (result.success) {
+        processed++;
+        totalAmount += result.amount || 0;
+      } else {
+        failed++;
+      }
+    }
+    
+    console.log(`[StripeConnect] Batch payout: ${processed} processed, ${failed} failed, $${totalAmount.toFixed(2)} total`);
+    return { processed, failed, totalAmount };
+  } catch (error: any) {
+    console.error('[StripeConnect] Batch payout failed:', error.message);
+    return { processed: 0, failed: 0, totalAmount: 0 };
+  }
+}

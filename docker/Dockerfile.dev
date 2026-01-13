@@ -1,0 +1,22 @@
+# MaxClaim Development Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install development dependencies
+RUN apk add --no-cache git python3 make g++
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose development port
+EXPOSE 5000
+
+# Start development server
+CMD ["npm", "run", "dev"]

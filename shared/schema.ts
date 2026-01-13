@@ -1381,3 +1381,129 @@ export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({
 
 export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
 export type FeatureFlag = typeof featureFlags.$inferSelect;
+
+// ============================================
+// PARTNER REVIEWS - Customer feedback for partners
+// ============================================
+
+export const partnerReviews = pgTable("partner_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => replitUsers.id, { onDelete: "set null" }),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
+  rating: integer("rating").notNull(), // 1-5 stars
+  comment: text("comment"),
+  isVerified: integer("is_verified").default(0).$type<boolean>(), // Verified job completion
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("partner_reviews_partner_idx").on(table.partnerId),
+  ratingIdx: index("partner_reviews_rating_idx").on(table.rating),
+}));
+
+export const insertPartnerReviewSchema = createInsertSchema(partnerReviews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPartnerReview = z.infer<typeof insertPartnerReviewSchema>;
+export type PartnerReview = typeof partnerReviews.$inferSelect;
+
+export const partnerReviewsRelations = relations(partnerReviews, ({ one }) => ({
+  partner: one(partners, {
+    fields: [partnerReviews.partnerId],
+    references: [partners.id],
+  }),
+  user: one(replitUsers, {
+    fields: [partnerReviews.userId],
+    references: [replitUsers.id],
+  }),
+}));
+
+// ============================================
+// AVAILABLE GRANTS - Disaster recovery assistance programs
+// ============================================
+
+export const grantCategory = pgEnum("grant_category", [
+  "federal",
+  "state", 
+  "local",
+  "nonprofit",
+  "private"
+]);
+
+export const availableGrants = pgTable("available_grants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull(), // FEMA, SBA, 211 Texas, USDA, etc.
+  name: text("name").notNull(),
+  category: grantCategory("category").notNull(),
+  minAmount: numeric("min_amount", { precision: 12, scale: 2 }).$type<number>(),
+  maxAmount: numeric("max_amount", { precision: 12, scale: 2 }).$type<number>(),
+  eligibility: text("eligibility"), // Description of eligibility requirements
+  applicationUrl: text("application_url"),
+  processingDays: integer("processing_days"), // Estimated processing time
+  disasterTypes: text("disaster_types").array(), // flood, fire, hurricane, etc.
+  statesAvailable: text("states_available").array(), // TX, FL, CA or ["ALL"]
+  isActive: integer("is_active").default(1).$type<boolean>(),
+  lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sourceIdx: index("available_grants_source_idx").on(table.source),
+  categoryIdx: index("available_grants_category_idx").on(table.category),
+  activeIdx: index("available_grants_active_idx").on(table.isActive),
+}));
+
+export const insertAvailableGrantSchema = createInsertSchema(availableGrants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastScrapedAt: true,
+});
+
+export type InsertAvailableGrant = z.infer<typeof insertAvailableGrantSchema>;
+export type AvailableGrant = typeof availableGrants.$inferSelect;
+
+// ============================================
+// TAX FORMS - 1099-NEC for partner payouts
+// ============================================
+
+export const taxFormType = pgEnum("tax_form_type", ["1099-NEC", "1099-K"]);
+
+export const taxForms = pgTable("tax_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  formType: taxFormType("form_type").notNull(),
+  taxYear: integer("tax_year").notNull(),
+  totalCompensation: numeric("total_compensation", { precision: 12, scale: 2 }).notNull().$type<number>(),
+  formData: jsonb("form_data").$type<{
+    recipientName?: string;
+    recipientTin?: string; // Encrypted
+    recipientAddress?: string;
+    payerInfo?: Record<string, any>;
+  }>(),
+  pdfUrl: text("pdf_url"),
+  pdfData: text("pdf_data"), // Base64 encoded PDF content
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("tax_forms_partner_idx").on(table.partnerId),
+  yearIdx: index("tax_forms_year_idx").on(table.taxYear),
+}));
+
+export const insertTaxFormSchema = createInsertSchema(taxForms).omit({
+  id: true,
+  generatedAt: true,
+  createdAt: true,
+});
+
+export type InsertTaxForm = z.infer<typeof insertTaxFormSchema>;
+export type TaxForm = typeof taxForms.$inferSelect;
+
+export const taxFormsRelations = relations(taxForms, ({ one }) => ({
+  partner: one(partners, {
+    fields: [taxForms.partnerId],
+    references: [partners.id],
+  }),
+}));

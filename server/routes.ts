@@ -22,7 +22,7 @@ import { aggregateSources, type CitedPriceEstimate, type PricingSource } from ".
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
 import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema, carrierTrends as carrierTrendsTable } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { sql, eq, desc, and } from "drizzle-orm";
 import { db } from "./db";
 import { auditClaimItem, auditBatch, getAllItems, getMarketData, type AuditResult, type BatchAuditResult } from "@shared/priceAudit";
 import { asyncHandler, validateClaimInput, validateFileUpload, validateAdminLogin, sanitizeString } from "./utils/validation";
@@ -4146,6 +4146,478 @@ export async function registerRoutes(app: Express): Promise<Server> {
       provider: cacheService.getProviderStatus(),
     });
   });
+
+  // ============================================
+  // PARTNER REVIEWS ENDPOINTS
+  // ============================================
+
+  // Get reviews for a partner
+  app.get("/api/partners/:id/reviews", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const reviews = await storage.getPartnerReviews(id);
+    const stats = await storage.getPartnerReviewStats(id);
+    
+    res.json({
+      reviews: reviews.slice(0, 50),
+      stats: { avgRating: stats.avgRating, totalReviews: stats.count }
+    });
+  }));
+
+  // Submit a review
+  app.post("/api/partners/:id/reviews", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { rating, comment, sessionId, claimId } = req.body;
+    
+    // Zod validation with coercion for numeric fields
+    const reviewSchema = z.object({
+      rating: z.coerce.number().min(1).max(5),
+      comment: z.string().optional().nullable(),
+      sessionId: z.string().optional().nullable(),
+      claimId: z.string().optional().nullable(),
+    });
+    
+    const validation = reviewSchema.safeParse({ rating, comment, sessionId, claimId });
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.message });
+    }
+    
+    const userId = req.user?.id || null;
+    
+    const review = await storage.createPartnerReview({
+      partnerId: id,
+      userId,
+      sessionId: sessionId || null,
+      claimId: claimId || null,
+      rating,
+      comment: comment || null,
+    });
+    
+    res.status(201).json(review);
+  }));
+
+  // ============================================
+  // AVAILABLE GRANTS ENDPOINTS
+  // ============================================
+
+  // List all available grants
+  app.get("/api/grants", asyncHandler(async (req, res) => {
+    const { state, disasterType, category } = req.query;
+    
+    // Use storage with isActive filter
+    let grants = await storage.getAvailableGrants({ isActive: true });
+    
+    // Filter by state/disaster type in JS for array contains
+    if (state) {
+      grants = grants.filter(g => 
+        g.statesAvailable?.includes(state as string) || 
+        g.statesAvailable?.includes("ALL")
+      );
+    }
+    if (disasterType) {
+      grants = grants.filter(g => 
+        g.disasterTypes?.includes(disasterType as string)
+      );
+    }
+    if (category) {
+      grants = grants.filter(g => g.category === category);
+    }
+    
+    // Sort by maxAmount descending and limit
+    grants = grants
+      .sort((a, b) => (Number(b.maxAmount) || 0) - (Number(a.maxAmount) || 0))
+      .slice(0, 100);
+    
+    res.json({
+      grants,
+      total: grants.length
+    });
+  }));
+
+  // Get single grant
+  app.get("/api/grants/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const grant = await storage.getAvailableGrant(id);
+    
+    if (!grant) {
+      return res.status(404).json({ error: "Grant not found" });
+    }
+    res.json(grant);
+  }));
+
+  // Admin: Add grant
+  app.post("/api/admin/grants", requireAdmin, asyncHandler(async (req, res) => {
+    // Zod validation
+    const grantSchema = z.object({
+      source: z.string().min(1),
+      name: z.string().min(1),
+      category: z.string().min(1),
+      minAmount: z.string().optional(),
+      maxAmount: z.string().optional(),
+      eligibility: z.string().optional(),
+      applicationUrl: z.string().optional(),
+      processingDays: z.string().optional(),
+      disasterTypes: z.array(z.string()).optional(),
+      statesAvailable: z.array(z.string()).optional(),
+    });
+    
+    const validation = grantSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.message });
+    }
+    
+    const { source, name, category, minAmount, maxAmount, eligibility, applicationUrl, processingDays, disasterTypes, statesAvailable } = validation.data;
+    
+    const grant = await storage.createAvailableGrant({
+      source,
+      name,
+      category,
+      minAmount: minAmount || null,
+      maxAmount: maxAmount || null,
+      eligibility: eligibility || null,
+      applicationUrl: applicationUrl || null,
+      processingDays: processingDays || null,
+      disasterTypes: disasterTypes || null,
+      statesAvailable: statesAvailable || null,
+    });
+    
+    res.status(201).json(grant);
+  }));
+
+  // Admin: Update grant
+  app.patch("/api/admin/grants/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const grant = await storage.getAvailableGrant(id);
+    if (!grant) {
+      return res.status(404).json({ error: "Grant not found" });
+    }
+    
+    await storage.updateAvailableGrant(id, req.body);
+    const updated = await storage.getAvailableGrant(id);
+    res.json(updated);
+  }));
+
+  // ============================================
+  // TAX FORMS ENDPOINTS (1099-NEC)
+  // ============================================
+
+  // Get partner tax forms
+  app.get("/api/partners/:id/tax-forms", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { taxYear } = req.query;
+    
+    const filters: { partnerId: string; taxYear?: number } = { partnerId: id };
+    if (taxYear) {
+      filters.taxYear = parseInt(taxYear as string);
+    }
+    
+    const forms = await storage.getTaxForms(filters);
+    res.json(forms);
+  }));
+
+  // Admin: Generate 1099-NEC for partner (uses proper PDF generation)
+  app.post("/api/admin/partners/:id/generate-1099", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { taxYear } = req.body;
+    
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateForm1099NEC } = await import("./services/taxFormGenerator");
+    const result = await generateForm1099NEC(id, year);
+    
+    if (!result.success) {
+      // Check if it's because threshold not met
+      if (result.error?.includes("below")) {
+        return res.json({
+          required: false,
+          message: result.error
+        });
+      }
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.status(201).json({
+      taxFormId: result.taxFormId,
+      form: result.form,
+      pdfBase64: result.pdfBase64,
+      required: true,
+      message: "1099-NEC generated successfully with PDF"
+    });
+  }));
+
+  // ============================================
+  // SERVICE STATUS ENDPOINTS
+  // ============================================
+
+  // Admin: Seed grants database
+  app.post("/api/admin/grants/seed", requireAdmin, asyncHandler(async (req, res) => {
+    const { seedGrants } = await import("./services/grantScraper");
+    const result = await seedGrants();
+    res.json({
+      success: true,
+      ...result,
+      message: `Seeded ${result.inserted} grants, skipped ${result.skipped} duplicates`
+    });
+  }));
+
+  // Grant scraper status
+  app.get("/api/services/grant-scraper/status", asyncHandler(async (req, res) => {
+    const { getScraperStatus } = await import("./services/grantScraper");
+    res.json(getScraperStatus());
+  }));
+
+  // PaddleOCR status
+  app.get("/api/services/paddleocr/status", asyncHandler(async (req, res) => {
+    const { getStatus } = await import("./services/paddleOCR");
+    res.json(await getStatus());
+  }));
+
+  // Tax form generator status
+  app.get("/api/services/tax-forms/status", asyncHandler(async (req, res) => {
+    const { getStatus } = await import("./services/taxFormGenerator");
+    res.json(getStatus());
+  }));
+
+  // Admin: Generate all 1099 forms for a year
+  app.post("/api/admin/tax-forms/generate-all", requireAdmin, asyncHandler(async (req, res) => {
+    const { taxYear } = req.body;
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateAllForms1099 } = await import("./services/taxFormGenerator");
+    const result = await generateAllForms1099(year);
+    
+    res.json({
+      success: true,
+      taxYear: year,
+      ...result,
+    });
+  }));
+
+  // Generate 1099 for specific partner
+  app.post("/api/admin/tax-forms/generate/:partnerId", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId } = req.params;
+    const { taxYear } = req.body;
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateForm1099NEC } = await import("./services/taxFormGenerator");
+    const result = await generateForm1099NEC(partnerId, year);
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      taxFormId: result.taxFormId,
+      form: result.form,
+    });
+  }));
+
+  // Download 1099 PDF
+  app.get("/api/tax-forms/:id/download", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const form = await storage.getTaxForm(id);
+    if (!form) {
+      return res.status(404).json({ error: "Tax form not found" });
+    }
+    
+    if (!form.pdfData) {
+      return res.status(404).json({ error: "PDF not available for this form" });
+    }
+    
+    const pdfBuffer = Buffer.from(form.pdfData, "base64");
+    
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="1099-NEC-${form.taxYear}-${form.partnerId}.pdf"`
+    );
+    res.send(pdfBuffer);
+  }));
+
+  // ============================================
+  // STRIPE CONNECT PARTNER PAYOUT ENDPOINTS
+  // ============================================
+
+  // Partner: Start Stripe Connect onboarding
+  app.post("/api/partners/:id/stripe-connect/onboard", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    // Verify partner exists via storage
+    const partner = await storage.getPartner(id);
+    if (!partner) {
+      return res.status(404).json({ error: "Partner not found" });
+    }
+    
+    const { createPartnerConnectAccount, createOnboardingLink } = await import("./services/stripePayments");
+    
+    // Create Connect account if not exists
+    let connectAccountId = partner.stripeConnectId;
+    if (!connectAccountId) {
+      const accountResult = await createPartnerConnectAccount(
+        id,
+        partner.contactEmail,
+        partner.companyName
+      );
+      
+      if (!accountResult.success) {
+        return res.status(500).json({ error: accountResult.error });
+      }
+      connectAccountId = accountResult.accountId;
+    }
+    
+    // Create onboarding link
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const linkResult = await createOnboardingLink(
+      connectAccountId!,
+      `${baseUrl}/partner/dashboard`,
+      `${baseUrl}/partner/connect-setup`
+    );
+    
+    if (!linkResult.success) {
+      return res.status(500).json({ error: linkResult.error });
+    }
+    
+    res.json({
+      success: true,
+      onboardingUrl: linkResult.url,
+      accountId: connectAccountId,
+    });
+  }));
+
+  // Partner: Get Connect dashboard link
+  app.get("/api/partners/:id/stripe-connect/dashboard", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const partner = await storage.getPartner(id);
+    if (!partner || !partner.stripeConnectId) {
+      return res.status(404).json({ error: "Partner or Connect account not found" });
+    }
+    
+    const { getConnectDashboardLink } = await import("./services/stripePayments");
+    const result = await getConnectDashboardLink(partner.stripeConnectId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      dashboardUrl: result.url,
+    });
+  }));
+
+  // Partner: Check Connect account balance
+  app.get("/api/partners/:id/stripe-connect/balance", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const partner = await storage.getPartner(id);
+    if (!partner || !partner.stripeConnectId) {
+      return res.status(404).json({ error: "Partner or Connect account not found" });
+    }
+    
+    const { getConnectAccountBalance } = await import("./services/stripePayments");
+    const result = await getConnectAccountBalance(partner.stripeConnectId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      balance: result.balance,
+    });
+  }));
+
+  // Admin: Process lead payout to partner
+  app.post("/api/admin/leads/:leadId/payout", requireAdmin, asyncHandler(async (req, res) => {
+    const { leadId } = req.params;
+    
+    const { processLeadPayout } = await import("./services/stripePayments");
+    const result = await processLeadPayout(leadId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      transferId: result.transferId,
+      amount: result.amount,
+    });
+  }));
+
+  // Admin: Process batch payouts
+  app.post("/api/admin/payouts/batch", requireAdmin, asyncHandler(async (req, res) => {
+    const { maxPayouts } = req.body;
+    
+    const { batchProcessPayouts } = await import("./services/stripePayments");
+    const result = await batchProcessPayouts(maxPayouts || 50);
+    
+    res.json({
+      success: true,
+      ...result,
+    });
+  }));
+
+  // ============================================
+  // CLAIMS ANALYSIS AGENT ENDPOINTS
+  // ============================================
+
+  // Claims agent status
+  app.get("/api/services/claims-agent/status", asyncHandler(async (req, res) => {
+    const { getAgentStatus } = await import("./services/claimsAgent");
+    res.json(getAgentStatus());
+  }));
+
+  // Run claims analysis agent
+  app.post("/api/claims/analyze-with-agent", asyncHandler(async (req, res) => {
+    const { carrier, zipCode, lineItems, documentText, claimNumber, lossDate } = req.body;
+    
+    if (!zipCode || !lineItems || lineItems.length === 0) {
+      return res.status(400).json({ error: "zipCode and lineItems are required" });
+    }
+
+    const { runClaimsAgent } = await import("./services/claimsAgent");
+    const result = await runClaimsAgent({
+      carrier,
+      zipCode,
+      lineItems,
+      documentText,
+      claimNumber,
+      lossDate,
+    });
+
+    res.json(result);
+  }));
+
+  // Enhanced claim analysis with optional agent
+  app.post("/api/claims/enhanced-analysis", asyncHandler(async (req, res) => {
+    const { useAgent, carrier, zipCode, lineItems, documentText } = req.body;
+    
+    if (!zipCode || !lineItems || lineItems.length === 0) {
+      return res.status(400).json({ error: "zipCode and lineItems are required" });
+    }
+
+    if (useAgent) {
+      // Use the full agent pipeline
+      const { runClaimsAgent } = await import("./services/claimsAgent");
+      const agentResult = await runClaimsAgent({ carrier, zipCode, lineItems, documentText });
+      return res.json({
+        method: 'agent',
+        ...agentResult,
+      });
+    } else {
+      // Use simpler LLM analysis
+      const { analyzeClaimWithLLM } = await import("./services/llmRouter");
+      const llmResult = await analyzeClaimWithLLM({ carrier, zipCode, lineItems });
+      return res.json({
+        method: 'llm-simple',
+        ...llmResult,
+      });
+    }
+  }));
 
   // Start scheduler on server boot
   scheduler.start();
