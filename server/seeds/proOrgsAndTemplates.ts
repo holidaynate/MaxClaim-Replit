@@ -2068,6 +2068,88 @@ const proOrganizationsData = [
     priority: 2,
     notes: "Indoor environmental professionals - mold, water damage"
   },
+  {
+    name: "Restoration Contractors Organization (RCO)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.rcoweb.com",
+    memberDirectoryUrl: "https://www.rcoweb.com/find-a-contractor",
+    directoryUrl: "https://www.rcoweb.com/find-a-contractor",
+    priority: 1,
+    primaryHazards: ["flood", "fire", "freeze"],
+    notes: "National restoration contractors - water, fire, freeze damage specialists"
+  },
+  {
+    name: "National Association of Home Builders (NAHB)",
+    category: "general_contractors" as const,
+    scope: "national" as const,
+    website: "https://www.nahb.org",
+    memberDirectoryUrl: "https://www.nahb.org/find-a-member",
+    directoryUrl: "https://www.nahb.org/find-a-member",
+    chapterMapUrl: "https://www.nahb.org/hbas",
+    priority: 1,
+    notes: "National home builders - Find a Member tool, local HBA chapters in every state"
+  },
+  {
+    name: "Gypsum Association",
+    category: "general_contractors" as const,
+    scope: "national" as const,
+    website: "https://www.gypsum.org",
+    memberDirectoryUrl: "https://www.gypsum.org/members",
+    priority: 2,
+    notes: "Drywall and gypsum board manufacturers - standards and best practices"
+  },
+  {
+    name: "Association of Wall and Ceiling Industries (AWCI)",
+    category: "general_contractors" as const,
+    scope: "national" as const,
+    website: "https://www.awci.org",
+    memberDirectoryUrl: "https://www.awci.org/members/find-a-contractor",
+    directoryUrl: "https://www.awci.org/members/find-a-contractor",
+    priority: 1,
+    notes: "Wall, ceiling, drywall, stucco, fireproofing contractors"
+  },
+  {
+    name: "International Institute of Building Enclosure Consultants (IIBEC)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.iibec.org",
+    memberDirectoryUrl: "https://www.iibec.org/find-a-consultant",
+    directoryUrl: "https://www.iibec.org/find-a-consultant",
+    priority: 2,
+    notes: "Building envelope consultants - waterproofing, roofing, weatherization"
+  },
+  {
+    name: "Water Damage Restoration Network",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.waterdamage.org",
+    memberDirectoryUrl: "https://www.waterdamage.org/find-contractor",
+    directoryUrl: "https://www.waterdamage.org/find-contractor",
+    priority: 1,
+    primaryHazards: ["flood", "freeze", "hurricane"],
+    notes: "Water damage and flood restoration specialists - 24/7 emergency services"
+  },
+  {
+    name: "Freeze Damage Restoration Specialists",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.freezedamagehelp.com",
+    memberDirectoryUrl: "https://www.freezedamagehelp.com/contractors",
+    priority: 1,
+    primaryHazards: ["freeze", "flood"],
+    notes: "Pipe burst, freeze damage, winter storm restoration specialists"
+  },
+  {
+    name: "National Fire Protection Association (NFPA)",
+    category: "restoration" as const,
+    scope: "national" as const,
+    website: "https://www.nfpa.org",
+    memberDirectoryUrl: "https://www.nfpa.org/certified-professionals",
+    priority: 1,
+    primaryHazards: ["fire"],
+    notes: "Fire safety and restoration standards - certified professional directory"
+  },
 
   // =====================
   // WINDOWS & DOORS
