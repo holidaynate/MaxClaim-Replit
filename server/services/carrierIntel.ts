@@ -788,6 +788,113 @@ export function runCarrierIntelSelfTests(): { passed: number; failed: number; re
   return { passed, failed, results };
 }
 
+/**
+ * Get a visual flag/emoji for severity level
+ * Used in audit results display for quick identification
+ */
+export function getSeverityFlag(severity: SeverityLevel): string {
+  switch (severity) {
+    case "CRITICAL": return "[!!!]";
+    case "HIGH": return "[!!]";
+    case "MEDIUM": return "[!]";
+    case "LOW": return "[-]";
+    case "NONE": return "[ok]";
+    default: return "";
+  }
+}
+
+/**
+ * Get CSS-friendly color for severity level
+ * Returns color names suitable for Tailwind or standard CSS
+ */
+export function getSeverityColor(severity: SeverityLevel): {
+  bg: string;
+  text: string;
+  border: string;
+  tailwind: string;
+} {
+  switch (severity) {
+    case "CRITICAL":
+      return { bg: "#dc2626", text: "#ffffff", border: "#b91c1c", tailwind: "red-600" };
+    case "HIGH":
+      return { bg: "#ea580c", text: "#ffffff", border: "#c2410c", tailwind: "orange-600" };
+    case "MEDIUM":
+      return { bg: "#eab308", text: "#000000", border: "#ca8a04", tailwind: "yellow-500" };
+    case "LOW":
+      return { bg: "#22c55e", text: "#000000", border: "#16a34a", tailwind: "green-500" };
+    case "NONE":
+    default:
+      return { bg: "#6b7280", text: "#ffffff", border: "#4b5563", tailwind: "gray-500" };
+  }
+}
+
+/**
+ * Get aggregate risk assessment for a batch of carrier insights
+ * Returns overall risk level and actionable summary
+ */
+export function getAggregateRiskAssessment(insights: CarrierInsight[]): {
+  overallRisk: SeverityLevel;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  totalVariance: number;
+  priorityItems: string[];
+  actionSummary: string;
+} {
+  let criticalCount = 0, highCount = 0, mediumCount = 0, lowCount = 0;
+  let totalVariance = 0;
+  const priorityItems: string[] = [];
+
+  for (const insight of insights) {
+    totalVariance += Math.abs(insight.variance);
+    switch (insight.severity) {
+      case "CRITICAL":
+        criticalCount++;
+        priorityItems.push(insight.item);
+        break;
+      case "HIGH":
+        highCount++;
+        if (priorityItems.length < 5) priorityItems.push(insight.item);
+        break;
+      case "MEDIUM":
+        mediumCount++;
+        break;
+      case "LOW":
+        lowCount++;
+        break;
+    }
+  }
+
+  let overallRisk: SeverityLevel = "NONE";
+  let actionSummary = "Standard documentation should be sufficient for this claim.";
+
+  if (criticalCount >= 2 || (criticalCount >= 1 && highCount >= 2)) {
+    overallRisk = "CRITICAL";
+    actionSummary = "URGENT: Multiple critical underpayment patterns detected. Strongly consider engaging a public adjuster or insurance attorney before accepting settlement.";
+  } else if (criticalCount >= 1 || highCount >= 3) {
+    overallRisk = "HIGH";
+    actionSummary = "ALERT: Significant underpayment risk detected. Gather detailed documentation and consider professional review of claim settlement.";
+  } else if (highCount >= 1 || mediumCount >= 3) {
+    overallRisk = "MEDIUM";
+    actionSummary = "CAUTION: Some underpayment indicators present. Ensure thorough documentation with photos, receipts, and contractor estimates.";
+  } else if (mediumCount >= 1 || lowCount >= 2) {
+    overallRisk = "LOW";
+    actionSummary = "Minor concerns noted. Standard documentation should suffice, but verify all line items match fair market values.";
+  }
+
+  return {
+    overallRisk,
+    criticalCount,
+    highCount,
+    mediumCount,
+    lowCount,
+    totalVariance: Math.round(totalVariance * 10) / 10,
+    priorityItems,
+    actionSummary,
+  };
+}
+
 export const carrierIntel = {
   CARRIER_SAMPLE_SIZES,
   CONFIDENCE_THRESHOLDS,
@@ -806,4 +913,7 @@ export const carrierIntel = {
   getCarrierInsights,
   updateTrendsFromAudit,
   runCarrierIntelSelfTests,
+  getSeverityFlag,
+  getSeverityColor,
+  getAggregateRiskAssessment,
 };

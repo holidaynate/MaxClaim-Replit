@@ -493,3 +493,64 @@ export function runRotationSelfTests(): { passed: number; failed: number; result
   console.log(`[competitiveRotation] Self-tests: ${passed} passed, ${failed} failed`);
   return { passed, failed, results };
 }
+
+/**
+ * Apply weights to partners that don't have them yet
+ * Uses baseBid to normalize weights: weight = partner.monthlyBudget / baseBid
+ * 
+ * @param partners - Array of partner objects
+ * @param baseBid - Base bid amount for normalization (default: $12)
+ * @returns Partners with calculated weights
+ * 
+ * @example
+ * const partners = [{ id: 1, monthlyBudget: 45 }, { id: 2, monthlyBudget: 15 }];
+ * const weighted = applyWeights(partners, 12);
+ * // Returns [{ id: 1, monthlyBudget: 45, weight: 3.75 }, { id: 2, monthlyBudget: 15, weight: 1.25 }]
+ */
+export function applyWeights(
+  partners: PartnerAdConfig[],
+  baseBid: number = 12
+): (PartnerAdConfig & { weight: number })[] {
+  if (!Array.isArray(partners) || partners.length === 0) {
+    return [];
+  }
+
+  if (baseBid <= 0) {
+    console.warn("[applyWeights] Invalid baseBid, using default of 12");
+    baseBid = 12;
+  }
+
+  return partners.map(partner => {
+    if ('weight' in partner && typeof (partner as any).weight === 'number') {
+      return partner as PartnerAdConfig & { weight: number };
+    }
+
+    const budget = partner.monthlyBudget || 0;
+    let weight = budget / baseBid;
+
+    weight = Math.max(0.1, weight);
+    weight = Math.min(MAX_WEIGHT_CAP, weight);
+
+    return {
+      ...partner,
+      weight: Math.round(weight * 100) / 100,
+    };
+  });
+}
+
+/**
+ * Calculate weight from bid amount
+ * Normalizes bid against a base bid to produce a weight multiplier
+ * 
+ * @param bid - Partner's bid amount
+ * @param baseBid - Base bid for normalization
+ * @returns Calculated weight (capped at MAX_WEIGHT_CAP)
+ */
+export function calculateWeight(bid: number, baseBid: number = 12): number {
+  if (bid <= 0 || baseBid <= 0) {
+    return 1.0;
+  }
+
+  const weight = bid / baseBid;
+  return Math.min(MAX_WEIGHT_CAP, Math.max(0.1, Math.round(weight * 100) / 100));
+}

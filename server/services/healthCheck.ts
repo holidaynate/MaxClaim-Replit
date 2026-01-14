@@ -320,3 +320,66 @@ export async function getCombinedHealth(): Promise<{
     overall,
   };
 }
+
+/**
+ * Run all registered service self-tests
+ * Centralized test runner for QA validation
+ */
+export async function runAllServiceTests(): Promise<{
+  timestamp: string;
+  totalPassed: number;
+  totalFailed: number;
+  services: Array<{
+    name: string;
+    passed: number;
+    failed: number;
+    results: string[];
+  }>;
+  overallStatus: "pass" | "partial" | "fail";
+}> {
+  const { runCarrierIntelSelfTests } = await import("./carrierIntel");
+  const { runRotationSelfTests } = await import("./competitiveRotation");
+
+  const services: Array<{
+    name: string;
+    passed: number;
+    failed: number;
+    results: string[];
+  }> = [];
+
+  const carrierIntelTests = runCarrierIntelSelfTests();
+  services.push({
+    name: "carrierIntel",
+    passed: carrierIntelTests.passed,
+    failed: carrierIntelTests.failed,
+    results: carrierIntelTests.results,
+  });
+
+  const rotationTests = runRotationSelfTests();
+  services.push({
+    name: "competitiveRotation",
+    passed: rotationTests.passed,
+    failed: rotationTests.failed,
+    results: rotationTests.results,
+  });
+
+  const totalPassed = services.reduce((sum, s) => sum + s.passed, 0);
+  const totalFailed = services.reduce((sum, s) => sum + s.failed, 0);
+
+  let overallStatus: "pass" | "partial" | "fail" = "pass";
+  if (totalFailed > 0 && totalPassed > 0) {
+    overallStatus = "partial";
+  } else if (totalFailed > 0 && totalPassed === 0) {
+    overallStatus = "fail";
+  }
+
+  console.log(`[healthCheck] All service tests: ${totalPassed} passed, ${totalFailed} failed (${overallStatus})`);
+
+  return {
+    timestamp: new Date().toISOString(),
+    totalPassed,
+    totalFailed,
+    services,
+    overallStatus,
+  };
+}
