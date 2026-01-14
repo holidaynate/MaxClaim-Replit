@@ -58,6 +58,12 @@ The application implements a comprehensive failover system with cascading fallba
 - **Tax Form Generator Service**: 1099-NEC generation with IRS compliance checking ($600 threshold), batch processing, and partner compensation tracking.
 - **PaddleOCR Service**: GPU-accelerated OCR integration with health checking and fallback support for high-volume document processing.
 - **Claims Analysis Agent**: 5-step agent pipeline (extraction, validation, missing item detection, carrier analysis, recommendations) with LLM integration.
+- **Versioned Claim Audit Service**: Resilient multi-version architecture with automatic fallback chain:
+  - v3-llm-openai (primary): LLM-powered analysis for highest quality results
+  - v2-rules-advanced (fallback): Database-backed deterministic rules engine
+  - v1-rules-basic (archived-but-viable): Offline-capable basic rules for disaster recovery
+  - Selection behavior: prefer-primary-else-fallback-else-archived with automatic degradation
+  - Includes fallback history logging and service health monitoring
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.

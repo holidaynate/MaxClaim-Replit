@@ -78,24 +78,20 @@ function detectCategory(description: string): string {
 }
 
 async function lookupPricing(description: string, zipCode?: string): Promise<{ avgPrice: number; maxPrice: number } | null> {
-  try {
-    const searchTerm = description.substring(0, 30).toLowerCase();
-    const results = await db.select({
-      avgPrice: sql<number>`AVG(price_avg)`,
-      maxPrice: sql<number>`MAX(price_high)`,
-    }).from(pricingDataPoints)
-      .where(sql`LOWER(description) LIKE ${`%${searchTerm}%`}`);
-    
-    if (results[0]?.avgPrice) {
-      return {
-        avgPrice: Number(results[0].avgPrice),
-        maxPrice: Number(results[0].maxPrice) || Number(results[0].avgPrice) * 1.5,
-      };
-    }
-    return null;
-  } catch {
-    return null;
+  const searchTerm = description.substring(0, 30).toLowerCase();
+  const results = await db.select({
+    avgPrice: sql<number>`AVG(price_avg)`,
+    maxPrice: sql<number>`MAX(price_high)`,
+  }).from(pricingDataPoints)
+    .where(sql`LOWER(description) LIKE ${`%${searchTerm}%`}`);
+  
+  if (results[0]?.avgPrice) {
+    return {
+      avgPrice: Number(results[0].avgPrice),
+      maxPrice: Number(results[0].maxPrice) || Number(results[0].avgPrice) * 1.5,
+    };
   }
+  return null;
 }
 
 async function lookupCarrierPatterns(carrier: string): Promise<string[]> {
@@ -108,17 +104,14 @@ async function lookupCarrierPatterns(carrier: string): Promise<string[]> {
     }
   }
 
-  try {
-    const dbPatterns = await db.select().from(carrierTrends)
-      .where(like(carrierTrends.carrierName, `%${carrier.toLowerCase()}%`))
-      .limit(5);
-    
-    for (const trend of dbPatterns) {
-      if (trend.commonStrategy && trend.frequency && trend.frequency > 10) {
-        patterns.push(`${carrier} has ${trend.frequency} reported ${trend.commonStrategy.toLowerCase()} patterns`);
-      }
+  const dbPatterns = await db.select().from(carrierTrends)
+    .where(like(carrierTrends.carrierName, `%${carrier.toLowerCase()}%`))
+    .limit(5);
+  
+  for (const trend of dbPatterns) {
+    if (trend.commonStrategy && trend.frequency && trend.frequency > 10) {
+      patterns.push(`${carrier} has ${trend.frequency} reported ${trend.commonStrategy.toLowerCase()} patterns`);
     }
-  } catch {
   }
 
   return patterns;
@@ -126,14 +119,39 @@ async function lookupCarrierPatterns(carrier: string): Promise<string[]> {
 
 export async function analyze(input: ClaimAuditInput): Promise<ClaimAuditResult> {
   const startTime = Date.now();
-  const auditedItems: AuditedLineItem[] = [];
-  const categoriesFound = new Set<string>();
+  
+  const isDbAvailable = await checkDbAvailability();
+  if (!isDbAvailable) {
+    return {
+      success: false,
+      version: VERSION_ID,
+      role: 'fallback',
+      auditedItems: [],
+      missingItems: [],
+      carrierPatterns: [],
+      recommendations: [],
+      summary: {
+        totalQuoted: 0,
+        totalMarketValue: 0,
+        totalUnderpayment: 0,
+        itemsAudited: 0,
+        flaggedItems: 0,
+      },
+      confidence: 0,
+      processingTimeMs: Date.now() - startTime,
+      fallbackReason: 'Database unavailable for v2 analysis',
+    };
+  }
 
-  for (const item of input.lineItems) {
-    const category = item.category || detectCategory(item.description);
-    categoriesFound.add(category);
+  try {
+    const auditedItems: AuditedLineItem[] = [];
+    const categoriesFound = new Set<string>();
+
+    for (const item of input.lineItems) {
+      const category = item.category || detectCategory(item.description);
+      categoriesFound.add(category);
     
-    const pricing = await lookupPricing(item.description, input.zipCode);
+      const pricing = await lookupPricing(item.description, input.zipCode);
     const quantity = item.quantity || 1;
     
     let marketPrice: number;
@@ -222,32 +240,116 @@ export async function analyze(input: ClaimAuditInput): Promise<ClaimAuditResult>
   recommendations.push('Get multiple contractor quotes to support fair market value claims');
   recommendations.push('Take detailed photos before, during, and after all repairs');
 
-  const totalQuoted = input.lineItems.reduce((sum: number, i: ClaimLineItem) => sum + i.quotedPrice, 0);
-  const totalMarket = auditedItems.reduce((sum: number, i: AuditedLineItem) => sum + i.marketPrice, 0);
-  const totalUnderpayment = Math.max(0, totalMarket - totalQuoted);
+    const totalQuoted = input.lineItems.reduce((sum: number, i: ClaimLineItem) => sum + i.quotedPrice, 0);
+    const totalMarket = auditedItems.reduce((sum: number, i: AuditedLineItem) => sum + i.marketPrice, 0);
+    const totalUnderpayment = Math.max(0, totalMarket - totalQuoted);
 
-  let confidence = 0.6;
-  if (carrierPatterns.length > 0) confidence += 0.1;
-  if (auditedItems.some(i => i.flags.length > 0)) confidence += 0.05;
+    let confidence = 0.6;
+    if (carrierPatterns.length > 0) confidence += 0.1;
+    if (auditedItems.some(i => i.flags.length > 0)) confidence += 0.05;
 
+    markDbAvailable();
+    
+    return {
+      success: true,
+      version: VERSION_ID,
+      role: 'fallback',
+      auditedItems,
+      missingItems: missingItems.slice(0, 10),
+      carrierPatterns,
+      recommendations,
+      summary: {
+        totalQuoted,
+        totalMarketValue: totalMarket,
+        totalUnderpayment,
+        itemsAudited: auditedItems.length,
+        flaggedItems: auditedItems.filter(i => i.flags.length > 0).length,
+      },
+      confidence: Math.min(confidence, 0.75),
+      processingTimeMs: Date.now() - startTime,
+      fallbackReason: undefined,
+    };
+  } catch (error: any) {
+    markDbUnavailable(error.message || 'Database operation failed during analysis');
+    
+    return {
+      success: false,
+      version: VERSION_ID,
+      role: 'fallback',
+      auditedItems: [],
+      missingItems: [],
+      carrierPatterns: [],
+      recommendations: [],
+      summary: {
+        totalQuoted: 0,
+        totalMarketValue: 0,
+        totalUnderpayment: 0,
+        itemsAudited: 0,
+        flaggedItems: 0,
+      },
+      confidence: 0,
+      processingTimeMs: Date.now() - startTime,
+      fallbackReason: `Database error: ${error.message}`,
+    };
+  }
+}
+
+let dbAvailable = true;
+let lastDbCheck = 0;
+let lastRecoveryCheck = 0;
+const DB_CHECK_INTERVAL = 30000;
+const RECOVERY_CHECK_INTERVAL = 60000;
+
+async function checkDbAvailability(): Promise<boolean> {
+  const now = Date.now();
+  
+  if (dbAvailable && now - lastDbCheck < DB_CHECK_INTERVAL) {
+    return true;
+  }
+  
+  if (!dbAvailable && now - lastRecoveryCheck < RECOVERY_CHECK_INTERVAL) {
+    return false;
+  }
+  
+  try {
+    await db.execute(sql`SELECT 1`);
+    if (!dbAvailable) {
+      console.log('[ClaimAudit v2] Database recovered - marking available');
+    }
+    dbAvailable = true;
+    lastDbCheck = now;
+  } catch {
+    dbAvailable = false;
+    lastRecoveryCheck = now;
+    console.log('[ClaimAudit v2] Database check failed - marking unavailable');
+  }
+  
+  return dbAvailable;
+}
+
+function markDbUnavailable(reason: string) {
+  if (dbAvailable) {
+    dbAvailable = false;
+    lastRecoveryCheck = Date.now();
+    console.log(`[ClaimAudit v2] Database marked unavailable: ${reason}`);
+  }
+}
+
+function markDbAvailable() {
+  if (!dbAvailable) {
+    console.log('[ClaimAudit v2] Database operation succeeded - marking available');
+  }
+  dbAvailable = true;
+  lastDbCheck = Date.now();
+}
+
+export async function getStatusAsync(): Promise<VersionStatus> {
+  await checkDbAvailability();
   return {
-    success: true,
-    version: VERSION_ID,
-    role: 'fallback',
-    auditedItems,
-    missingItems: missingItems.slice(0, 10),
-    carrierPatterns,
-    recommendations,
-    summary: {
-      totalQuoted,
-      totalMarketValue: totalMarket,
-      totalUnderpayment,
-      itemsAudited: auditedItems.length,
-      flaggedItems: auditedItems.filter(i => i.flags.length > 0).length,
-    },
-    confidence: Math.min(confidence, 0.75),
-    processingTimeMs: Date.now() - startTime,
-    fallbackReason: undefined,
+    id: VERSION_ID,
+    role: 'fallback' as const,
+    available: dbAvailable,
+    description: 'Advanced deterministic rules engine with database-backed pricing',
   };
 }
 
@@ -255,7 +357,7 @@ export function getStatus(): VersionStatus {
   return {
     id: VERSION_ID,
     role: 'fallback' as const,
-    available: true,
+    available: dbAvailable,
     description: 'Advanced deterministic rules engine with database-backed pricing',
   };
 }
