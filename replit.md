@@ -31,7 +31,11 @@ Key features include:
 - **Email Templates System**: Four vendor outreach email templates with placeholder support.
 - **Performance & Caching Infrastructure**: Enterprise-grade caching and async processing for audit results and batch operations.
 - **Regional Pricing Infrastructure**: A demand-weighted pricing system for partner advertising with state-to-region mapping, demand multipliers, and disaster awareness.
-- **Competitive Rotation Algorithm**: A budget-weighted ad placement priority system with tier multipliers, budget factors, and demand bonuses.
+- **Competitive Rotation Algorithm**: A budget-weighted ad placement priority system with tier multipliers, budget factors, and demand bonuses. Features include:
+  - Weight cap protection (max 10x) to prevent partner monopolies
+  - `applyWeights()` helper for auto-calculating weights from budget/baseBid ratio
+  - `testDistribution()` for QA validation of weighted selection
+  - Self-test suite with 7 automated tests
 - **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal.
 - **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
 - **Partner Reviews System**: Customer feedback collection with ratings and review statistics per partner.
@@ -45,8 +49,15 @@ Key features include:
 The application implements a comprehensive failover system with cascading fallbacks for critical services:
 - **OCR Service Cascade**: PaddleOCR (GPU) → OCR.space → Tesseract.js → Manual Entry.
 - **LLM Router Service**: OpenAI → LocalAI → Rule-based extraction with circuit breaker pattern and automatic failover.
-- **Health Check Endpoints**: For monitoring service status.
-- **Carrier Intelligence Service**: Enhanced carrier pattern analysis with sample sizes, confidence calculations, and aggregated statistics, utilizing a database of historical underpayment patterns by major carriers.
+- **Health Check Endpoints**: For monitoring service status, with centralized `runAllServiceTests()` for QA validation.
+- **Performance Monitoring**: Timing wrappers (`withTiming`, `withTimingAsync`) with configurable thresholds (FAST: 50ms, NORMAL: 200ms, SLOW: 500ms).
+- **Lead Status Lifecycle**: Constants and helpers for lead tracking (PENDING → IN_PROGRESS → CLOSED → PAID) with status transition validation.
+- **Carrier Intelligence Service**: Enhanced carrier pattern analysis with sample sizes, confidence calculations, and aggregated statistics, utilizing a database of historical underpayment patterns by major carriers. Features include:
+  - Fuzzy matching with Dice coefficient and roofing abbreviation expansion (sq, arch, comp, etc.)
+  - Trend classification labels (PROBLEMATIC, UNDERPAYS, FAIR, GENEROUS)
+  - Severity levels (CRITICAL, HIGH, MEDIUM, LOW, NONE) with visual flags and colors
+  - Real-time trend learning via `updateTrendsFromAudit()` with weighted averages
+  - Aggregate risk assessment with priority item detection and action summaries
 - **Feature Toggle System**: Environment-based toggles for premium features.
 - **Unified Cache Service**: Redis (distributed) with node-cache (local) fallback for audit results, partner weights, and pricing data.
 - **Pricing Scraper Service**: Crawl4AI-style scraping with synthetic pricing fallback.
