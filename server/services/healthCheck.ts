@@ -5,7 +5,7 @@
 
 import { db } from "../db";
 import { priceDBCache } from "../utils/priceDBCache";
-import { getServiceHealth, getVersionStatuses, getActiveVersion } from "./claimAudit";
+import { getServiceHealthAsync, getVersionStatusesAsync, getActiveVersionAsync } from "./claimAudit";
 
 interface ServiceStatus {
   name: string;
@@ -188,9 +188,9 @@ export async function getPrimaryHealth(): Promise<HealthCheckResult> {
 /**
  * Check versioned claim audit service status
  */
-function checkClaimAuditService(): ServiceStatus {
-  const health = getServiceHealth();
-  const active = getActiveVersion();
+async function checkClaimAuditService(): Promise<ServiceStatus> {
+  const health = await getServiceHealthAsync();
+  const active = await getActiveVersionAsync();
   
   let status: "healthy" | "degraded" | "unhealthy" = "healthy";
   if (health.status === 'critical') status = "unhealthy";
@@ -210,7 +210,7 @@ function checkClaimAuditService(): ServiceStatus {
 export async function getFallbackHealth(): Promise<HealthCheckResult> {
   const services: ServiceStatus[] = [
     checkPricingCache(),
-    checkClaimAuditService(),
+    await checkClaimAuditService(),
     {
       name: "tesseract-fallback",
       status: "healthy",
@@ -277,11 +277,11 @@ export function getFeatureStatus(): FeatureStatus[] {
 /**
  * Get versioned service detailed status
  */
-export function getVersionedServiceHealth() {
+export async function getVersionedServiceHealth() {
   return {
-    health: getServiceHealth(),
-    versions: getVersionStatuses(),
-    active: getActiveVersion(),
+    health: await getServiceHealthAsync(),
+    versions: await getVersionStatusesAsync(),
+    active: await getActiveVersionAsync(),
   };
 }
 
@@ -292,7 +292,7 @@ export async function getCombinedHealth(): Promise<{
   primary: HealthCheckResult;
   fallback: HealthCheckResult;
   features: FeatureStatus[];
-  versionedService: ReturnType<typeof getVersionedServiceHealth>;
+  versionedService: Awaited<ReturnType<typeof getVersionedServiceHealth>>;
   overall: "healthy" | "degraded" | "unhealthy";
 }> {
   const [primary, fallback] = await Promise.all([
@@ -301,7 +301,7 @@ export async function getCombinedHealth(): Promise<{
   ]);
 
   const features = getFeatureStatus();
-  const versionedService = getVersionedServiceHealth();
+  const versionedService = await getVersionedServiceHealth();
 
   let overall: "healthy" | "degraded" | "unhealthy" = "healthy";
   if (primary.status === "unhealthy" && fallback.status === "unhealthy") {

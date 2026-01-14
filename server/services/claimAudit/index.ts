@@ -42,7 +42,7 @@ function logFallback(from: string, to: string, reason: string) {
 
 export async function analyzeClaimWithFallback(input: ClaimAuditInput): Promise<ClaimAuditResult> {
   const v3Status = v3LlmOpenAI.getStatus();
-  const v2Status = v2RulesAdvanced.getStatus();
+  const v2Status = await v2RulesAdvanced.getStatusAsync();
   const v1Status = v1RulesBasic.getStatus();
 
   if (v3Status.available) {
@@ -115,9 +115,40 @@ export function getVersionStatuses(): VersionStatus[] {
   ];
 }
 
+export async function getVersionStatusesAsync(): Promise<VersionStatus[]> {
+  return [
+    v3LlmOpenAI.getStatus(),
+    await v2RulesAdvanced.getStatusAsync(),
+    v1RulesBasic.getStatus(),
+  ];
+}
+
 export function getActiveVersion(): { id: string; role: VersionRole; fallbackChain: string[] } {
   const v3Status = v3LlmOpenAI.getStatus();
   const v2Status = v2RulesAdvanced.getStatus();
+  
+  const fallbackChain: string[] = [];
+  
+  if (v3Status.available) {
+    fallbackChain.push('v3-llm-openai');
+    fallbackChain.push('v2-rules-advanced');
+    fallbackChain.push('v1-rules-basic');
+    return { id: 'v3-llm-openai', role: 'primary', fallbackChain };
+  }
+  
+  if (v2Status.available) {
+    fallbackChain.push('v2-rules-advanced');
+    fallbackChain.push('v1-rules-basic');
+    return { id: 'v2-rules-advanced', role: 'fallback', fallbackChain };
+  }
+  
+  fallbackChain.push('v1-rules-basic');
+  return { id: 'v1-rules-basic', role: 'archived-but-viable', fallbackChain };
+}
+
+export async function getActiveVersionAsync(): Promise<{ id: string; role: VersionRole; fallbackChain: string[] }> {
+  const v3Status = v3LlmOpenAI.getStatus();
+  const v2Status = await v2RulesAdvanced.getStatusAsync();
   
   const fallbackChain: string[] = [];
   
@@ -152,6 +183,49 @@ export function getServiceHealth(): {
   const versions = getVersionStatuses();
   const available = versions.filter(v => v.available);
   const active = getActiveVersion();
+  const recentFallbacks = fallbackHistory.filter(
+    f => Date.now() - f.timestamp.getTime() < 3600000
+  ).length;
+
+  if (available.length === 3 && active.role === 'primary') {
+    return {
+      status: 'healthy',
+      activeVersion: active.id,
+      availableVersions: available.map(v => v.id),
+      recentFallbacks,
+      message: 'All implementations available, using primary LLM-powered analysis',
+    };
+  }
+
+  if (available.length >= 2 && active.role !== 'archived-but-viable') {
+    return {
+      status: 'degraded',
+      activeVersion: active.id,
+      availableVersions: available.map(v => v.id),
+      recentFallbacks,
+      message: `Operating in ${active.role} mode - ${3 - available.length} implementation(s) unavailable`,
+    };
+  }
+
+  return {
+    status: 'critical',
+    activeVersion: active.id,
+    availableVersions: available.map(v => v.id),
+    recentFallbacks,
+    message: 'Operating on archived implementation only - limited analysis capability',
+  };
+}
+
+export async function getServiceHealthAsync(): Promise<{
+  status: 'healthy' | 'degraded' | 'critical';
+  activeVersion: string;
+  availableVersions: string[];
+  recentFallbacks: number;
+  message: string;
+}> {
+  const versions = await getVersionStatusesAsync();
+  const available = versions.filter(v => v.available);
+  const active = await getActiveVersionAsync();
   const recentFallbacks = fallbackHistory.filter(
     f => Date.now() - f.timestamp.getTime() < 3600000
   ).length;
