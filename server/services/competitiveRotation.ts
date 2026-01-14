@@ -58,6 +58,7 @@ const TIER_MULTIPLIERS: Record<string, number> = {
 const TIME_DECAY_MINUTES = 15;
 const MONTH_END_BUDGET_BOOST = 1.5;
 const DISASTER_REGION_BOOST = 1.8;
+const MAX_WEIGHT_CAP = 10.0;
 
 export function calculateRotationWeights(
   partners: PartnerAdConfig[],
@@ -130,7 +131,7 @@ export function calculateRotationWeights(
     
     const tradeAssociationPenalty = partner.isTradeAssociation ? 0.5 : 1.0;
     
-    const weight = 
+    const rawWeight = 
       tierMultiplier * 
       budgetFactor * 
       competitivePosition * 
@@ -138,6 +139,8 @@ export function calculateRotationWeights(
       disasterBonus * 
       freshnessPenalty *
       tradeAssociationPenalty;
+    
+    const weight = Math.min(rawWeight, MAX_WEIGHT_CAP);
     
     const baseCpc = getBaseCpcForTrade(partner.tradeType);
     const regionMultiplier = regionDemand?.baseMultiplier || 1.0;
@@ -321,4 +324,172 @@ export function getCompetitiveInsights(
     },
     tierDistribution,
   };
+}
+
+/**
+ * Test distribution of weighted random selection
+ * Runs multiple iterations to verify weight distribution matches expectations
+ * Useful for QA validation and debugging
+ */
+export function testDistribution(
+  weights: RotationWeight[],
+  iterations: number = 1000
+): Record<string, { count: number; percentage: number; expectedPercentage: number }> {
+  if (!Array.isArray(weights) || weights.length === 0) {
+    return {};
+  }
+
+  const counts: Record<string, number> = {};
+  weights.forEach(w => {
+    counts[w.partnerId] = 0;
+  });
+
+  const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+
+  for (let i = 0; i < iterations; i++) {
+    const selected = weightedRandomSelect(weights, 1);
+    if (selected.length > 0) {
+      counts[selected[0].partnerId]++;
+    }
+  }
+
+  const stats: Record<string, { count: number; percentage: number; expectedPercentage: number }> = {};
+  
+  weights.forEach(w => {
+    const count = counts[w.partnerId];
+    const percentage = Number(((count / iterations) * 100).toFixed(2));
+    const expectedPercentage = Number(((w.weight / totalWeight) * 100).toFixed(2));
+    
+    stats[w.partnerId] = {
+      count,
+      percentage,
+      expectedPercentage,
+    };
+  });
+
+  return stats;
+}
+
+/**
+ * Run self-tests to verify rotation algorithm functionality
+ */
+export function runRotationSelfTests(): { passed: number; failed: number; results: string[] } {
+  const results: string[] = [];
+  let passed = 0;
+  let failed = 0;
+
+  const testPartners: PartnerAdConfig[] = [
+    {
+      partnerId: "test1",
+      companyName: "Test Partner 1",
+      tradeType: "Roofing",
+      tier: "premium",
+      monthlyBudget: 1000,
+      budgetSpent: 100,
+      regions: ["Gulf Coast"],
+      state: "TX",
+      isTradeAssociation: false,
+      status: "active",
+      totalImpressions: 500,
+      totalClicks: 50,
+    },
+    {
+      partnerId: "test2",
+      companyName: "Test Partner 2",
+      tradeType: "Roofing",
+      tier: "standard",
+      monthlyBudget: 500,
+      budgetSpent: 50,
+      regions: ["Gulf Coast"],
+      state: "TX",
+      isTradeAssociation: false,
+      status: "active",
+      totalImpressions: 300,
+      totalClicks: 30,
+    },
+    {
+      partnerId: "test3",
+      companyName: "Test Partner 3",
+      tradeType: "Roofing",
+      tier: "free",
+      monthlyBudget: 0,
+      budgetSpent: 0,
+      regions: ["Gulf Coast"],
+      state: "TX",
+      isTradeAssociation: false,
+      status: "active",
+      totalImpressions: 100,
+      totalClicks: 5,
+    },
+  ];
+
+  const weights = calculateRotationWeights(testPartners, "Gulf Coast", "TX", "Roofing");
+  if (weights.length === 3) {
+    passed++;
+    results.push(`Test 1 PASSED: Calculated weights for ${weights.length} partners`);
+  } else {
+    failed++;
+    results.push(`Test 1 FAILED: Expected 3 weights, got ${weights.length}`);
+  }
+
+  if (weights.length > 0 && weights[0].partnerId === "test1") {
+    passed++;
+    results.push("Test 2 PASSED: Premium partner ranked first (highest weight)");
+  } else {
+    failed++;
+    results.push("Test 2 FAILED: Premium partner should rank first");
+  }
+
+  const allCapped = weights.every(w => w.weight <= MAX_WEIGHT_CAP);
+  if (allCapped) {
+    passed++;
+    results.push(`Test 3 PASSED: All weights capped at ${MAX_WEIGHT_CAP}`);
+  } else {
+    failed++;
+    results.push(`Test 3 FAILED: Some weights exceed cap of ${MAX_WEIGHT_CAP}`);
+  }
+
+  const selected = weightedRandomSelect(weights, 2);
+  if (selected.length === 2) {
+    passed++;
+    results.push("Test 4 PASSED: Weighted random select returns correct count");
+  } else {
+    failed++;
+    results.push(`Test 4 FAILED: Expected 2 selections, got ${selected.length}`);
+  }
+
+  const ids = selected.map(s => s.partnerId);
+  if (new Set(ids).size === ids.length) {
+    passed++;
+    results.push("Test 5 PASSED: No duplicate selections");
+  } else {
+    failed++;
+    results.push("Test 5 FAILED: Found duplicate selections");
+  }
+
+  if (weights.length >= 2) {
+    const distribution = testDistribution(weights, 1000);
+    const test1Stats = distribution["test1"];
+    const test3Stats = distribution["test3"];
+    
+    if (test1Stats && test3Stats && test1Stats.percentage > test3Stats.percentage) {
+      passed++;
+      results.push(`Test 6 PASSED: Premium partner selected more often (${test1Stats.percentage}% vs ${test3Stats.percentage}%)`);
+    } else {
+      failed++;
+      results.push("Test 6 FAILED: Premium partner should be selected more often");
+    }
+  }
+
+  const placement = selectPartnersForPlacement(testPartners, "Gulf Coast", "TX", "Roofing", 2);
+  if (placement.topPartners.length === 2 && placement.totalEligible === 3) {
+    passed++;
+    results.push("Test 7 PASSED: Partner placement returns correct results");
+  } else {
+    failed++;
+    results.push("Test 7 FAILED: Partner placement returned incorrect results");
+  }
+
+  console.log(`[competitiveRotation] Self-tests: ${passed} passed, ${failed} failed`);
+  return { passed, failed, results };
 }

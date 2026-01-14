@@ -33,6 +33,9 @@ export interface CarrierPattern {
   confidenceLevel: ConfidenceLevel;
 }
 
+export type TrendClassification = "PROBLEMATIC" | "UNDERPAYS" | "FAIR" | "GENEROUS";
+export type SeverityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "NONE";
+
 export interface CarrierStats {
   carrierName: string;
   totalPatterns: number;
@@ -43,6 +46,21 @@ export interface CarrierStats {
   strategyBreakdown: Record<StrategyType, number>;
   totalHistoricalClaims: number;
   riskScore: number;
+  trendClassification: TrendClassification;
+}
+
+export interface CarrierInsight {
+  severity: SeverityLevel;
+  variance: number;
+  percentageUnderpayment: number;
+  message: string;
+  recommendedAction: string;
+  confidence: number;
+  confidenceLevel: ConfidenceLevel;
+  sampleSize: number;
+  carrier: string;
+  item: string;
+  pattern: CarrierPattern | null;
 }
 
 export interface OverallStats {
@@ -189,6 +207,8 @@ export function getCarrierStats(carrierName: string): CarrierStats | null {
     (patterns.length * 5 * 0.3)
   );
   
+  const trendClassification = getTrendClassification(avgUnderpaymentRate);
+  
   return {
     carrierName,
     totalPatterns: patterns.length,
@@ -199,6 +219,7 @@ export function getCarrierStats(carrierName: string): CarrierStats | null {
     strategyBreakdown,
     totalHistoricalClaims,
     riskScore,
+    trendClassification,
   };
 }
 
@@ -315,6 +336,458 @@ export function analyzeClaimForCarrier(
   };
 }
 
+/**
+ * Get trend classification based on average underpayment rate
+ */
+export function getTrendClassification(avgUnderpaymentRate: number): TrendClassification {
+  if (avgUnderpaymentRate > 25) {
+    return "PROBLEMATIC";
+  } else if (avgUnderpaymentRate > 15) {
+    return "UNDERPAYS";
+  } else if (avgUnderpaymentRate < 5) {
+    return "GENEROUS";
+  }
+  return "FAIR";
+}
+
+/**
+ * Get severity level based on underpayment variance
+ */
+export function getSeverityLevel(variance: number): SeverityLevel {
+  const absVariance = Math.abs(variance);
+  if (absVariance >= 50) {
+    return "CRITICAL";
+  } else if (absVariance >= 25) {
+    return "HIGH";
+  } else if (absVariance >= 10) {
+    return "MEDIUM";
+  } else if (absVariance > 0) {
+    return "LOW";
+  }
+  return "NONE";
+}
+
+/**
+ * Generate user-friendly warning message with emoji indicators
+ */
+export function generateWarningMessage(
+  carrier: string,
+  item: string,
+  variance: number,
+  severity: SeverityLevel
+): string {
+  const percentage = Math.abs(variance).toFixed(0);
+
+  switch (severity) {
+    case "CRITICAL":
+      return `CRITICAL: ${carrier} historically underpays "${item}" by ${percentage}%. This is a major red flag. Include extensive documentation, contractor quotes, and photos.`;
+    case "HIGH":
+      return `HIGH RISK: Historical data shows ${carrier} underpays "${item}" by ${percentage}%. Ensure detailed photographic evidence and labor documentation are included.`;
+    case "MEDIUM":
+      return `MEDIUM RISK: ${carrier} typically underpays "${item}" by ${percentage}%. Provide additional documentation to support your claim.`;
+    case "LOW":
+      return `Note: ${carrier} sometimes underpays "${item}" by ${percentage}%. Monitor this during negotiations.`;
+    default:
+      return `No historical underpayment trend for this item from ${carrier}.`;
+  }
+}
+
+/**
+ * Generate recommended action based on severity level
+ */
+export function generateRecommendation(severity: SeverityLevel, item: string): string {
+  switch (severity) {
+    case "CRITICAL":
+      return `PRIORITY ACTION: Gather extensive documentation for "${item}" - photos from multiple angles, contractor estimates, labor rates. Consider hiring a public adjuster or attorney.`;
+    case "HIGH":
+      return `RECOMMENDED: Provide detailed photographic evidence of "${item}" and current local market rates. Have a professional contractor review for accuracy.`;
+    case "MEDIUM":
+      return `Recommended: Include photos and any contractor quotes for "${item}" to strengthen your claim.`;
+    case "LOW":
+      return `Monitor: Include standard documentation for "${item}" as part of normal claim process.`;
+    default:
+      return `Standard documentation for "${item}" should be sufficient.`;
+  }
+}
+
+const STOP_WORDS = new Set([
+  "the", "and", "for", "per", "with", "from", "this", "that", "are", "was", "were"
+]);
+
+const ROOFING_ABBREVIATIONS: Record<string, string[]> = {
+  "sq": ["square", "squares"],
+  "lf": ["linear", "foot", "feet"],
+  "sf": ["square", "foot", "feet"],
+  "hv": ["hvac", "heating", "ventilation"],
+  "arch": ["architectural", "architecture"],
+  "comp": ["composition", "composite"],
+  "asph": ["asphalt"],
+  "shgl": ["shingle", "shingles"],
+  "ins": ["install", "installation", "insurance"],
+  "rem": ["remove", "removal"],
+  "rep": ["replace", "replacement"],
+  "flsh": ["flash", "flashing"],
+  "mod": ["modifier", "modification"],
+};
+
+/**
+ * Normalize a string for fuzzy matching
+ * Removes special characters, converts to lowercase, extracts key tokens
+ * Keeps important abbreviations used in roofing/construction trades
+ */
+function normalizeForMatching(text: string): string[] {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(token => token.length >= 2 && !STOP_WORDS.has(token));
+  
+  const expandedTokens: string[] = [];
+  for (const token of tokens) {
+    expandedTokens.push(token);
+    const expansions = ROOFING_ABBREVIATIONS[token];
+    if (expansions) {
+      expandedTokens.push(...expansions);
+    }
+  }
+  
+  return expandedTokens;
+}
+
+/**
+ * Calculate match score using Dice coefficient
+ * More robust for comparing token sets of different sizes
+ * Returns a score from 0 to 1 (higher = better match)
+ */
+function calculateMatchScore(itemTokens: string[], patternTokens: string[]): number {
+  if (patternTokens.length === 0 || itemTokens.length === 0) return 0;
+  
+  let matches = 0;
+  
+  for (const itemToken of itemTokens) {
+    for (const patternToken of patternTokens) {
+      if (
+        itemToken === patternToken ||
+        (itemToken.length >= 3 && patternToken.includes(itemToken)) ||
+        (patternToken.length >= 3 && itemToken.includes(patternToken))
+      ) {
+        matches++;
+        break;
+      }
+    }
+  }
+  
+  const diceCoefficient = (2 * matches) / (itemTokens.length + patternTokens.length);
+  return diceCoefficient;
+}
+
+/**
+ * Get carrier intelligence for a specific line item
+ * Returns severity, warning message, recommendations, and confidence
+ * Uses fuzzy matching to handle variations in item naming
+ */
+export function getCarrierInsight(carrierName: string, itemName: string): CarrierInsight | null {
+  if (!carrierName || typeof carrierName !== "string") {
+    console.warn("[carrierIntel] Invalid carrier name:", carrierName);
+    return null;
+  }
+
+  if (!itemName || typeof itemName !== "string") {
+    console.warn("[carrierIntel] Invalid item name:", itemName);
+    return null;
+  }
+
+  const patterns = getCarrierPatterns(carrierName);
+  
+  if (patterns.length === 0) {
+    return null;
+  }
+
+  const itemTokens = normalizeForMatching(itemName);
+  let bestMatch: CarrierPattern | null = null;
+  let bestScore = 0;
+  const MATCH_THRESHOLD = 0.35;
+
+  for (const pattern of patterns) {
+    const patternTokens = normalizeForMatching(pattern.lineItemDescription);
+    const descriptionScore = calculateMatchScore(itemTokens, patternTokens);
+    
+    let gapScore = 0;
+    for (const gap of pattern.typicalGaps) {
+      const gapTokens = normalizeForMatching(gap);
+      const score = calculateMatchScore(itemTokens, gapTokens);
+      if (score > gapScore) {
+        gapScore = score;
+      }
+    }
+    
+    const finalScore = Math.max(descriptionScore, gapScore);
+    
+    if (finalScore > bestScore && finalScore >= MATCH_THRESHOLD) {
+      bestScore = finalScore;
+      bestMatch = pattern;
+    }
+  }
+
+  if (!bestMatch) {
+    return null;
+  }
+
+  const variance = bestMatch.underpaymentRate;
+  const severity = getSeverityLevel(variance);
+  const { confidenceLevel, adjustedConfidence } = calculateConfidence(
+    bestMatch.historicalCount,
+    bestMatch.confidence
+  );
+
+  return {
+    severity,
+    variance,
+    percentageUnderpayment: Math.abs(variance),
+    message: generateWarningMessage(carrierName, itemName, variance, severity),
+    recommendedAction: generateRecommendation(severity, itemName),
+    confidence: adjustedConfidence,
+    confidenceLevel,
+    sampleSize: bestMatch.historicalCount,
+    carrier: carrierName,
+    item: itemName,
+    pattern: bestMatch,
+  };
+}
+
+/**
+ * Update carrier trends from audit results using weighted average
+ * This allows the system to learn from real audit data over time
+ */
+export async function updateTrendsFromAudit(auditResult: {
+  carrier: string;
+  itemName: string;
+  claimPrice: number;
+  marketPrice: number;
+}): Promise<{ success: boolean; newVariance?: number; sampleSize?: number }> {
+  const { carrier, itemName, claimPrice, marketPrice } = auditResult;
+
+  if (!carrier || !itemName || marketPrice <= 0) {
+    console.warn("[carrierIntel] Invalid audit result for trend update");
+    return { success: false };
+  }
+
+  if (typeof claimPrice !== "number" || typeof marketPrice !== "number") {
+    console.warn("[carrierIntel] Invalid price values in audit result");
+    return { success: false };
+  }
+
+  const newVariance = ((claimPrice - marketPrice) / marketPrice) * 100;
+
+  try {
+    const existing = await db.select()
+      .from(carrierTrends)
+      .where(sql`lower(carrier_name) = ${carrier.toLowerCase()} AND lower(line_item_description) = ${itemName.toLowerCase()}`)
+      .limit(1);
+
+    if (existing.length > 0) {
+      const trend = existing[0];
+      const existingVariance = trend.underpaymentRate;
+      const existingSampleSize = trend.historicalCount;
+      
+      const newSampleSize = existingSampleSize + 1;
+      const weightedVariance = (existingVariance * existingSampleSize + newVariance) / newSampleSize;
+      
+      await db.update(carrierTrends)
+        .set({
+          underpaymentRate: Math.round(weightedVariance * 100) / 100,
+          historicalCount: newSampleSize,
+          confidence: Math.min(99, trend.confidence + 0.1),
+        })
+        .where(eq(carrierTrends.id, trend.id));
+
+      console.log(
+        `[carrierIntel] Updated trend for ${carrier}/"${itemName}": ` +
+        `new variance = ${weightedVariance.toFixed(2)}%, sample size = ${newSampleSize}`
+      );
+
+      return { 
+        success: true, 
+        newVariance: Math.round(weightedVariance * 100) / 100, 
+        sampleSize: newSampleSize 
+      };
+    } else {
+      await db.insert(carrierTrends).values({
+        carrierName: carrier,
+        lineItemDescription: itemName,
+        underpaymentRate: Math.round(newVariance * 100) / 100,
+        frequency: 0.1,
+        typicalGaps: [itemName],
+        commonStrategy: newVariance < -20 ? "UNDERVALUE" : "OMIT",
+        historicalCount: 1,
+        confidence: 50,
+      });
+
+      console.log(
+        `[carrierIntel] Created new trend for ${carrier}/"${itemName}": ` +
+        `variance = ${newVariance.toFixed(2)}%`
+      );
+
+      return { 
+        success: true, 
+        newVariance: Math.round(newVariance * 100) / 100, 
+        sampleSize: 1 
+      };
+    }
+  } catch (error) {
+    console.error("[carrierIntel] Failed to update trends from audit:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Get multiple carrier insights for a list of items
+ * Useful for batch processing during claim audits
+ */
+export function getCarrierInsights(
+  carrierName: string,
+  items: string[]
+): {
+  insights: CarrierInsight[];
+  highRiskCount: number;
+  totalEstimatedUnderpayment: number;
+  overallRecommendation: string;
+} {
+  const insights: CarrierInsight[] = [];
+  let highRiskCount = 0;
+  let totalUnderpayment = 0;
+
+  for (const item of items) {
+    const insight = getCarrierInsight(carrierName, item);
+    if (insight) {
+      insights.push(insight);
+      totalUnderpayment += insight.percentageUnderpayment;
+      if (insight.severity === "CRITICAL" || insight.severity === "HIGH") {
+        highRiskCount++;
+      }
+    }
+  }
+
+  let overallRecommendation = "Standard claim documentation should be sufficient.";
+  if (highRiskCount >= 3) {
+    overallRecommendation = "ALERT: Multiple high-risk items detected. Consider engaging a public adjuster or attorney to ensure fair compensation.";
+  } else if (highRiskCount >= 1) {
+    overallRecommendation = "Some items flagged as high risk. Ensure thorough documentation and consider professional review.";
+  } else if (insights.length > 0) {
+    overallRecommendation = "Some underpayment patterns detected. Provide supporting documentation for flagged items.";
+  }
+
+  return {
+    insights,
+    highRiskCount,
+    totalEstimatedUnderpayment: Math.round(totalUnderpayment * 10) / 10,
+    overallRecommendation,
+  };
+}
+
+/**
+ * Run self-tests to verify module functionality
+ */
+export function runCarrierIntelSelfTests(): { passed: number; failed: number; results: string[] } {
+  const results: string[] = [];
+  let passed = 0;
+  let failed = 0;
+
+  const patterns = getCarrierPatterns("State Farm");
+  if (patterns.length > 0) {
+    passed++;
+    results.push(`Test 1 PASSED: Found ${patterns.length} patterns for State Farm`);
+  } else {
+    failed++;
+    results.push("Test 1 FAILED: No patterns found for State Farm");
+  }
+
+  const unknownPatterns = getCarrierPatterns("Unknown Carrier XYZ");
+  if (unknownPatterns.length === 0) {
+    passed++;
+    results.push("Test 2 PASSED: Correctly returned empty for unknown carrier");
+  } else {
+    failed++;
+    results.push("Test 2 FAILED: Should return empty for unknown carrier");
+  }
+
+  const severityCritical = getSeverityLevel(-55);
+  const severityHigh = getSeverityLevel(-30);
+  const severityMedium = getSeverityLevel(-15);
+  const severityLow = getSeverityLevel(-5);
+  if (
+    severityCritical === "CRITICAL" &&
+    severityHigh === "HIGH" &&
+    severityMedium === "MEDIUM" &&
+    severityLow === "LOW"
+  ) {
+    passed++;
+    results.push("Test 3 PASSED: Severity levels calculated correctly");
+  } else {
+    failed++;
+    results.push("Test 3 FAILED: Severity level calculation incorrect");
+  }
+
+  const stats = getCarrierStats("State Farm");
+  if (stats && stats.carrierName === "State Farm" && stats.totalPatterns > 0 && stats.trendClassification) {
+    passed++;
+    results.push(`Test 4 PASSED: Carrier stats calculated (${stats.totalPatterns} patterns, ${stats.trendClassification} trend)`);
+  } else {
+    failed++;
+    results.push("Test 4 FAILED: Failed to calculate carrier stats");
+  }
+
+  const trendProblematic = getTrendClassification(30);
+  const trendUnderpays = getTrendClassification(20);
+  const trendFair = getTrendClassification(10);
+  const trendGenerous = getTrendClassification(3);
+  if (
+    trendProblematic === "PROBLEMATIC" &&
+    trendUnderpays === "UNDERPAYS" &&
+    trendFair === "FAIR" &&
+    trendGenerous === "GENEROUS"
+  ) {
+    passed++;
+    results.push("Test 5 PASSED: Trend classifications calculated correctly");
+  } else {
+    failed++;
+    results.push("Test 5 FAILED: Trend classification calculation incorrect");
+  }
+
+  const fuzzyTestCases = [
+    { carrier: "State Farm", item: "Roof Tear Off SQ", shouldMatch: true },
+    { carrier: "State Farm", item: "arch shingle tear off", shouldMatch: true },
+    { carrier: "State Farm", item: "ice water shield", shouldMatch: true },
+    { carrier: "State Farm", item: "steep pitch charge", shouldMatch: true },
+    { carrier: "State Farm", item: "valley flashing installation", shouldMatch: true },
+    { carrier: "State Farm", item: "completely unrelated garbage item xyz", shouldMatch: false },
+  ];
+
+  let fuzzyPassed = 0;
+  let fuzzyFailed = 0;
+  for (const testCase of fuzzyTestCases) {
+    const insight = getCarrierInsight(testCase.carrier, testCase.item);
+    const matched = insight !== null;
+    if (matched === testCase.shouldMatch) {
+      fuzzyPassed++;
+    } else {
+      fuzzyFailed++;
+      results.push(`Fuzzy test FAILED: "${testCase.item}" expected ${testCase.shouldMatch ? "match" : "no match"}, got ${matched ? "match" : "no match"}`);
+    }
+  }
+
+  if (fuzzyFailed === 0) {
+    passed++;
+    results.push(`Test 6 PASSED: All ${fuzzyPassed} fuzzy matching tests passed`);
+  } else {
+    failed++;
+    results.push(`Test 6 FAILED: ${fuzzyFailed}/${fuzzyTestCases.length} fuzzy matching tests failed`);
+  }
+
+  console.log(`[carrierIntel] Self-tests: ${passed} passed, ${failed} failed`);
+  return { passed, failed, results };
+}
+
 export const carrierIntel = {
   CARRIER_SAMPLE_SIZES,
   CONFIDENCE_THRESHOLDS,
@@ -325,4 +798,12 @@ export const carrierIntel = {
   getAllCarriers,
   getOverallStats,
   analyzeClaimForCarrier,
+  getTrendClassification,
+  getSeverityLevel,
+  generateWarningMessage,
+  generateRecommendation,
+  getCarrierInsight,
+  getCarrierInsights,
+  updateTrendsFromAudit,
+  runCarrierIntelSelfTests,
 };
