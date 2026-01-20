@@ -2,7 +2,8 @@
 // Cascading fallback: PaddleOCR → OCR.space → Tesseract.js → Manual Entry
 
 import { createWorker } from 'tesseract.js';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 import fs from 'fs/promises';
 
