@@ -2,7 +2,8 @@
 // Cascading fallback: PaddleOCR → OCR.space → Tesseract.js → Manual Entry
 
 import { createWorker } from 'tesseract.js';
-import * as pdfParse from 'pdf-parse';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse');
 import fs from 'fs/promises';
 
 export type OCRSource = 'paddle-ocr' | 'ocr.space' | 'tesseract' | 'pdf-text' | 'manual-entry';
@@ -152,7 +153,7 @@ async function tesseractOCR(filePath: string): Promise<OCRResult | null> {
 async function extractPDFText(filePath: string): Promise<OCRResult | null> {
   try {
     const dataBuffer = await fs.readFile(filePath);
-    const data = await (pdfParse as any)(dataBuffer);
+    const data = await pdfParse(dataBuffer);
     
     // If PDF has extractable text (not scanned), use it
     if (data.text && data.text.trim().length > 50) {
