@@ -21,6 +21,7 @@ export const partnerType = pgEnum("partner_type", ["contractor", "adjuster", "ag
 export const partnerTier = pgEnum("partner_tier", ["advertiser", "affiliate", "partner"]);
 export const partnerStatus = pgEnum("partner_status", ["pending", "approved", "rejected", "suspended"]);
 export const leadType = pgEnum("lead_type", ["click", "referral", "conversion"]);
+export const leadStatus = pgEnum("lead_status", ["pending", "in_progress", "closed", "paid"]);
 export const auditFlag = pgEnum("audit_flag", [
   "OK",
   "Below market minimum",
@@ -373,6 +374,9 @@ export const pricingDataPointsRelations = relations(pricingDataPoints, ({ one })
   }),
 }));
 
+// Partner billing status for admin dashboard filtering
+export const billingStatus = pgEnum("billing_status", ["active", "past_due", "cancelled", "pending", "trial"]);
+
 // Partners - Contractors, Adjusters, and Agencies applying for the network
 export const partners = pgTable("partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -381,10 +385,39 @@ export const partners = pgTable("partners", {
   tier: partnerTier("tier").default("advertiser").notNull(),
   contactPerson: text("contact_person").notNull(),
   email: text("email").notNull(),
+  password: text("password"), // Hashed password for credential login
+  emailVerified: integer("email_verified").default(0).$type<boolean>(), // Email verification status
   phone: text("phone").notNull(),
   website: text("website"),
   licenseNumber: text("license_number"),
+  zipCode: varchar("zip_code", { length: 5 }), // Primary ZIP for filtering
+  state: varchar("state", { length: 2 }), // State for grouping
+  subType: text("sub_type"), // Specialty: roofing, plumbing, etc.
+  orgMembership: text("org_membership"), // NRCA, AGC, NARI, etc.
   signingAgentId: varchar("signing_agent_id"), // Sales agent who signed this partner
+  planId: text("plan_id").default("free"), // free, standard, premium
+  billingStatus: billingStatus("billing_status").default("pending"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  serviceRegions: text("service_regions").array(), // Multiple service areas
+  activeRegion: text("active_region"), // Currently active region for dashboard view
+  adConfig: jsonb("ad_config").$type<{
+    bannerSize?: string;
+    placements?: string[];
+    cpc?: number;
+    monthlyBudget?: number;
+    affiliatePct?: number;
+  }>(),
+  metrics: jsonb("metrics").$type<{
+    impressions?: number;
+    clicks?: number;
+    leads?: number;
+    conversions?: number;
+    spendMTD?: number;
+    spendYTD?: number;
+    payoutsMTD?: number;
+    payoutsYTD?: number;
+  }>().default({}),
   status: partnerStatus("status").default("pending").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -393,6 +426,10 @@ export const partners = pgTable("partners", {
   statusIdx: index("partners_status_idx").on(table.status),
   typeIdx: index("partners_type_idx").on(table.type),
   agentIdx: index("partners_agent_idx").on(table.signingAgentId),
+  stateIdx: index("partners_state_idx").on(table.state),
+  zipIdx: index("partners_zip_idx").on(table.zipCode),
+  planIdx: index("partners_plan_idx").on(table.planId),
+  billingIdx: index("partners_billing_idx").on(table.billingStatus),
 }));
 
 export const insertPartnerSchema = createInsertSchema(partners).omit({
@@ -463,15 +500,22 @@ export const partnerLeads = pgTable("partner_leads", {
   sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
   claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
   leadType: leadType("lead_type").notNull(),
+  status: leadStatus("status").default("pending").notNull(),
+  claimValue: numeric("claim_value", { precision: 12, scale: 2 }).$type<number>(),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).$type<number>(),
+  commissionAmount: numeric("commission_amount", { precision: 12, scale: 2 }).$type<number>(),
   zipCode: varchar("zip_code", { length: 5 }),
   metadata: jsonb("metadata"),
   clickedAt: timestamp("clicked_at", { withTimezone: true }),
   convertedAt: timestamp("converted_at", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   partnerIdx: index("partner_leads_partner_idx").on(table.partnerId),
   sessionIdx: index("partner_leads_session_idx").on(table.sessionId),
   typeIdx: index("partner_leads_type_idx").on(table.leadType),
+  statusIdx: index("partner_leads_status_idx").on(table.status),
   createdAtIdx: index("partner_leads_created_at_idx").on(table.createdAt),
   clickedAtIdx: index("partner_leads_clicked_at_idx").on(table.clickedAt),
 }));
@@ -652,8 +696,12 @@ export const salesAgents = pgTable("sales_agents", {
   agentRefCode: text("agent_ref_code").unique(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  password: text("password"), // Hashed password for credential login
+  emailVerified: integer("email_verified").default(0).$type<boolean>(), // Email verification status
   phone: text("phone"),
   region: text("region"),
+  serviceRegions: text("service_regions").array(), // Multiple service areas for Local Resources
+  activeRegion: text("active_region"), // Currently active region for dashboard view
   birthYear: integer("birth_year"),
   commissionTierId: varchar("commission_tier_id").references(() => agentCommissionTiers.id),
   stripeConnectId: text("stripe_connect_id").unique(),
@@ -1073,7 +1121,16 @@ export const proOrgCategory = pgEnum("pro_org_category", [
   "disaster_recovery",
   "regulator",
   "disaster",
-  "licensing"
+  "licensing",
+  "plumbers",
+  "electricians",
+  "hvac",
+  "flooring",
+  "painters",
+  "restoration",
+  "windows_doors",
+  "tree_services",
+  "appliance_repair"
 ]);
 
 // Disaster Risk Tiers for state prioritization
@@ -1113,6 +1170,11 @@ export const proOrganizations = pgTable("pro_organizations", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   notes: text("notes"),
+  tradeSpecialties: text("trade_specialties").array(),
+  disasterSpecialties: text("disaster_specialties").array(),
+  certifications: text("certifications").array(),
+  emergencyServices: integer("emergency_services").default(0).$type<boolean>(),
+  stateBoards: jsonb("state_boards").$type<Record<string, string>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
@@ -1156,3 +1218,292 @@ export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit
 
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
+
+// Batch Job Status enum for async processing
+export const batchJobStatus = pgEnum("batch_job_status", [
+  "queued",
+  "processing",
+  "completed",
+  "failed"
+]);
+
+// Batch Jobs - Async processing queue for large claim audits
+export const batchJobs = pgTable("batch_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  status: batchJobStatus("status").default("queued").notNull(),
+  itemCount: integer("item_count").notNull(),
+  processedCount: integer("processed_count").default(0).notNull(),
+  zipCode: char("zip_code", { length: 5 }),
+  inputData: jsonb("input_data").notNull(),
+  results: jsonb("results"),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  statusIdx: index("batch_jobs_status_idx").on(table.status),
+  createdAtIdx: index("batch_jobs_created_at_idx").on(table.createdAt),
+}));
+
+export const insertBatchJobSchema = createInsertSchema(batchJobs).omit({
+  id: true,
+  status: true,
+  processedCount: true,
+  results: true,
+  error: true,
+  startedAt: true,
+  completedAt: true,
+  createdAt: true,
+});
+
+export type InsertBatchJob = z.infer<typeof insertBatchJobSchema>;
+export type BatchJob = typeof batchJobs.$inferSelect;
+
+// ============================================
+// AUTH TOKENS - Password Reset & Email Verification
+// ============================================
+
+// Token type enum
+export const tokenType = pgEnum("token_type", ["password_reset", "email_verification"]);
+
+// Password Reset Tokens - For forgot password flow
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  userType: text("user_type").notNull(), // 'agent' or 'partner'
+  userId: varchar("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("password_reset_token_idx").on(table.token),
+  emailIdx: index("password_reset_email_idx").on(table.email),
+  expiresIdx: index("password_reset_expires_idx").on(table.expiresAt),
+}));
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  usedAt: true,
+  createdAt: true,
+});
+
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+// Email Verification Tokens - For email verification flow
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  email: text("email").notNull(),
+  userType: text("user_type").notNull(), // 'agent' or 'partner'
+  userId: varchar("user_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("email_verification_token_idx").on(table.token),
+  emailIdx: index("email_verification_email_idx").on(table.email),
+  expiresIdx: index("email_verification_expires_idx").on(table.expiresAt),
+}));
+
+export const insertEmailVerificationTokenSchema = createInsertSchema(emailVerificationTokens).omit({
+  id: true,
+  verifiedAt: true,
+  createdAt: true,
+});
+
+export type InsertEmailVerificationToken = z.infer<typeof insertEmailVerificationTokenSchema>;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+// ============================================
+// CARRIER TRENDS - Underpayment Intelligence Database
+// ============================================
+
+// Carrier underpayment strategy enum
+export const carrierStrategy = pgEnum("carrier_strategy", [
+  "OMIT",
+  "UNDERVALUE", 
+  "DENY_COVERAGE",
+  "DENY_MODIFIER",
+  "ZERO_COST"
+]);
+
+// Carrier Trends - Historical underpayment patterns by carrier
+export const carrierTrends = pgTable("carrier_trends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  carrierName: text("carrier_name").notNull(),
+  lineItemDescription: text("line_item_description").notNull(),
+  underpaymentRate: numeric("underpayment_rate", { precision: 5, scale: 2 }).notNull().$type<number>(),
+  frequency: numeric("frequency", { precision: 5, scale: 2 }).notNull().$type<number>(),
+  typicalGaps: text("typical_gaps").array(),
+  commonStrategy: carrierStrategy("common_strategy").notNull(),
+  historicalCount: integer("historical_count").default(0).notNull(),
+  confidence: integer("confidence").default(80).notNull(),
+  monthYear: timestamp("month_year", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  carrierIdx: index("carrier_trends_carrier_idx").on(table.carrierName),
+  itemIdx: index("carrier_trends_item_idx").on(table.lineItemDescription),
+  carrierItemIdx: index("carrier_trends_carrier_item_idx").on(table.carrierName, table.lineItemDescription),
+}));
+
+export const insertCarrierTrendSchema = createInsertSchema(carrierTrends).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCarrierTrend = z.infer<typeof insertCarrierTrendSchema>;
+export type CarrierTrend = typeof carrierTrends.$inferSelect;
+
+// ============================================
+// FEATURE FLAGS - Premium Feature Toggles
+// ============================================
+
+export const featureFlags = pgTable("feature_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  enabled: integer("enabled").default(0).$type<boolean>(),
+  requiredTier: text("required_tier").default("free"),
+  activationConditions: jsonb("activation_conditions").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const insertFeatureFlagSchema = createInsertSchema(featureFlags).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertFeatureFlag = z.infer<typeof insertFeatureFlagSchema>;
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+
+// ============================================
+// PARTNER REVIEWS - Customer feedback for partners
+// ============================================
+
+export const partnerReviews = pgTable("partner_reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => replitUsers.id, { onDelete: "set null" }),
+  sessionId: varchar("session_id").references(() => sessions.id, { onDelete: "set null" }),
+  claimId: varchar("claim_id").references(() => claims.id, { onDelete: "set null" }),
+  rating: integer("rating").notNull(), // 1-5 stars
+  comment: text("comment"),
+  isVerified: integer("is_verified").default(0).$type<boolean>(), // Verified job completion
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("partner_reviews_partner_idx").on(table.partnerId),
+  ratingIdx: index("partner_reviews_rating_idx").on(table.rating),
+}));
+
+export const insertPartnerReviewSchema = createInsertSchema(partnerReviews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPartnerReview = z.infer<typeof insertPartnerReviewSchema>;
+export type PartnerReview = typeof partnerReviews.$inferSelect;
+
+export const partnerReviewsRelations = relations(partnerReviews, ({ one }) => ({
+  partner: one(partners, {
+    fields: [partnerReviews.partnerId],
+    references: [partners.id],
+  }),
+  user: one(replitUsers, {
+    fields: [partnerReviews.userId],
+    references: [replitUsers.id],
+  }),
+}));
+
+// ============================================
+// AVAILABLE GRANTS - Disaster recovery assistance programs
+// ============================================
+
+export const grantCategory = pgEnum("grant_category", [
+  "federal",
+  "state", 
+  "local",
+  "nonprofit",
+  "private"
+]);
+
+export const availableGrants = pgTable("available_grants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").notNull(), // FEMA, SBA, 211 Texas, USDA, etc.
+  name: text("name").notNull(),
+  category: grantCategory("category").notNull(),
+  minAmount: numeric("min_amount", { precision: 12, scale: 2 }).$type<number>(),
+  maxAmount: numeric("max_amount", { precision: 12, scale: 2 }).$type<number>(),
+  eligibility: text("eligibility"), // Description of eligibility requirements
+  applicationUrl: text("application_url"),
+  processingDays: integer("processing_days"), // Estimated processing time
+  disasterTypes: text("disaster_types").array(), // flood, fire, hurricane, etc.
+  statesAvailable: text("states_available").array(), // TX, FL, CA or ["ALL"]
+  isActive: integer("is_active").default(1).$type<boolean>(),
+  lastScrapedAt: timestamp("last_scraped_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sourceIdx: index("available_grants_source_idx").on(table.source),
+  categoryIdx: index("available_grants_category_idx").on(table.category),
+  activeIdx: index("available_grants_active_idx").on(table.isActive),
+}));
+
+export const insertAvailableGrantSchema = createInsertSchema(availableGrants).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastScrapedAt: true,
+});
+
+export type InsertAvailableGrant = z.infer<typeof insertAvailableGrantSchema>;
+export type AvailableGrant = typeof availableGrants.$inferSelect;
+
+// ============================================
+// TAX FORMS - 1099-NEC for partner payouts
+// ============================================
+
+export const taxFormType = pgEnum("tax_form_type", ["1099-NEC", "1099-K"]);
+
+export const taxForms = pgTable("tax_forms", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  formType: taxFormType("form_type").notNull(),
+  taxYear: integer("tax_year").notNull(),
+  totalCompensation: numeric("total_compensation", { precision: 12, scale: 2 }).notNull().$type<number>(),
+  formData: jsonb("form_data").$type<{
+    recipientName?: string;
+    recipientTin?: string; // Encrypted
+    recipientAddress?: string;
+    payerInfo?: Record<string, any>;
+  }>(),
+  pdfUrl: text("pdf_url"),
+  pdfData: text("pdf_data"), // Base64 encoded PDF content
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  partnerIdx: index("tax_forms_partner_idx").on(table.partnerId),
+  yearIdx: index("tax_forms_year_idx").on(table.taxYear),
+}));
+
+export const insertTaxFormSchema = createInsertSchema(taxForms).omit({
+  id: true,
+  generatedAt: true,
+  createdAt: true,
+});
+
+export type InsertTaxForm = z.infer<typeof insertTaxFormSchema>;
+export type TaxForm = typeof taxForms.$inferSelect;
+
+export const taxFormsRelations = relations(taxForms, ({ one }) => ({
+  partner: one(partners, {
+    fields: [taxForms.partnerId],
+    references: [partners.id],
+  }),
+}));

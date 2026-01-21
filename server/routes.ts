@@ -1,3 +1,18 @@
+/**
+ * MaxClaim – Insurance Claim Fair Market Value Tool
+ * https://github.com/holidaynate/MaxClaim-Replit
+ *
+ * © 2023–2025 Nate Chacon (InfiN8 / HolidayNate). All rights reserved.
+ *
+ * This file is part of the proprietary MaxClaim SaaS implementation.
+ * Business logic (claim auditing, multi-carrier pricing aggregation,
+ * geo-targeted partner matching, weighted "pay what you want" promotions)
+ * is original to MaxClaim and protected by copyright and pending patents.
+ *
+ * Third-party libraries (Express, helmet, etc.) are used under their
+ * respective open source licenses as documented in THIRD_PARTY_NOTICES.md.
+ */
+
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -6,7 +21,9 @@ import { analyzeClaimItem, analyzeClaimItemWithCitation, getCategoryLineItems, g
 import { aggregateSources, type CitedPriceEstimate, type PricingSource } from "./utils/pricingCitation";
 import { getRegionalContext, calculateInflationMultiplier, getBLSInflationData } from "./external-apis";
 import { performOCR, parseInsuranceDocument } from "./ocr-service";
-import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema } from "@shared/schema";
+import { insertPartnerSchema, insertPartnershipLOISchema, insertPartnerLeadSchema, carrierTrends as carrierTrendsTable } from "@shared/schema";
+import { sql, eq, desc, and } from "drizzle-orm";
+import { db } from "./db";
 import { auditClaimItem, auditBatch, getAllItems, getMarketData, type AuditResult, type BatchAuditResult } from "@shared/priceAudit";
 import { asyncHandler, validateClaimInput, validateFileUpload, validateAdminLogin, sanitizeString } from "./utils/validation";
 import { priceDBCache } from "./utils/priceDBCache";
@@ -22,12 +39,63 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
+import { auditCache } from "./cache/auditCache";
+import { batchQueue } from "./queue/batchQueue";
+import { sendPasswordResetEmail, sendEmailVerificationEmail, sendWelcomeEmail } from "./services/emailService";
+import { generatePlanRecommendation, getTradeTypes, getTierComparison } from "./services/planBuilder";
+import { 
+  calculateRegionCostBreakdown, 
+  generateFullRecommendation, 
+  getAvailableRegions 
+} from "./services/regionalCostCalculator";
+import { 
+  getRegionsForState, 
+  findRegionByZip, 
+  getRegionAllocationByPlan,
+  getAllStatesWithRegions 
+} from "./config/regions";
+import { getAllDisasterRegions, REGIONAL_DEMAND_DATA } from "./config/regionalDemand";
+import { 
+  calculateRotationWeights, 
+  selectPartnersForPlacement, 
+  calculateBudgetPacing, 
+  getCompetitiveInsights,
+  type PartnerAdConfig 
+} from "./services/competitiveRotation";
+import {
+  getPrimaryHealth,
+  getFallbackHealth,
+  getFeatureStatus,
+  getCombinedHealth,
+} from "./services/healthCheck";
+import { seedCarrierTrends } from "./seeds/carrierTrends";
+import { leadStore } from "./services/leadStore";
+import { carrierIntel } from "./services/carrierIntel";
+import { distributionTest } from "./services/distributionTest";
+import { scheduler } from "./services/scheduler";
+import { cacheService } from "./services/cacheService";
+import { claimValidator, type LineItemInput, type ValidationResult } from "./services/claimValidator";
+import { partnerRouter, type RoutingCriteria, type RoutingResult, type RoutingAnalysis } from "./services/partnerRouter";
 
 // Extend Express session type
 declare module "express-session" {
   interface SessionData {
     isAdmin?: boolean;
   }
+}
+
+// Helper to format uptime in human-readable format
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
 }
 
 const claimAnalysisSchema = z.object({
@@ -85,6 +153,669 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/status", (req, res) => {
     res.json({ isAdmin: !!req.session?.isAdmin });
   });
+
+  // ========== CREDENTIAL-BASED AUTH ENDPOINTS ==========
+  
+  // Secure password hashing using bcrypt
+  const bcrypt = await import("bcrypt");
+  const SALT_ROUNDS = 12; // Industry-standard work factor
+  
+  async function hashPassword(password: string): Promise<string> {
+    return bcrypt.hash(password, SALT_ROUNDS);
+  }
+  
+  async function verifyPassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  // Detect role from email (checks agents, partners, and admin users)
+  app.post("/api/auth/detect-role", asyncHandler(async (req, res) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    
+    // Check if email exists in sales_agents
+    const agent = await storage.getSalesAgentByEmail(email);
+    if (agent) {
+      return res.json({ role: "agent", found: true });
+    }
+    
+    // Check if email exists in partners
+    const partner = await storage.getPartnerByEmail(email);
+    if (partner) {
+      return res.json({ role: "partner", found: true });
+    }
+    
+    // Check admin users table
+    const adminUser = await storage.getUserByUsername(email);
+    if (adminUser) {
+      return res.json({ role: "admin", found: true });
+    }
+    
+    // No match found - let frontend show role selector
+    res.json({ role: null, found: false });
+  }));
+
+  // Sign in with credentials
+  app.post("/api/auth/signin", asyncHandler(async (req, res) => {
+    const { email, password, role } = z.object({
+      email: z.string().email(),
+      password: z.string().min(1),
+      role: z.enum(["agent", "partner", "admin"]),
+    }).parse(req.body);
+    
+    if (role === "admin") {
+      // Admin uses ADMIN_PASSWORD env var
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      if (password === adminPassword) {
+        req.session.isAdmin = true;
+        return res.json({ 
+          success: true, 
+          role: "admin",
+          user: { email, name: "Admin" }
+        });
+      }
+      return res.json({ success: false, message: "Invalid admin credentials" });
+    }
+    
+    if (role === "agent") {
+      const agent = await storage.getSalesAgentByEmail(email);
+      if (!agent || !agent.password) {
+        return res.json({ success: false, message: "Agent not found or password not set" });
+      }
+      if (!(await verifyPassword(password, agent.password))) {
+        return res.json({ success: false, message: "Invalid password" });
+      }
+      // Store agent session
+      (req.session as any).agentId = agent.id;
+      (req.session as any).userRole = "agent";
+      return res.json({ 
+        success: true, 
+        role: "agent",
+        user: { 
+          id: agent.id,
+          email: agent.email, 
+          name: agent.name,
+          refCode: agent.agentRefCode
+        }
+      });
+    }
+    
+    if (role === "partner") {
+      const partner = await storage.getPartnerByEmail(email);
+      if (!partner || !partner.password) {
+        return res.json({ success: false, message: "Partner not found or password not set" });
+      }
+      if (!(await verifyPassword(password, partner.password))) {
+        return res.json({ success: false, message: "Invalid password" });
+      }
+      // Store partner session
+      (req.session as any).partnerId = partner.id;
+      (req.session as any).userRole = "partner";
+      return res.json({ 
+        success: true, 
+        role: "partner",
+        user: { 
+          id: partner.id,
+          email: partner.email, 
+          name: partner.contactPerson,
+          companyName: partner.companyName
+        }
+      });
+    }
+    
+    res.json({ success: false, message: "Invalid role" });
+  }));
+
+  // Agent signup
+  app.post("/api/auth/signup/agent", asyncHandler(async (req, res) => {
+    const data = z.object({
+      name: z.string().min(2),
+      email: z.string().email(),
+      password: z.string().min(8),
+      phone: z.string().optional(),
+      birthYear: z.number().min(1940).max(2010).optional(),
+      region: z.string().optional(),
+    }).parse(req.body);
+    
+    // Check if email already exists
+    const existingAgent = await storage.getSalesAgentByEmail(data.email);
+    if (existingAgent) {
+      return res.json({ success: false, message: "Email already registered as an agent" });
+    }
+    
+    // Generate unique ref code from name and birth year
+    const nameParts = data.name.trim().split(/\s+/);
+    const firstName = nameParts[0] || "agent";
+    const lastName = nameParts[1] || "user";
+    const birthYear = data.birthYear || 1990;
+    const joinedYear = new Date().getFullYear();
+    
+    // Get existing codes to ensure uniqueness
+    const existingAgents = await storage.getSalesAgents({});
+    const existingCodes = existingAgents.map(a => a.agentRefCode || "");
+    
+    const refCode = await generateUniqueAgentRefCode(firstName, lastName, birthYear, joinedYear, existingCodes);
+    
+    // Create agent with hashed password
+    const hashedPassword = await hashPassword(data.password);
+    const agent = await storage.createSalesAgent({
+      name: data.name,
+      email: data.email,
+      password: hashedPassword,
+      phone: data.phone || null,
+      birthYear: data.birthYear || null,
+      region: data.region || "national",
+      agentRefCode: refCode,
+      status: "active",
+      emailVerified: 0, // Integer 0 for false since DB column is integer
+    });
+    
+    // Generate email verification token
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    
+    await storage.createEmailVerificationToken({
+      token: verifyToken,
+      email: data.email.toLowerCase(),
+      userType: 'agent',
+      userId: agent.id,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(data.email.toLowerCase(), verifyToken, 'agent', data.name);
+    
+    // Store session
+    (req.session as any).agentId = agent.id;
+    (req.session as any).userRole = "agent";
+    
+    res.json({ 
+      success: true, 
+      refCode: agent.agentRefCode,
+      emailVerificationSent: true,
+      user: {
+        id: agent.id,
+        email: agent.email,
+        name: agent.name,
+      }
+    });
+  }));
+
+  // Partner signup
+  app.post("/api/auth/signup/partner", asyncHandler(async (req, res) => {
+    const data = z.object({
+      companyName: z.string().min(2),
+      type: z.enum(["contractor", "adjuster", "agency"]),
+      contactPerson: z.string().min(2),
+      email: z.string().email(),
+      password: z.string().min(8),
+      phone: z.string().min(10),
+      website: z.string().optional(),
+      licenseNumber: z.string().optional(),
+      pricingTier: z.enum(["free", "standard", "premium"]).optional(),
+      referralCode: z.string().optional(),
+    }).parse(req.body);
+    
+    // Check if email already exists
+    const existingPartner = await storage.getPartnerByEmail(data.email);
+    if (existingPartner) {
+      return res.json({ success: false, message: "Email already registered as a partner" });
+    }
+    
+    // Look up signing agent if referral code provided
+    let signingAgentId: string | null = null;
+    if (data.referralCode) {
+      const agent = await storage.getSalesAgentByRefCode(data.referralCode);
+      if (agent) {
+        signingAgentId = agent.id;
+      }
+    }
+    
+    // Create partner with hashed password
+    const hashedPassword = await hashPassword(data.password);
+    const partner = await storage.createPartner({
+      companyName: data.companyName,
+      type: data.type,
+      tier: "advertiser",
+      contactPerson: data.contactPerson,
+      email: data.email,
+      password: hashedPassword,
+      phone: data.phone,
+      website: data.website || null,
+      licenseNumber: data.licenseNumber || null,
+      signingAgentId,
+      status: "pending", // Partners need approval
+      emailVerified: 0, // Integer 0 for false since DB column is integer
+    });
+    
+    // Generate email verification token
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    
+    await storage.createEmailVerificationToken({
+      token: verifyToken,
+      email: data.email.toLowerCase(),
+      userType: 'partner',
+      userId: partner.id,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(data.email.toLowerCase(), verifyToken, 'partner', data.companyName);
+    
+    // Store session
+    (req.session as any).partnerId = partner.id;
+    (req.session as any).userRole = "partner";
+    
+    res.json({ 
+      success: true,
+      emailVerificationSent: true,
+      user: {
+        id: partner.id,
+        email: partner.email,
+        companyName: partner.companyName,
+        status: partner.status,
+      }
+    });
+  }));
+
+  // Get current user session info
+  app.get("/api/auth/me", (req, res) => {
+    const session = req.session as any;
+    if (session.isAdmin) {
+      return res.json({ authenticated: true, role: "admin" });
+    }
+    if (session.agentId) {
+      return res.json({ authenticated: true, role: "agent", id: session.agentId });
+    }
+    if (session.partnerId) {
+      return res.json({ authenticated: true, role: "partner", id: session.partnerId });
+    }
+    res.json({ authenticated: false });
+  });
+
+  // Logout
+  app.post("/api/auth/logout", (req, res) => {
+    const session = req.session as any;
+    session.isAdmin = false;
+    session.agentId = null;
+    session.partnerId = null;
+    session.userRole = null;
+    res.json({ success: true });
+  });
+
+  // ============================================
+  // PASSWORD RESET FLOW
+  // ============================================
+
+  // Forgot Password - Request password reset email
+  app.post("/api/auth/forgot-password", asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Check if email exists in agents or partners
+    const agents = await storage.getSalesAgents({ email: normalizedEmail } as any);
+    const partners = await storage.getPartners({ email: normalizedEmail } as any);
+    
+    // Determine if agent or partner
+    let userType: 'agent' | 'partner' | null = null;
+    let userId: string | null = null;
+    
+    // Find agent by email
+    const allAgents = await storage.getSalesAgents({});
+    const matchedAgent = allAgents.find(a => a.email?.toLowerCase() === normalizedEmail);
+    if (matchedAgent) {
+      userType = 'agent';
+      userId = matchedAgent.id;
+    }
+    
+    // Find partner by email
+    const allPartners = await storage.getPartners({});
+    const matchedPartner = allPartners.find(p => p.email?.toLowerCase() === normalizedEmail);
+    if (matchedPartner) {
+      userType = 'partner';
+      userId = matchedPartner.id;
+    }
+    
+    // Always return success to prevent email enumeration attacks
+    if (!userType || !userId) {
+      console.log(`Password reset requested for unknown email: ${normalizedEmail}`);
+      return res.json({ 
+        success: true, 
+        message: "If this email exists in our system, you will receive a password reset link shortly." 
+      });
+    }
+    
+    // Generate secure token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    
+    // Store token in database
+    await storage.createPasswordResetToken({
+      token,
+      email: normalizedEmail,
+      userType,
+      userId,
+      expiresAt,
+    });
+    
+    // Send password reset email via SendGrid (or log if not configured)
+    await sendPasswordResetEmail(normalizedEmail, token, userType);
+    
+    res.json({ 
+      success: true, 
+      message: "If this email exists in our system, you will receive a password reset link shortly." 
+    });
+  }));
+
+  // Verify Reset Token - Check if token is valid
+  app.get("/api/auth/verify-reset-token/:token", asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({ valid: false, error: "Token is required" });
+    }
+    
+    const resetToken = await storage.getPasswordResetTokenByToken(token);
+    
+    if (!resetToken) {
+      return res.json({ valid: false, error: "Invalid or expired reset token" });
+    }
+    
+    // Check if token has been used
+    if (resetToken.usedAt) {
+      return res.json({ valid: false, error: "This reset link has already been used" });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(resetToken.expiresAt)) {
+      return res.json({ valid: false, error: "This reset link has expired" });
+    }
+    
+    res.json({ 
+      valid: true, 
+      email: resetToken.email,
+      userType: resetToken.userType 
+    });
+  }));
+
+  // Reset Password - Set new password using token
+  app.post("/api/auth/reset-password", asyncHandler(async (req, res) => {
+    const { token, newPassword } = req.body;
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: "Token is required" });
+    }
+    
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+    
+    const resetToken = await storage.getPasswordResetTokenByToken(token);
+    
+    if (!resetToken) {
+      return res.status(400).json({ error: "Invalid or expired reset token" });
+    }
+    
+    // Check if token has been used
+    if (resetToken.usedAt) {
+      return res.status(400).json({ error: "This reset link has already been used" });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(resetToken.expiresAt)) {
+      return res.status(400).json({ error: "This reset link has expired" });
+    }
+    
+    // Hash new password
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    
+    // Update password based on user type
+    if (resetToken.userType === 'agent') {
+      await storage.updateAgentPassword(resetToken.userId, hashedPassword);
+    } else if (resetToken.userType === 'partner') {
+      await storage.updatePartnerPassword(resetToken.userId, hashedPassword);
+    }
+    
+    // Mark token as used
+    await storage.markPasswordResetTokenUsed(resetToken.id);
+    
+    console.log(`[PASSWORD RESET] Password updated for ${resetToken.email}`);
+    
+    res.json({ success: true, message: "Your password has been reset successfully. You can now sign in with your new password." });
+  }));
+
+  // ============================================
+  // EMAIL VERIFICATION FLOW
+  // ============================================
+
+  // Verify Email - Verify email using token
+  app.get("/api/auth/verify-email/:token", asyncHandler(async (req, res) => {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({ success: false, error: "Token is required" });
+    }
+    
+    const verifyToken = await storage.getEmailVerificationTokenByToken(token);
+    
+    if (!verifyToken) {
+      return res.status(400).json({ success: false, error: "Invalid or expired verification link" });
+    }
+    
+    // Check if already verified
+    if (verifyToken.verifiedAt) {
+      return res.json({ success: true, message: "Email already verified", alreadyVerified: true });
+    }
+    
+    // Check if token has expired
+    if (new Date() > new Date(verifyToken.expiresAt)) {
+      return res.status(400).json({ success: false, error: "This verification link has expired" });
+    }
+    
+    // Mark email as verified for the user and auto-approve if applicable
+    let userName: string | undefined;
+    let wasAutoApproved = false;
+    
+    if (verifyToken.userType === 'agent') {
+      await storage.updateAgentEmailVerified(verifyToken.userId, true);
+      const agent = await storage.getSalesAgent(verifyToken.userId);
+      userName = agent?.name;
+    } else if (verifyToken.userType === 'partner') {
+      await storage.updatePartnerEmailVerified(verifyToken.userId, true);
+      
+      // Auto-approve partner after email verification
+      const partner = await storage.getPartner(verifyToken.userId);
+      if (partner && partner.status === 'pending') {
+        await storage.updatePartnerStatus(verifyToken.userId, 'approved');
+        wasAutoApproved = true;
+        console.log(`[AUTO-APPROVAL] Partner ${partner.companyName} auto-approved after email verification`);
+      }
+      userName = partner?.companyName;
+    }
+    
+    // Mark token as verified
+    await storage.markEmailVerified(verifyToken.id);
+    
+    console.log(`[EMAIL VERIFICATION] Email verified for ${verifyToken.email}`);
+    
+    // Send welcome email after successful verification
+    await sendWelcomeEmail(verifyToken.email, verifyToken.userType, userName);
+    
+    res.json({ 
+      success: true, 
+      message: wasAutoApproved 
+        ? "Email verified and account approved! You're ready to start."
+        : "Email verified successfully!",
+      userType: verifyToken.userType,
+      autoApproved: wasAutoApproved
+    });
+  }));
+
+  // Resend Verification Email
+  app.post("/api/auth/resend-verification", asyncHandler(async (req, res) => {
+    const { email } = req.body;
+    
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    
+    const normalizedEmail = email.toLowerCase().trim();
+    
+    // Find user by email
+    let userType: 'agent' | 'partner' | null = null;
+    let userId: string | null = null;
+    let userName: string | undefined;
+    let emailVerified = false;
+    
+    // Find agent by email
+    const allAgents = await storage.getSalesAgents({});
+    const matchedAgent = allAgents.find(a => a.email?.toLowerCase() === normalizedEmail);
+    if (matchedAgent) {
+      userType = 'agent';
+      userId = matchedAgent.id;
+      userName = matchedAgent.name;
+      emailVerified = matchedAgent.emailVerified || false;
+    }
+    
+    // Find partner by email
+    const allPartners = await storage.getPartners({});
+    const matchedPartner = allPartners.find(p => p.email?.toLowerCase() === normalizedEmail);
+    if (matchedPartner) {
+      userType = 'partner';
+      userId = matchedPartner.id;
+      userName = matchedPartner.companyName;
+      emailVerified = matchedPartner.emailVerified || false;
+    }
+    
+    // Always return success to prevent email enumeration
+    if (!userType || !userId) {
+      return res.json({ 
+        success: true, 
+        message: "If this email exists in our system, you will receive a verification email shortly." 
+      });
+    }
+    
+    if (emailVerified) {
+      return res.json({ 
+        success: true, 
+        message: "Email is already verified.",
+        alreadyVerified: true
+      });
+    }
+    
+    // Generate new verification token
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+    
+    await storage.createEmailVerificationToken({
+      token,
+      email: normalizedEmail,
+      userType,
+      userId,
+      expiresAt,
+    });
+    
+    // Send verification email
+    await sendEmailVerificationEmail(normalizedEmail, token, userType, userName);
+    
+    res.json({ 
+      success: true, 
+      message: "If this email exists in our system, you will receive a verification email shortly." 
+    });
+  }));
+
+  // Check email verification status
+  app.get("/api/auth/verification-status", asyncHandler(async (req, res) => {
+    const session = req.session as any;
+    
+    if (!session.agentId && !session.partnerId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    
+    let emailVerified = false;
+    let email = '';
+    
+    if (session.agentId) {
+      const agent = await storage.getSalesAgent(session.agentId);
+      if (agent) {
+        emailVerified = agent.emailVerified || false;
+        email = agent.email || '';
+      }
+    } else if (session.partnerId) {
+      const partner = await storage.getPartner(session.partnerId);
+      if (partner) {
+        emailVerified = partner.emailVerified || false;
+        email = partner.email || '';
+      }
+    }
+    
+    res.json({ emailVerified, email });
+  }));
+
+  // Get sales agent by ID (for agent dashboard)
+  app.get("/api/sales-agents/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const session = req.session as any;
+    
+    // Only allow access to own agent data or admin access
+    if (!session.isAdmin && session.agentId !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const agent = await storage.getSalesAgent(id);
+    if (!agent) {
+      return res.status(404).json({ error: "Agent not found" });
+    }
+    
+    // Return agent data without sensitive fields
+    res.json({
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        agentRefCode: agent.agentRefCode,
+        totalEarned: agent.totalEarned || 0,
+        ytdEarnings: agent.ytdEarnings || 0,
+        status: agent.status,
+        region: agent.region,
+        serviceRegions: agent.serviceRegions || [],
+        activeRegion: agent.activeRegion || agent.region,
+        joinedAt: agent.joinedAt,
+      }
+    });
+  }));
+
+  // Update sales agent service regions
+  app.put("/api/sales-agents/:id/regions", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const session = req.session as any;
+    
+    // Only allow access to own agent data or admin access
+    if (!session.isAdmin && session.agentId !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const { serviceRegions, activeRegion } = req.body;
+    
+    if (!Array.isArray(serviceRegions) || serviceRegions.length === 0) {
+      return res.status(400).json({ error: "At least one service region is required" });
+    }
+    
+    if (!activeRegion || !serviceRegions.includes(activeRegion)) {
+      return res.status(400).json({ error: "Active region must be one of the selected service regions" });
+    }
+    
+    // Update the agent's regions
+    await storage.updateSalesAgentRegions(id, serviceRegions, activeRegion);
+    
+    res.json({ success: true, serviceRegions, activeRegion });
+  }));
 
   // Helper to normalize claim items - derive both unitPrice and quotedPrice (subtotal)
   // Throws error if quantity is invalid
@@ -739,6 +1470,439 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ==================== Stripe Checkout API ====================
+
+  // Create checkout session for partner subscription
+  app.post("/api/checkout/create-session", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      partnerId: z.string(),
+      tier: z.enum(["standard", "premium"]),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+    });
+
+    const { partnerId, tier, successUrl, cancelUrl } = schema.parse(req.body);
+    const session = req.session as any;
+
+    // Only allow partner to create checkout for themselves (or admin)
+    if (!session.isAdmin && session.partnerId !== partnerId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const { stripePaymentService } = await import("./services/stripePayments");
+    
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = await stripePaymentService.createCheckoutSession(
+      partnerId,
+      tier,
+      successUrl || `${baseUrl}/partner-dashboard`,
+      cancelUrl || `${baseUrl}/partner-dashboard`
+    );
+
+    res.json({ 
+      sessionId: result.sessionId, 
+      url: result.url 
+    });
+  }));
+
+  // Get checkout session status
+  app.get("/api/checkout/session/:sessionId", asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const { stripePaymentService } = await import("./services/stripePayments");
+    
+    const session = await stripePaymentService.getCheckoutSession(sessionId);
+    
+    res.json({
+      status: session.status,
+      paymentStatus: session.payment_status,
+      customerId: session.customer,
+      subscriptionId: session.subscription?.id,
+    });
+  }));
+
+  // Stripe webhook handler
+  app.post("/api/webhooks/stripe", asyncHandler(async (req, res) => {
+    const { getUncachableStripeClient, getStripeSecretKey } = await import("./services/stripeClient");
+    const { stripePaymentService } = await import("./services/stripePayments");
+    const Stripe = (await import("stripe")).default;
+
+    const stripe = await getUncachableStripeClient();
+    const sig = req.headers['stripe-signature'] as string;
+    
+    let event;
+
+    try {
+      // Note: In production, use webhook secret for verification
+      // For development, we'll trust the payload
+      if (process.env.STRIPE_WEBHOOK_SECRET) {
+        event = stripe.webhooks.constructEvent(
+          req.body,
+          sig,
+          process.env.STRIPE_WEBHOOK_SECRET
+        );
+      } else {
+        event = req.body;
+      }
+    } catch (err: any) {
+      console.error('Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        console.log('[Stripe Webhook] Checkout session completed:', session.id);
+        await stripePaymentService.handleCheckoutComplete(session.id);
+        break;
+
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted':
+        const subscription = event.data.object;
+        console.log(`[Stripe Webhook] Subscription ${event.type}:`, subscription.id);
+        // Handle subscription updates as needed
+        break;
+
+      case 'invoice.payment_succeeded':
+        const invoice = event.data.object;
+        console.log('[Stripe Webhook] Invoice paid:', invoice.id);
+        break;
+
+      case 'invoice.payment_failed':
+        const failedInvoice = event.data.object;
+        console.log('[Stripe Webhook] Invoice payment failed:', failedInvoice.id);
+        break;
+
+      default:
+        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  }));
+
+  // Get partner pricing tiers
+  app.get("/api/checkout/pricing", (req, res) => {
+    res.json({
+      tiers: {
+        free: {
+          id: "free",
+          name: "Free",
+          price: 0,
+          interval: "month",
+          features: [
+            "Basic listing",
+            "1 placement",
+            "Pay-per-lead only",
+            "Monthly analytics",
+          ],
+        },
+        standard: {
+          id: "standard",
+          name: "Standard",
+          price: 500,
+          interval: "month",
+          features: [
+            "Priority listing",
+            "3 placements",
+            "2 banner sizes",
+            "Weekly analytics",
+            "Lead notifications",
+          ],
+        },
+        premium: {
+          id: "premium",
+          name: "Premium",
+          price: 2000,
+          interval: "month",
+          features: [
+            "Featured listing",
+            "All placements",
+            "All banner sizes",
+            "Real-time analytics",
+            "Dedicated support",
+            "API access",
+          ],
+        },
+      },
+    });
+  });
+
+  // ==================== Plan Builder API ====================
+
+  // Get trade types for plan builder dropdown
+  app.get("/api/plan-builder/trade-types", (req, res) => {
+    try {
+      const tradeTypes = getTradeTypes();
+      res.json({ tradeTypes });
+    } catch (error: any) {
+      console.error("Get trade types error:", error);
+      res.status(500).json({ error: "Failed to get trade types" });
+    }
+  });
+
+  // Get tier comparison for plan builder
+  app.get("/api/plan-builder/tiers", (req, res) => {
+    try {
+      const tiers = getTierComparison();
+      res.json({ tiers });
+    } catch (error: any) {
+      console.error("Get tiers error:", error);
+      res.status(500).json({ error: "Failed to get tier information" });
+    }
+  });
+
+  // Generate plan recommendation
+  app.post("/api/plan-builder/recommend", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      zipCode: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+      tier: z.enum(["free", "standard", "premium"]),
+    });
+
+    const { zipCode, tradeType, tier } = schema.parse(req.body);
+    
+    const recommendation = generatePlanRecommendation(zipCode, tradeType, tier);
+    
+    res.json({ recommendation });
+  }));
+
+  // ==================== Regional Pricing API ====================
+
+  // Get all states with regional pricing data
+  app.get("/api/regions/states", (req, res) => {
+    try {
+      const states = getAllStatesWithRegions();
+      res.json({ states });
+    } catch (error: any) {
+      console.error("Get states error:", error);
+      res.status(500).json({ error: "Failed to get states" });
+    }
+  });
+
+  // Get regions for a specific state
+  app.get("/api/regions/:state", (req, res) => {
+    try {
+      const { state } = req.params;
+      const regions = getRegionsForState(state.toUpperCase());
+      
+      if (!regions) {
+        return res.status(404).json({ error: `No regions found for state: ${state}` });
+      }
+      
+      const regionList = Object.entries(regions).map(([name, data]) => ({
+        name,
+        cities: data.cities,
+        zipPrefixes: data.zipPrefixes
+      }));
+      
+      res.json({ state: state.toUpperCase(), regions: regionList });
+    } catch (error: any) {
+      console.error("Get regions error:", error);
+      res.status(500).json({ error: "Failed to get regions" });
+    }
+  });
+
+  // Get available regions for a ZIP code
+  app.get("/api/regions/by-zip/:zip", (req, res) => {
+    try {
+      const { zip } = req.params;
+      const available = getAvailableRegions(zip);
+      res.json(available);
+    } catch (error: any) {
+      console.error("Get regions by ZIP error:", error);
+      res.status(500).json({ error: "Failed to get regions for ZIP" });
+    }
+  });
+
+  // Get region allocation by plan type
+  app.post("/api/regions/allocation", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      stateCode: z.string().length(2),
+      homeRegion: z.string().min(1),
+      planType: z.enum(["standard", "premium", "build_your_own"]),
+    });
+
+    const { stateCode, homeRegion, planType } = schema.parse(req.body);
+    const allocation = getRegionAllocationByPlan(stateCode, homeRegion, planType);
+    
+    res.json({ allocation });
+  }));
+
+  // Calculate cost breakdown for a specific region
+  app.post("/api/regions/cost-breakdown", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      state: z.string().length(2),
+      region: z.string().min(1),
+      zip: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+    });
+
+    const { state, region, zip, tradeType } = schema.parse(req.body);
+    const breakdown = calculateRegionCostBreakdown(state, region, zip, tradeType);
+    
+    res.json({ breakdown });
+  }));
+
+  // Generate full regional recommendation with budget allocation
+  app.post("/api/regions/recommend", asyncHandler(async (req, res) => {
+    const schema = z.object({
+      zip: z.string().min(5).max(10),
+      tradeType: z.string().min(1),
+      planType: z.enum(["standard", "premium", "build_your_own"]),
+      budget: z.number().positive().optional(),
+      selectedRegions: z.array(z.string()).optional(),
+    });
+
+    const { zip, tradeType, planType, budget, selectedRegions } = schema.parse(req.body);
+    const recommendation = generateFullRecommendation(zip, tradeType, planType, budget, selectedRegions);
+    
+    res.json({ recommendation });
+  }));
+
+  // Get active disaster declarations
+  app.get("/api/regions/disasters", (req, res) => {
+    try {
+      const disasters = getAllDisasterRegions();
+      res.json({ disasters, count: disasters.length });
+    } catch (error: any) {
+      console.error("Get disasters error:", error);
+      res.status(500).json({ error: "Failed to get disaster declarations" });
+    }
+  });
+
+  // Get regional demand data for a state
+  app.get("/api/regions/demand/:state", (req, res) => {
+    try {
+      const { state } = req.params;
+      const demandData = REGIONAL_DEMAND_DATA[state.toUpperCase()];
+      
+      if (!demandData) {
+        return res.status(404).json({ error: `No demand data for state: ${state}` });
+      }
+      
+      const regions = Object.entries(demandData).map(([region, data]) => ({
+        region,
+        ...data
+      }));
+      
+      res.json({ state: state.toUpperCase(), regions });
+    } catch (error: any) {
+      console.error("Get demand data error:", error);
+      res.status(500).json({ error: "Failed to get demand data" });
+    }
+  });
+
+  // ==================== Competitive Rotation API ====================
+
+  // Get competitive insights for a region
+  app.get("/api/rotation/insights/:state/:region", requireAdmin, async (req, res) => {
+    try {
+      const { state, region } = req.params;
+      
+      const partners = await storage.getPartners({ status: "approved" });
+      
+      const partnerConfigs: PartnerAdConfig[] = partners.map(p => ({
+        partnerId: p.id,
+        companyName: p.companyName,
+        tradeType: p.type,
+        tier: (p.pricingTier || "standard") as any,
+        monthlyBudget: p.pricingTier === "premium" ? 2000 : p.pricingTier === "standard" ? 500 : 0,
+        budgetSpent: 0,
+        regions: [decodeURIComponent(region)],
+        state: state.toUpperCase(),
+        isTradeAssociation: p.type === "agency",
+        status: "active" as const,
+        totalImpressions: 0,
+        totalClicks: 0,
+      }));
+
+      const insights = getCompetitiveInsights(partnerConfigs, decodeURIComponent(region), state.toUpperCase());
+      
+      res.json({ insights });
+    } catch (error: any) {
+      console.error("Get rotation insights error:", error);
+      res.status(500).json({ error: "Failed to get rotation insights" });
+    }
+  });
+
+  // Calculate rotation weights for ad placement (admin)
+  app.post("/api/rotation/calculate", requireAdmin, asyncHandler(async (req, res) => {
+    const schema = z.object({
+      region: z.string().min(1),
+      state: z.string().length(2),
+      tradeType: z.string().nullable().optional(),
+      maxResults: z.number().positive().default(5),
+    });
+
+    const { region, state, tradeType, maxResults } = schema.parse(req.body);
+    
+    const partners = await storage.getPartners({ status: "approved" });
+    
+    const partnerConfigs: PartnerAdConfig[] = partners.map(p => ({
+      partnerId: p.id,
+      companyName: p.companyName,
+      tradeType: p.type,
+      tier: (p.pricingTier || "standard") as any,
+      monthlyBudget: p.pricingTier === "premium" ? 2000 : p.pricingTier === "standard" ? 500 : 0,
+      budgetSpent: 0,
+      regions: [region],
+      state: state.toUpperCase(),
+      isTradeAssociation: p.type === "agency",
+      status: "active" as const,
+      totalImpressions: 0,
+      totalClicks: 0,
+    }));
+
+    const result = selectPartnersForPlacement(
+      partnerConfigs,
+      region,
+      state.toUpperCase(),
+      tradeType || null,
+      maxResults
+    );
+    
+    res.json({ placement: result });
+  }));
+
+  // Get budget pacing for a partner (admin or own partner)
+  app.get("/api/rotation/pacing/:partnerId", async (req, res) => {
+    try {
+      const { partnerId } = req.params;
+      const session = req.session as any;
+      
+      if (!session.isAdmin && session.partnerId !== partnerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: "Partner not found" });
+      }
+      
+      const partnerConfig: PartnerAdConfig = {
+        partnerId: partner.id,
+        companyName: partner.companyName,
+        tradeType: partner.type,
+        tier: (partner.pricingTier || "standard") as any,
+        monthlyBudget: partner.pricingTier === "premium" ? 2000 : partner.pricingTier === "standard" ? 500 : 0,
+        budgetSpent: 0,
+        regions: [],
+        state: "",
+        isTradeAssociation: partner.type === "agency",
+        status: partner.status === "approved" ? "active" : "paused",
+        totalImpressions: 0,
+        totalClicks: 0,
+      };
+      
+      const pacing = calculateBudgetPacing(partnerConfig);
+      
+      res.json({ pacing });
+    } catch (error: any) {
+      console.error("Get pacing error:", error);
+      res.status(500).json({ error: "Failed to get budget pacing" });
+    }
+  });
+
   // Get partners with filters
   app.get("/api/partners", async (req, res) => {
     try {
@@ -774,10 +1938,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single partner
+  // Get single partner (protected - only own partner data or admin)
   app.get("/api/partners/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const session = req.session as any;
+      
+      // Only allow access to own partner data or admin access
+      if (!session.isAdmin && session.partnerId !== id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
       const partner = await storage.getPartner(id);
 
       if (!partner) {
@@ -849,6 +2020,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Create partner lead error:', error);
       res.status(400).json({ 
         error: 'Failed to track partner lead',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get single lead by ID (admin only)
+  app.get("/api/leads/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await leadStore.getById(id);
+      
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      res.json(lead);
+    } catch (error: any) {
+      console.error('Get lead error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve lead',
+        details: error.message 
+      });
+    }
+  });
+
+  // Update lead status (lifecycle transition - admin only)
+  app.patch("/api/leads/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = z.object({
+        status: z.enum(["pending", "in_progress", "closed", "paid"]),
+        claimValue: z.number().optional(),
+        commissionRate: z.number().optional(),
+        metadata: z.any().optional(),
+      }).parse(req.body);
+
+      const updatedLead = await leadStore.updateStatus(id, updateData);
+      
+      if (!updatedLead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      res.json({
+        success: true,
+        lead: updatedLead,
+        message: `Lead status updated to ${updateData.status}`
+      });
+    } catch (error: any) {
+      console.error('Update lead status error:', error);
+      res.status(400).json({ 
+        error: 'Failed to update lead status',
+        details: error.message 
+      });
+    }
+  });
+
+  // Trigger payout for a lead
+  app.post("/api/leads/:id/payout", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lead = await leadStore.getById(id);
+      
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead not found' });
+      }
+      
+      if (lead.status !== 'closed') {
+        return res.status(400).json({ 
+          error: 'Lead must be in closed status to trigger payout',
+          currentStatus: lead.status 
+        });
+      }
+      
+      const updatedLead = await leadStore.updateStatus(id, { status: 'paid' });
+      
+      res.json({
+        success: true,
+        lead: updatedLead,
+        message: 'Lead marked as paid',
+        commissionAmount: updatedLead?.commissionAmount
+      });
+    } catch (error: any) {
+      console.error('Trigger lead payout error:', error);
+      res.status(400).json({ 
+        error: 'Failed to trigger lead payout',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get partner lead statistics (requires auth)
+  app.get("/api/partners/:id/lead-stats", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: 'Partner not found' });
+      }
+      
+      const stats = await leadStore.getPartnerStats(partnerId);
+      
+      res.json({
+        partnerId,
+        ...stats
+      });
+    } catch (error: any) {
+      console.error('Get partner lead stats error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve lead statistics',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get partner leads list (requires auth)
+  app.get("/api/partners/:id/leads", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      const session = req.session as any;
+      
+      // Only allow access to own leads or admin access
+      if (!session.isAdmin && session.partnerId !== partnerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const partner = await storage.getPartner(partnerId);
+      if (!partner) {
+        return res.status(404).json({ error: 'Partner not found' });
+      }
+      
+      const leads = await leadStore.getByPartner(partnerId);
+      
+      res.json({ leads });
+    } catch (error: any) {
+      console.error('Get partner leads error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve leads',
+        details: error.message 
+      });
+    }
+  });
+
+  // Get leads ready for payout (admin)
+  app.get("/api/leads/ready-for-payout", requireAdmin, async (req, res) => {
+    try {
+      const { partnerId } = req.query;
+      
+      const leads = await leadStore.getLeadsReadyForPayout(
+        partnerId as string | undefined
+      );
+      
+      res.json({
+        count: leads.length,
+        leads,
+        totalCommission: leads.reduce((sum, l) => sum + (l.commissionAmount || 0), 0)
+      });
+    } catch (error: any) {
+      console.error('Get leads ready for payout error:', error);
+      res.status(500).json({ 
+        error: 'Failed to retrieve leads',
+        details: error.message 
+      });
+    }
+  });
+
+  // Batch mark leads as paid (admin)
+  app.post("/api/leads/batch-payout", requireAdmin, async (req, res) => {
+    try {
+      const { leadIds } = z.object({
+        leadIds: z.array(z.string()).min(1).max(100),
+      }).parse(req.body);
+      
+      const updatedCount = await leadStore.markAsPaid(leadIds);
+      
+      res.json({
+        success: true,
+        requested: leadIds.length,
+        updated: updatedCount,
+        message: `${updatedCount} leads marked as paid`
+      });
+    } catch (error: any) {
+      console.error('Batch payout error:', error);
+      res.status(400).json({ 
+        error: 'Failed to process batch payout',
+        details: error.message 
+      });
+    }
+  });
+
+  // Export partner leads to CSV (requires auth)
+  app.get("/api/partners/:id/leads/export", isAuthenticated, async (req, res) => {
+    try {
+      const { id: partnerId } = req.params;
+      
+      const csv = await leadStore.exportToCSV(partnerId);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=leads-${partnerId}.csv`);
+      res.send(csv);
+    } catch (error: any) {
+      console.error('Export leads error:', error);
+      res.status(500).json({ 
+        error: 'Failed to export leads',
         details: error.message 
       });
     }
@@ -947,16 +2322,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ========== MaxClaim v2.0 AUDIT ENDPOINTS ==========
 
-  // Single item audit (v2.0)
+  // Single item audit (v2.0) - with caching
   app.post("/api/audit/single", (req, res) => {
     try {
-      const { item, price, qty } = z.object({
+      const { item, price, qty, zipCode } = z.object({
         item: z.string().min(1, "Item name is required"),
         price: z.number().positive("Price must be positive"),
         qty: z.number().positive("Quantity must be positive"),
+        zipCode: z.string().length(5).optional(),
       }).parse(req.body);
 
+      // Check cache first
+      const cached = auditCache.get(item, zipCode);
+      if (cached) {
+        return res.json(cached);
+      }
+
       const result = auditClaimItem(item, price, qty);
+      
+      // Cache the result
+      auditCache.set(item, result, zipCode);
+      
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -971,18 +2357,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Batch audit (v2.0) - Full claim with multiple items
+  // Batch audit (v2.0) - Full claim with multiple items (with caching)
   app.post("/api/audit/batch", (req, res) => {
     try {
-      const { items } = z.object({
+      const { items, zipCode } = z.object({
         items: z.array(z.object({
           name: z.string().min(1),
           price: z.number(),
           qty: z.number(),
         })).min(1, "At least one item is required"),
+        zipCode: z.string().length(5).optional(),
       }).parse(req.body);
 
-      const result = auditBatch(items);
+      // Check batch cache for optimization
+      const { cached, uncached } = auditCache.getBatchCached(items, zipCode);
+      
+      let result: any;
+      if (uncached.length === 0) {
+        // All items were cached - rebuild full summary from cached items
+        const cachedItems = Array.from(cached.values());
+        result = buildFullBatchResult(cachedItems, true);
+      } else if (cached.size === 0) {
+        // No cache hits, compute all
+        result = auditBatch(items);
+        // Cache individual results (auditBatch returns 'results' array)
+        if (result.results) {
+          result.results.forEach((itemResult: any, idx: number) => {
+            auditCache.set(items[idx].name, itemResult, zipCode);
+          });
+        }
+      } else {
+        // Partial cache - compute uncached items
+        const uncachedItems = uncached.map(u => u.item);
+        const computedResult = auditBatch(uncachedItems) as any;
+        
+        // Merge cached and computed results
+        const mergedResults: any[] = new Array(items.length);
+        cached.forEach((cachedResult, index) => {
+          mergedResults[index] = cachedResult;
+        });
+        uncached.forEach((u, idx) => {
+          if (computedResult.results?.[idx]) {
+            mergedResults[u.index] = computedResult.results[idx];
+            auditCache.set(u.item.name, computedResult.results[idx], zipCode);
+          }
+        });
+        
+        // Rebuild summary from merged results
+        const fullResult = buildFullBatchResult(mergedResults.filter(Boolean), false);
+        result = {
+          ...fullResult,
+          partialCache: true,
+          cachedCount: cached.size,
+          computedCount: uncached.length,
+        };
+      }
+      
+      // Helper function defined inline
+      function buildFullBatchResult(resultItems: any[], fromCache: boolean) {
+        let totalClaimValue = 0;
+        let totalFMV = 0;
+        let totalUnderpayment = 0;
+        let flaggedCount = 0;
+        let fmvCount = 0;
+        let lowCount = 0;
+        const flagBreakdown = { low: 0, fmv: 0, missing: 0, invalid: 0 };
+
+        resultItems.forEach((item: any) => {
+          if (item.subtotal) totalClaimValue += item.subtotal;
+          if (item.fmvSubtotal) totalFMV += item.fmvSubtotal;
+          if (item.underpaymentOpportunity) totalUnderpayment += item.underpaymentOpportunity;
+          if (item.flagged) flaggedCount++;
+          
+          const status = item.status?.toUpperCase?.() || item.status;
+          switch (status) {
+            case 'LOW': lowCount++; flagBreakdown.low++; break;
+            case 'FMV': fmvCount++; flagBreakdown.fmv++; break;
+            case 'MISSING_ITEM': flagBreakdown.missing++; break;
+            case 'INVALID': flagBreakdown.invalid++; break;
+          }
+        });
+
+        return {
+          totalItems: resultItems.length,
+          flaggedItems: flaggedCount,
+          fmvItems: fmvCount,
+          lowItems: lowCount,
+          totalClaimValue: Math.round(totalClaimValue * 100) / 100,
+          totalFmvValue: Math.round(totalFMV * 100) / 100,
+          totalUnderpaymentOpportunity: Math.round(totalUnderpayment * 100) / 100,
+          totalClaimValueString: totalClaimValue.toFixed(2),
+          totalFmvValueString: totalFMV.toFixed(2),
+          totalUnderpaymentString: totalUnderpayment.toFixed(2),
+          flagBreakdown,
+          results: resultItems,
+          fromCache,
+        };
+      }
+      
       res.json(result);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -996,6 +2468,273 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   });
+
+  // ========== CLAIM VALIDATION ENDPOINTS ==========
+
+  // Validate single line item with trade-specific rules
+  app.post("/api/validate/item", (req, res) => {
+    try {
+      const input = z.object({
+        itemName: z.string().min(1, "Item name is required"),
+        quantity: z.number().positive("Quantity must be positive"),
+        unit: z.string().min(1, "Unit is required"),
+        price: z.number().min(0, "Price cannot be negative"),
+        category: z.string().optional(),
+      }).parse(req.body);
+
+      const result = claimValidator.validateLineItem(input);
+      const detectedTrade = claimValidator.detectTrade(input.itemName, input.category);
+
+      res.json({
+        ...result,
+        detectedTrade,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Validate item error:', error);
+        res.status(500).json({ error: 'Failed to validate item' });
+      }
+    }
+  });
+
+  // Validate batch of line items
+  app.post("/api/validate/batch", (req, res) => {
+    try {
+      const { items } = z.object({
+        items: z.array(z.object({
+          itemName: z.string().min(1),
+          quantity: z.number(),
+          unit: z.string(),
+          price: z.number(),
+          category: z.string().optional(),
+        })).min(1, "At least one item is required").max(100, "Maximum 100 items"),
+      }).parse(req.body);
+
+      const batchResult = claimValidator.validateBatchItems(items);
+
+      res.json(batchResult);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Validate batch error:', error);
+        res.status(500).json({ error: 'Failed to validate batch' });
+      }
+    }
+  });
+
+  // Get trade rules for a specific trade
+  app.get("/api/validate/trades", (req, res) => {
+    const tradeRules = claimValidator.getTradeRules();
+    const trades = Object.keys(tradeRules).map(trade => ({
+      trade,
+      expectedUnits: tradeRules[trade].expectedUnits,
+      quantityRange: {
+        min: tradeRules[trade].minQuantity,
+        max: tradeRules[trade].maxQuantity
+      },
+      priceRange: {
+        min: tradeRules[trade].priceRangeMin,
+        max: tradeRules[trade].priceRangeMax
+      },
+      keywords: tradeRules[trade].keywords
+    }));
+    res.json({ trades });
+  });
+
+  // Get supported unit aliases
+  app.get("/api/validate/units", (req, res) => {
+    res.json({ 
+      unitAliases: claimValidator.getUnitAliases(),
+      supportedUnits: ['SQ', 'SF', 'LF', 'EA', 'CT', 'GAL', 'HR', 'JOB']
+    });
+  });
+
+  // ========== PARTNER ROUTING ENDPOINTS ==========
+
+  // Route claim to best matching partners
+  app.post("/api/route/claim", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+      priority: z.enum(['budget', 'rating', 'distance']).optional(),
+    }).parse(req.body);
+
+    // Fetch approved partners from database
+    const allPartners = await storage.getPartners({ status: 'approved' });
+
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    res.json({
+      criteria,
+      ...routingResult,
+    });
+  }));
+
+  // Get best single partner for a claim
+  app.post("/api/route/claim/best", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+    }).parse(req.body);
+
+    const allPartners = await storage.getPartners({ status: 'approved' });
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    const bestMatch = partnerRouter.selectWinningPartner(
+      routingResult.eligiblePartners,
+      'highest_score'
+    );
+
+    if (!bestMatch) {
+      return res.json({
+        criteria,
+        match: null,
+        message: "No matching partners found for this claim"
+      });
+    }
+
+    res.json({
+      criteria,
+      match: bestMatch
+    });
+  }));
+
+  // Get weighted random partner selection (for rotation)
+  app.post("/api/route/claim/weighted", asyncHandler(async (req, res) => {
+    const criteria = z.object({
+      zipCode: z.string().length(5).optional(),
+      state: z.string().optional(),
+      trades: z.array(z.string()).default([]),
+      claimValue: z.number().optional(),
+    }).parse(req.body);
+
+    const allPartners = await storage.getPartners({ status: 'approved' });
+    const routingResult = partnerRouter.routeClaimToPartners(allPartners, criteria);
+
+    const selectedMatch = partnerRouter.selectWinningPartner(
+      routingResult.eligiblePartners,
+      'weighted_random'
+    );
+
+    if (!selectedMatch) {
+      return res.json({
+        criteria,
+        match: null,
+        message: "No matching partners found for this claim"
+      });
+    }
+
+    res.json({
+      criteria,
+      match: selectedMatch,
+      selectionMethod: "weighted_random"
+    });
+  }));
+
+  // Extract trades from claim items
+  app.post("/api/route/extract-trades", (req, res) => {
+    try {
+      const { items } = z.object({
+        items: z.array(z.object({
+          itemName: z.string(),
+          category: z.string().optional(),
+        })).min(1),
+      }).parse(req.body);
+
+      const trades = partnerRouter.extractTradesFromClaimItems(items);
+
+      res.json({ trades });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: 'Invalid request',
+          details: error.errors
+        });
+      } else {
+        console.error('Extract trades error:', error);
+        res.status(500).json({ error: 'Failed to extract trades' });
+      }
+    }
+  });
+
+  // ========== ASYNC BATCH PROCESSING ENDPOINTS ==========
+
+  // Submit async batch job - returns immediately with job ID
+  app.post("/api/batch-audit", asyncHandler(async (req, res) => {
+    const { items, zipCode } = z.object({
+      items: z.array(z.object({
+        name: z.string().min(1),
+        price: z.number(),
+        qty: z.number(),
+      })).min(1, "At least one item is required").max(500, "Maximum 500 items per batch"),
+      zipCode: z.string().length(5).optional(),
+    }).parse(req.body);
+
+    // Create batch job in database
+    const job = await storage.createBatchJob({
+      itemCount: items.length,
+      zipCode: zipCode || null,
+      inputData: { items, zipCode },
+    });
+
+    // Enqueue for background processing
+    batchQueue.enqueueBatch(
+      job.id,
+      { items, zipCode },
+      async (batchId, status, results, error) => {
+        await storage.updateBatchJobStatus(batchId, status, results, error);
+      }
+    );
+
+    const queueStats = batchQueue.getQueueStats();
+
+    res.status(202).json({
+      batchId: job.id,
+      status: 'queued',
+      itemCount: items.length,
+      estimatedWait: queueStats.size * 2,
+      queuePosition: queueStats.size,
+    });
+  }));
+
+  // Poll batch job status
+  app.get("/api/batch-audit/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const job = await storage.getBatchJob(id);
+    if (!job) {
+      return res.status(404).json({ error: 'Batch job not found' });
+    }
+
+    // Include in-memory status if still processing
+    const memoryStatus = batchQueue.getJobStatus(id);
+
+    res.json({
+      batchId: job.id,
+      status: job.status,
+      itemCount: job.itemCount,
+      processedCount: job.processedCount,
+      results: job.results,
+      error: job.error,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      createdAt: job.createdAt,
+      inMemoryStatus: memoryStatus,
+    });
+  }));
 
   // Get all items for autocomplete (v2.0)
   app.get("/api/items", (req, res) => {
@@ -1877,6 +3616,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   }));
 
+  // ===== LOCAL PROS API (Enhanced organization endpoint for ContractorPanel) =====
+
+  // POST /api/local-pros - Fetch relevant orgs for a region with smart prioritization
+  app.post("/api/local-pros", asyncHandler(async (req, res) => {
+    const data = z.object({
+      zip: z.string().min(5).max(10).optional(),
+      state: z.string().length(2).optional(),
+      trade: z.string().optional(),
+      limit: z.number().min(1).max(20).default(6),
+    }).parse(req.body);
+
+    let stateCode = data.state?.toUpperCase();
+    
+    if (!stateCode && data.zip) {
+      stateCode = getStateFromZip(data.zip) || undefined;
+    }
+    
+    if (!stateCode) {
+      res.status(400).json({ error: "Either valid ZIP or state code required" });
+      return;
+    }
+
+    const allOrgs = await storage.getOrgsForState(stateCode, data.trade);
+    
+    const prioritizedOrgs = [...allOrgs].sort((a, b) => {
+      const scopePriority: Record<string, number> = {
+        'local': 1,
+        'state': 2,
+        'regional': 3,
+        'national': 4,
+      };
+      
+      const scopeDiff = (scopePriority[a.scope] || 5) - (scopePriority[b.scope] || 5);
+      if (scopeDiff !== 0) return scopeDiff;
+      
+      const priorityDiff = (b.priority || 1) - (a.priority || 1);
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      return a.name.localeCompare(b.name);
+    });
+
+    const limitedOrgs = prioritizedOrgs.slice(0, data.limit);
+
+    res.json({
+      zip: data.zip,
+      state: stateCode,
+      trade: data.trade,
+      organizations: limitedOrgs.map(org => ({
+        id: org.id,
+        name: org.name,
+        category: org.category,
+        scope: org.scope,
+        website: org.website,
+        memberDirectoryUrl: org.memberDirectoryUrl,
+        directoryUrl: org.directoryUrl,
+        chapterMapUrl: org.chapterMapUrl,
+        priority: org.priority,
+      })),
+      total: limitedOrgs.length,
+      available: allOrgs.length,
+    });
+  }));
+
+  // GET /api/organizations/:id - Get single organization details
+  app.get("/api/organizations/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const org = await storage.getProOrganization(id);
+    if (!org) {
+      res.status(404).json({ error: "Organization not found" });
+      return;
+    }
+    res.json(org);
+  }));
+
+  // POST /api/organizations/request - Submit a request for a new organization
+  app.post("/api/organizations/request", asyncHandler(async (req, res) => {
+    const data = z.object({
+      organizationName: z.string().min(2),
+      category: z.string().optional(),
+      website: z.string().url().optional(),
+      submitterEmail: z.string().email().optional(),
+      notes: z.string().optional(),
+    }).parse(req.body);
+
+    console.log("[OrgRequest] New organization request received:", data.organizationName);
+    
+    res.status(201).json({
+      success: true,
+      message: "Thank you! Your organization request has been submitted for review.",
+      requestData: data,
+    });
+  }));
+
+  // GET /api/admin/organizations - Admin view of all organizations with full details
+  app.get("/api/admin/organizations", requireAdmin, asyncHandler(async (req, res) => {
+    const { category, state, scope, search } = req.query;
+    
+    let orgs = await storage.getProOrganizations({
+      category: category as string,
+      state: state as string,
+      scope: scope as string,
+    });
+    
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      orgs = orgs.filter(org => 
+        org.name.toLowerCase().includes(searchLower) ||
+        org.category.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    const byCategory = orgs.reduce((acc, org) => {
+      acc[org.category] = (acc[org.category] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const byScope = orgs.reduce((acc, org) => {
+      acc[org.scope] = (acc[org.scope] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    res.json({
+      organizations: orgs,
+      total: orgs.length,
+      stats: {
+        byCategory,
+        byScope,
+      },
+    });
+  }));
+
   // Get single pro organization
   app.get("/api/pro-organizations/:id", asyncHandler(async (req, res) => {
     const { id } = req.params;
@@ -2014,6 +3884,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // ========== ADMIN METRICS ENDPOINT ==========
+  
+  // Comprehensive metrics for admin dashboard
+  app.get("/api/admin/metrics", requireAdmin, asyncHandler(async (req, res) => {
+    const memUsage = process.memoryUsage();
+    const priceDBStats = priceDBCache.getStats();
+    const auditCacheStats = auditCache.getStats();
+    const queueStats = batchQueue.getQueueStats();
+    const items = getAllItems();
+    const recentBatchJobs = await storage.getRecentBatchJobs(10);
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      server: {
+        uptime: Math.floor(process.uptime()),
+        uptimeFormatted: formatUptime(process.uptime()),
+        nodeVersion: process.version,
+        platform: process.platform,
+        tier: 'core',
+      },
+      memory: {
+        rss: Math.round(memUsage.rss / 1024 / 1024),
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+        external: Math.round(memUsage.external / 1024 / 1024),
+        heapUsagePercent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
+      },
+      priceDB: {
+        itemCount: items.length,
+        cacheHits: priceDBStats.cacheHits,
+        cacheMisses: priceDBStats.cacheMisses,
+        hitRate: priceDBStats.cacheHits + priceDBStats.cacheMisses > 0 
+          ? Math.round((priceDBStats.cacheHits / (priceDBStats.cacheHits + priceDBStats.cacheMisses)) * 100)
+          : 0,
+        memorySizeKB: priceDBStats.memorySizeKB,
+        cacheAgeMinutes: priceDBCache.getCacheAge(),
+        lastLoaded: priceDBStats.lastLoaded,
+      },
+      auditCache: {
+        keys: auditCacheStats.keys,
+        hits: auditCacheStats.hits,
+        misses: auditCacheStats.misses,
+        hitRate: auditCache.getHitRate(),
+        ksize: auditCacheStats.ksize,
+        vsize: auditCacheStats.vsize,
+      },
+      batchQueue: {
+        pending: queueStats.pending,
+        size: queueStats.size,
+        concurrency: queueStats.concurrency,
+        isPaused: queueStats.isPaused,
+        activeJobs: batchQueue.getActiveJobCount(),
+      },
+      recentBatchJobs: recentBatchJobs.map(job => ({
+        id: job.id,
+        status: job.status,
+        itemCount: job.itemCount,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt,
+      })),
+    });
+  }));
+
+  // Flush audit cache (admin action)
+  app.post("/api/admin/cache/flush", requireAdmin, (req, res) => {
+    auditCache.flush();
+    res.json({ success: true, message: 'Audit cache flushed' });
+  });
+
+  // Get cache keys (admin action)
+  app.get("/api/admin/cache/keys", requireAdmin, (req, res) => {
+    const keys = auditCache.keys();
+    res.json({ count: keys.length, keys: keys.slice(0, 100) });
+  });
+
   // Seed default commission tiers on startup
   try {
     await seedDefaultCommissionTiers();
@@ -2027,6 +3972,655 @@ export async function registerRoutes(app: Express): Promise<Server> {
   } catch (error) {
     console.error("[ProOrgsDB] Failed to seed pro organizations/templates:", error);
   }
+
+  // Seed carrier trends on startup
+  try {
+    await seedCarrierTrends();
+  } catch (error) {
+    console.error("[CarrierTrends] Failed to seed carrier trends:", error);
+  }
+
+  // ===========================================
+  // HEALTH CHECK ENDPOINTS - Service Redundancy
+  // ===========================================
+
+  // Primary services health
+  app.get("/api/health/primary", asyncHandler(async (req, res) => {
+    const health = await getPrimaryHealth();
+    const statusCode = health.status === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Fallback services health
+  app.get("/api/health/fallback", asyncHandler(async (req, res) => {
+    const health = await getFallbackHealth();
+    const statusCode = health.status === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Feature flags status
+  app.get("/api/health/features", (req, res) => {
+    const features = getFeatureStatus();
+    res.json({
+      timestamp: new Date().toISOString(),
+      features,
+    });
+  });
+
+  // Combined health check (primary + fallback + features)
+  app.get("/api/health", asyncHandler(async (req, res) => {
+    const health = await getCombinedHealth();
+    const statusCode = health.overall === "unhealthy" ? 503 : 200;
+    res.status(statusCode).json(health);
+  }));
+
+  // Carrier trends endpoint (intelligence data)
+  app.get("/api/carrier-trends", asyncHandler(async (req, res) => {
+    const { carrier } = req.query;
+    
+    if (carrier && typeof carrier === "string") {
+      const trends = await db.select()
+        .from(carrierTrendsTable)
+        .where(sql`lower(carrier_name) = ${carrier.toLowerCase()}`);
+      res.json({ carrier, patterns: trends });
+    } else {
+      const trends = await db.select().from(carrierTrendsTable);
+      res.json({ count: trends.length, trends });
+    }
+  }));
+
+  // Carrier lookup by line item
+  app.get("/api/carrier-trends/lookup", asyncHandler(async (req, res) => {
+    const { item, carrier } = req.query;
+    
+    if (!item || typeof item !== "string") {
+      res.status(400).json({ error: "item query parameter required" });
+      return;
+    }
+    
+    let query = db.select().from(carrierTrendsTable)
+      .where(sql`lower(line_item_description) LIKE ${`%${item.toLowerCase()}%`}`);
+    
+    if (carrier && typeof carrier === "string") {
+      query = db.select().from(carrierTrendsTable)
+        .where(sql`lower(line_item_description) LIKE ${`%${item.toLowerCase()}%`} AND lower(carrier_name) = ${carrier.toLowerCase()}`);
+    }
+    
+    const results = await query;
+    res.json({ item, results });
+  }));
+
+  // Carrier intelligence stats (aggregated metrics)
+  app.get("/api/carrier-stats", (req, res) => {
+    const { carrier } = req.query;
+    
+    if (carrier && typeof carrier === "string") {
+      const stats = carrierIntel.getCarrierStats(carrier);
+      if (!stats) {
+        return res.status(404).json({ error: "Carrier not found" });
+      }
+      res.json(stats);
+    } else {
+      const overallStats = carrierIntel.getOverallStats();
+      res.json(overallStats);
+    }
+  });
+
+  // Carrier analysis for claim items
+  app.post("/api/carrier-analyze", (req, res) => {
+    try {
+      const { carrier, lineItems } = z.object({
+        carrier: z.string(),
+        lineItems: z.array(z.string()).min(1),
+      }).parse(req.body);
+
+      const analysis = carrierIntel.analyzeClaimForCarrier(carrier, lineItems);
+      res.json({
+        carrier,
+        itemsAnalyzed: lineItems.length,
+        ...analysis,
+      });
+    } catch (error: any) {
+      res.status(400).json({ 
+        error: "Invalid request",
+        details: error.message 
+      });
+    }
+  });
+
+  // List all carriers with intelligence data
+  app.get("/api/carriers", (req, res) => {
+    const carriers = carrierIntel.getAllCarriers();
+    const stats = carriers.map(c => ({
+      name: c,
+      patterns: carrierIntel.getCarrierPatterns(c).length,
+    }));
+    res.json({ count: carriers.length, carriers: stats });
+  });
+
+  // Distribution test endpoint (admin/dev tool)
+  app.get("/api/test/distribution", (req, res) => {
+    try {
+      const iterations = parseInt(req.query.iterations as string) || 500;
+      const result = distributionTest.testDistribution(null, { 
+        iterations: Math.min(iterations, 5000) 
+      });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Distribution test failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Validate weight factors (admin/dev tool)
+  app.get("/api/test/weights", (req, res) => {
+    try {
+      const result = distributionTest.validateWeightFactors();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Weight validation failed",
+        details: error.message 
+      });
+    }
+  });
+
+  // Scheduler status endpoint
+  app.get("/api/scheduler/status", (req, res) => {
+    res.json(scheduler.getStatus());
+  });
+
+  // Run scheduler job manually (admin)
+  app.post("/api/scheduler/run/:jobName", requireAdmin, async (req, res) => {
+    const { jobName } = req.params;
+    const result = await scheduler.runJob(jobName);
+    res.json(result);
+  });
+
+  // Cache status endpoint
+  app.get("/api/cache/status", (req, res) => {
+    res.json({
+      stats: cacheService.getStats(),
+      provider: cacheService.getProviderStatus(),
+    });
+  });
+
+  // ============================================
+  // PARTNER REVIEWS ENDPOINTS
+  // ============================================
+
+  // Get reviews for a partner
+  app.get("/api/partners/:id/reviews", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const reviews = await storage.getPartnerReviews(id);
+    const stats = await storage.getPartnerReviewStats(id);
+    
+    res.json({
+      reviews: reviews.slice(0, 50),
+      stats: { avgRating: stats.avgRating, totalReviews: stats.count }
+    });
+  }));
+
+  // Submit a review
+  app.post("/api/partners/:id/reviews", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { rating, comment, sessionId, claimId } = req.body;
+    
+    // Zod validation with coercion for numeric fields
+    const reviewSchema = z.object({
+      rating: z.coerce.number().min(1).max(5),
+      comment: z.string().optional().nullable(),
+      sessionId: z.string().optional().nullable(),
+      claimId: z.string().optional().nullable(),
+    });
+    
+    const validation = reviewSchema.safeParse({ rating, comment, sessionId, claimId });
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.message });
+    }
+    
+    const userId = req.user?.id || null;
+    
+    const review = await storage.createPartnerReview({
+      partnerId: id,
+      userId,
+      sessionId: sessionId || null,
+      claimId: claimId || null,
+      rating,
+      comment: comment || null,
+    });
+    
+    res.status(201).json(review);
+  }));
+
+  // ============================================
+  // AVAILABLE GRANTS ENDPOINTS
+  // ============================================
+
+  // List all available grants
+  app.get("/api/grants", asyncHandler(async (req, res) => {
+    const { state, disasterType, category } = req.query;
+    
+    // Use storage with isActive filter
+    let grants = await storage.getAvailableGrants({ isActive: true });
+    
+    // Filter by state/disaster type in JS for array contains
+    if (state) {
+      grants = grants.filter(g => 
+        g.statesAvailable?.includes(state as string) || 
+        g.statesAvailable?.includes("ALL")
+      );
+    }
+    if (disasterType) {
+      grants = grants.filter(g => 
+        g.disasterTypes?.includes(disasterType as string)
+      );
+    }
+    if (category) {
+      grants = grants.filter(g => g.category === category);
+    }
+    
+    // Sort by maxAmount descending and limit
+    grants = grants
+      .sort((a, b) => (Number(b.maxAmount) || 0) - (Number(a.maxAmount) || 0))
+      .slice(0, 100);
+    
+    res.json({
+      grants,
+      total: grants.length
+    });
+  }));
+
+  // Get single grant
+  app.get("/api/grants/:id", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const grant = await storage.getAvailableGrant(id);
+    
+    if (!grant) {
+      return res.status(404).json({ error: "Grant not found" });
+    }
+    res.json(grant);
+  }));
+
+  // Admin: Add grant
+  app.post("/api/admin/grants", requireAdmin, asyncHandler(async (req, res) => {
+    // Zod validation
+    const grantSchema = z.object({
+      source: z.string().min(1),
+      name: z.string().min(1),
+      category: z.string().min(1),
+      minAmount: z.string().optional(),
+      maxAmount: z.string().optional(),
+      eligibility: z.string().optional(),
+      applicationUrl: z.string().optional(),
+      processingDays: z.string().optional(),
+      disasterTypes: z.array(z.string()).optional(),
+      statesAvailable: z.array(z.string()).optional(),
+    });
+    
+    const validation = grantSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: validation.error.message });
+    }
+    
+    const { source, name, category, minAmount, maxAmount, eligibility, applicationUrl, processingDays, disasterTypes, statesAvailable } = validation.data;
+    
+    const grant = await storage.createAvailableGrant({
+      source,
+      name,
+      category,
+      minAmount: minAmount || null,
+      maxAmount: maxAmount || null,
+      eligibility: eligibility || null,
+      applicationUrl: applicationUrl || null,
+      processingDays: processingDays || null,
+      disasterTypes: disasterTypes || null,
+      statesAvailable: statesAvailable || null,
+    });
+    
+    res.status(201).json(grant);
+  }));
+
+  // Admin: Update grant
+  app.patch("/api/admin/grants/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const grant = await storage.getAvailableGrant(id);
+    if (!grant) {
+      return res.status(404).json({ error: "Grant not found" });
+    }
+    
+    await storage.updateAvailableGrant(id, req.body);
+    const updated = await storage.getAvailableGrant(id);
+    res.json(updated);
+  }));
+
+  // ============================================
+  // TAX FORMS ENDPOINTS (1099-NEC)
+  // ============================================
+
+  // Get partner tax forms
+  app.get("/api/partners/:id/tax-forms", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { taxYear } = req.query;
+    
+    const filters: { partnerId: string; taxYear?: number } = { partnerId: id };
+    if (taxYear) {
+      filters.taxYear = parseInt(taxYear as string);
+    }
+    
+    const forms = await storage.getTaxForms(filters);
+    res.json(forms);
+  }));
+
+  // Admin: Generate 1099-NEC for partner (uses proper PDF generation)
+  app.post("/api/admin/partners/:id/generate-1099", requireAdmin, asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { taxYear } = req.body;
+    
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateForm1099NEC } = await import("./services/taxFormGenerator");
+    const result = await generateForm1099NEC(id, year);
+    
+    if (!result.success) {
+      // Check if it's because threshold not met
+      if (result.error?.includes("below")) {
+        return res.json({
+          required: false,
+          message: result.error
+        });
+      }
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.status(201).json({
+      taxFormId: result.taxFormId,
+      form: result.form,
+      pdfBase64: result.pdfBase64,
+      required: true,
+      message: "1099-NEC generated successfully with PDF"
+    });
+  }));
+
+  // ============================================
+  // SERVICE STATUS ENDPOINTS
+  // ============================================
+
+  // Admin: Seed grants database
+  app.post("/api/admin/grants/seed", requireAdmin, asyncHandler(async (req, res) => {
+    const { seedGrants } = await import("./services/grantScraper");
+    const result = await seedGrants();
+    res.json({
+      success: true,
+      ...result,
+      message: `Seeded ${result.inserted} grants, skipped ${result.skipped} duplicates`
+    });
+  }));
+
+  // Grant scraper status
+  app.get("/api/services/grant-scraper/status", asyncHandler(async (req, res) => {
+    const { getScraperStatus } = await import("./services/grantScraper");
+    res.json(getScraperStatus());
+  }));
+
+  // PaddleOCR status
+  app.get("/api/services/paddleocr/status", asyncHandler(async (req, res) => {
+    const { getStatus } = await import("./services/paddleOCR");
+    res.json(await getStatus());
+  }));
+
+  // Tax form generator status
+  app.get("/api/services/tax-forms/status", asyncHandler(async (req, res) => {
+    const { getStatus } = await import("./services/taxFormGenerator");
+    res.json(getStatus());
+  }));
+
+  // Admin: Generate all 1099 forms for a year
+  app.post("/api/admin/tax-forms/generate-all", requireAdmin, asyncHandler(async (req, res) => {
+    const { taxYear } = req.body;
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateAllForms1099 } = await import("./services/taxFormGenerator");
+    const result = await generateAllForms1099(year);
+    
+    res.json({
+      success: true,
+      taxYear: year,
+      ...result,
+    });
+  }));
+
+  // Generate 1099 for specific partner
+  app.post("/api/admin/tax-forms/generate/:partnerId", requireAdmin, asyncHandler(async (req, res) => {
+    const { partnerId } = req.params;
+    const { taxYear } = req.body;
+    const year = taxYear || new Date().getFullYear() - 1;
+    
+    const { generateForm1099NEC } = await import("./services/taxFormGenerator");
+    const result = await generateForm1099NEC(partnerId, year);
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      taxFormId: result.taxFormId,
+      form: result.form,
+    });
+  }));
+
+  // Download 1099 PDF
+  app.get("/api/tax-forms/:id/download", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const form = await storage.getTaxForm(id);
+    if (!form) {
+      return res.status(404).json({ error: "Tax form not found" });
+    }
+    
+    if (!form.pdfData) {
+      return res.status(404).json({ error: "PDF not available for this form" });
+    }
+    
+    const pdfBuffer = Buffer.from(form.pdfData, "base64");
+    
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="1099-NEC-${form.taxYear}-${form.partnerId}.pdf"`
+    );
+    res.send(pdfBuffer);
+  }));
+
+  // ============================================
+  // STRIPE CONNECT PARTNER PAYOUT ENDPOINTS
+  // ============================================
+
+  // Partner: Start Stripe Connect onboarding
+  app.post("/api/partners/:id/stripe-connect/onboard", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    // Verify partner exists via storage
+    const partner = await storage.getPartner(id);
+    if (!partner) {
+      return res.status(404).json({ error: "Partner not found" });
+    }
+    
+    const { createPartnerConnectAccount, createOnboardingLink } = await import("./services/stripePayments");
+    
+    // Create Connect account if not exists
+    let connectAccountId = partner.stripeConnectId;
+    if (!connectAccountId) {
+      const accountResult = await createPartnerConnectAccount(
+        id,
+        partner.contactEmail,
+        partner.companyName
+      );
+      
+      if (!accountResult.success) {
+        return res.status(500).json({ error: accountResult.error });
+      }
+      connectAccountId = accountResult.accountId;
+    }
+    
+    // Create onboarding link
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const linkResult = await createOnboardingLink(
+      connectAccountId!,
+      `${baseUrl}/partner/dashboard`,
+      `${baseUrl}/partner/connect-setup`
+    );
+    
+    if (!linkResult.success) {
+      return res.status(500).json({ error: linkResult.error });
+    }
+    
+    res.json({
+      success: true,
+      onboardingUrl: linkResult.url,
+      accountId: connectAccountId,
+    });
+  }));
+
+  // Partner: Get Connect dashboard link
+  app.get("/api/partners/:id/stripe-connect/dashboard", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const partner = await storage.getPartner(id);
+    if (!partner || !partner.stripeConnectId) {
+      return res.status(404).json({ error: "Partner or Connect account not found" });
+    }
+    
+    const { getConnectDashboardLink } = await import("./services/stripePayments");
+    const result = await getConnectDashboardLink(partner.stripeConnectId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      dashboardUrl: result.url,
+    });
+  }));
+
+  // Partner: Check Connect account balance
+  app.get("/api/partners/:id/stripe-connect/balance", asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    
+    const partner = await storage.getPartner(id);
+    if (!partner || !partner.stripeConnectId) {
+      return res.status(404).json({ error: "Partner or Connect account not found" });
+    }
+    
+    const { getConnectAccountBalance } = await import("./services/stripePayments");
+    const result = await getConnectAccountBalance(partner.stripeConnectId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      balance: result.balance,
+    });
+  }));
+
+  // Admin: Process lead payout to partner
+  app.post("/api/admin/leads/:leadId/payout", requireAdmin, asyncHandler(async (req, res) => {
+    const { leadId } = req.params;
+    
+    const { processLeadPayout } = await import("./services/stripePayments");
+    const result = await processLeadPayout(leadId);
+    
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+    
+    res.json({
+      success: true,
+      transferId: result.transferId,
+      amount: result.amount,
+    });
+  }));
+
+  // Admin: Process batch payouts
+  app.post("/api/admin/payouts/batch", requireAdmin, asyncHandler(async (req, res) => {
+    const { maxPayouts } = req.body;
+    
+    const { batchProcessPayouts } = await import("./services/stripePayments");
+    const result = await batchProcessPayouts(maxPayouts || 50);
+    
+    res.json({
+      success: true,
+      ...result,
+    });
+  }));
+
+  // ============================================
+  // CLAIMS ANALYSIS AGENT ENDPOINTS
+  // ============================================
+
+  // Claims agent status
+  app.get("/api/services/claims-agent/status", asyncHandler(async (req, res) => {
+    const { getAgentStatus } = await import("./services/claimsAgent");
+    res.json(getAgentStatus());
+  }));
+
+  // Run claims analysis agent
+  app.post("/api/claims/analyze-with-agent", asyncHandler(async (req, res) => {
+    const { carrier, zipCode, lineItems, documentText, claimNumber, lossDate } = req.body;
+    
+    if (!zipCode || !lineItems || lineItems.length === 0) {
+      return res.status(400).json({ error: "zipCode and lineItems are required" });
+    }
+
+    const { runClaimsAgent } = await import("./services/claimsAgent");
+    const result = await runClaimsAgent({
+      carrier,
+      zipCode,
+      lineItems,
+      documentText,
+      claimNumber,
+      lossDate,
+    });
+
+    res.json(result);
+  }));
+
+  // Enhanced claim analysis with optional agent
+  app.post("/api/claims/enhanced-analysis", asyncHandler(async (req, res) => {
+    const { useAgent, carrier, zipCode, lineItems, documentText } = req.body;
+    
+    if (!zipCode || !lineItems || lineItems.length === 0) {
+      return res.status(400).json({ error: "zipCode and lineItems are required" });
+    }
+
+    if (useAgent) {
+      // Use the full agent pipeline
+      const { runClaimsAgent } = await import("./services/claimsAgent");
+      const agentResult = await runClaimsAgent({ carrier, zipCode, lineItems, documentText });
+      return res.json({
+        method: 'agent',
+        ...agentResult,
+      });
+    } else {
+      // Use simpler LLM analysis
+      const { analyzeClaimWithLLM } = await import("./services/llmRouter");
+      const llmResult = await analyzeClaimWithLLM({ carrier, zipCode, lineItems });
+      return res.json({
+        method: 'llm-simple',
+        ...llmResult,
+      });
+    }
+  }));
+
+  // Start scheduler on server boot
+  scheduler.start();
 
   const httpServer = createServer(app);
   return httpServer;

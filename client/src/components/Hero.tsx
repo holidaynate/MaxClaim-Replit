@@ -9,7 +9,7 @@ export default function Hero() {
             MaxClaim Recovery Suite · Free Beta
           </p>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-slate-50" data-testid="text-hero-heading">
-            AI-Powered Disaster & Loss Claim Review{" "}
+            AI-Powered Disaster Claim Review{" "}
             <span className="block text-sky-300">
               for Homeowners, Contractors & Public Adjusters
             </span>
@@ -22,6 +22,9 @@ export default function Hero() {
           <p className="mt-2 text-xs text-slate-400" data-testid="text-hero-note">
             No login required. No obligations. Built in Texas for disaster‑hit
             and underserved communities.
+          </p>
+          <p className="mt-3 text-xs text-sky-400/80 font-medium" data-testid="text-hero-positioning">
+            MaxClaim is a Consumer & Community Advocacy platform — focused on Small Business Development & Lead Support.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">

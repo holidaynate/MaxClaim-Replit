@@ -1,7 +1,17 @@
+/**
+ * MaxClaim – Frontend UI
+ * https://github.com/holidaynate/MaxClaim-Replit
+ *
+ * © 2023–2025 Nate Chacon (InfiN8 / HolidayNate). All rights reserved.
+ *
+ * Original design and UX by Nate Chacon.
+ * External CSS/JS frameworks used only as utilities; see THIRD_PARTY_NOTICES.md.
+ */
+
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Package, Database, Code } from "lucide-react";
+import { ExternalLink, Package, Database, Code, Shield } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 interface SourceVersion {
@@ -69,16 +79,64 @@ export default function AttributionsPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Attributions & Credits
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="title-attributions">
+            Attributions & Open Source
           </h1>
+        </div>
+
+        {/* Ownership Section */}
+        <Card className="border-primary/20 bg-primary/5" data-testid="card-ownership">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" aria-hidden="true" />
+              <CardTitle className="text-xl">Ownership & Copyright</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p>
+              MaxClaim is an original SaaS application created and owned by{" "}
+              <strong>Nate Chacon (InfiN8 / HolidayNate)</strong>.
+              The core business logic, pricing models, and partner-matching algorithms
+              are proprietary.
+            </p>
+            <p className="text-muted-foreground">
+              We respectfully use open source libraries such as Express, React, and
+              others under their respective licenses. Full details are available in
+              our{" "}
+              <a 
+                href="https://github.com/holidaynate/MaxClaim-Replit" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+                data-testid="link-github"
+              >
+                GitHub repository
+                <ExternalLink className="w-3 h-3" aria-hidden="true" />
+              </a>
+              {" "}under <code className="text-sm bg-muted px-1.5 py-0.5 rounded">COPYRIGHT.md</code> and{" "}
+              <code className="text-sm bg-muted px-1.5 py-0.5 rounded">THIRD_PARTY_NOTICES.md</code>.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Public articles and guides on insurance valuation and fair market value
+              informed the conceptual design of MaxClaim, but no copyrighted text or
+              proprietary datasets are copied into this service.
+            </p>
+            <p className="text-xs text-muted-foreground border-t pt-3 mt-3">
+              © 2023–2025 Nate Chacon. All rights reserved.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Separator />
+
+        {/* Open Source Section Header */}
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">Open Source Dependencies</h2>
           <p className="text-muted-foreground">
-            Max-Claim is built using open-source software and publicly available data.
+            MaxClaim is built using open-source software and publicly available data.
             We gratefully acknowledge the following libraries, APIs, and datasets:
           </p>
         </div>
-
-        <Separator />
 
         {/* Grouped Sources */}
         {groupedSources && Object.entries(groupedSources).map(([category, categorySources]) => {

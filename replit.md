@@ -1,7 +1,7 @@
 # Max-Claim - Insurance Claim Fair Market Value Tool
 
 ## Overview
-Max-Claim is a free consumer advocacy web application designed to help homeowners and property owners achieve fair compensation for underpaid insurance claims. It compares insurance settlement offers against real-time fair market values (FMV) to identify potential additional compensation. The application prioritizes user privacy by collecting only ZIP codes for regional pricing analysis and does not store personally identifiable information. Its core mission is to empower consumers to negotiate effectively with insurance companies.
+Max-Claim is a free consumer advocacy web application that helps homeowners and property owners achieve fair compensation for underpaid insurance claims. It compares insurance settlement offers against real-time fair market values (FMV) to identify potential additional compensation. The application prioritizes user privacy by collecting only ZIP codes for regional pricing analysis and does not store personally identifiable information. Its core mission is to empower consumers to negotiate effectively with insurance companies, providing transparency and actionable data to disrupt the insurance claims industry.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language suitable for non-technical users.
@@ -9,67 +9,94 @@ Preferred communication style: Simple, everyday language suitable for non-techni
 ## System Architecture
 
 ### UI/UX Decisions
-The application utilizes a dark slate-950 theme with sky-blue (sky-500) accents. Key UI elements include a Hero Section, a "How It Works" visual flow, a two-column desktop layout for claim forms and resources, and a Partner Section. A single-screen Claim Wizard guides users with trust badges and a triple CTA strategy. Accessibility is a priority, adhering to WCAG AA compliance, offering keyboard navigation, and ensuring mobile responsiveness.
+The application features a dark slate-950 theme with sky-blue (sky-500) accents. It includes a Hero Section, a "How It Works" visual flow, a two-column desktop layout, and a Partner Section. A single-screen Claim Wizard guides users. Accessibility is a priority, adhering to WCAG AA compliance, offering keyboard navigation, and ensuring mobile responsiveness, with features like text size toggles, font style selection, high contrast mode, and reduced motion.
 
 ### Technical Implementations
-Max-Claim is a full-stack web application. The frontend is built with React 18, TypeScript, Vite, Wouter for routing, TanStack Query for server state, Shadcn/ui and Tailwind CSS for UI, and React Hook Form with Zod for form validation. The backend uses Node.js, Express, and TypeScript, incorporating a regional FMV pricing engine, a dual OCR service (OCR.space + Tesseract.js), and a text parsing engine. A PostgreSQL database (Neon) with Drizzle ORM manages persistent storage, and pricing data is collected for future analytics.
+Max-Claim is a full-stack web application. The frontend uses React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, and Zod. The backend is built with Node.js, Express, and TypeScript, incorporating a regional FMV pricing engine, dual OCR services (OCR.space + Tesseract.js), and a text parsing engine. PostgreSQL (Neon) with Drizzle ORM handles data persistence.
 
-### Feature Specifications
-- **Single-Screen Claim Wizard**: Streamlined process for document upload, ZIP code, damage type, and insurance offer.
-- **ZIP-Aware Contractor Matching**: Filters local contractors based on ZIP code, with CTAs and referral tracking.
-- **Unit-Aware Pricing**: Supports 5 unit types (LF, SF, SQ, CT, EA) with descriptive tooltips.
-- **v2.0 Audit Engine**: Compares entered prices against RRC_COST and INS_MAX_COST ranges, flagging items as underpaid, overpaid, fair, missing, or invalid. Provides batch audit summaries including total claim value, market value, variance, and potential underpayment.
-- **Document Upload & OCR**: Supports JPG, PNG, PDF with dual OCR engine (OCR.space API and Tesseract.js fallback).
+Key features include:
+- **Single-Screen Claim Wizard**: Streamlined process for claim submission.
+- **v2.0 Audit Engine**: Compares prices against RRC_COST and INS_MAX_COST ranges, flagging discrepancies and providing batch audit summaries.
+- **Document Upload & OCR**: Supports various image and PDF formats with a dual OCR engine.
 - **Regional Pricing Intelligence**: Uses ZIP code-based multipliers and external data for FMV adjustments.
-- **Disaster Relief Resources**: Provides links to relevant organizations.
-- **PDF Export**: Client-side PDF generation of comprehensive reports.
-- **Email Report**: Allows emailing report summaries via mailto: links.
-- **Comprehensive Accessibility**: Includes text size toggle, high contrast mode, bilingual support infrastructure, ARIA labels, and keyboard navigation.
-- **Legal Compliance**: Persistent footer with disclaimers and modal dialogs for legal information.
-- **Privacy Architecture**: Collects only anonymous data (ZIP codes, item categories, units, quantities, pricing comparisons). No PII stored.
-- **Monetization Infrastructure**: Partnership system for contractors/adjusters with various pricing models, ZIP targeting, weighted rotation, and lead/click tracking.
-- **Partner Matching Algorithm**: Prioritizes local contractors with scoring based on ZIP/area code matches, local business bonuses, and payment tier multipliers.
-- **Location Utilities**: Privacy-first, ZIP-based location mapping for coarse metro area detection.
-- **Replit Auth Integration**: Full OpenID Connect authentication via Replit Auth, storing session and user data in PostgreSQL.
-- **User Claims Dashboard**: Authenticated users can view their claim history and access stored PDF reports.
-- **Protected File Access**: Ensures ownership verification for file access.
-- **Monetization System**: Complete partner monetization with sales agent reference codes for lead tracking, commission management (15-40% sliding scale), Stripe integration for payments and payouts, ad impression analytics, and renewal automation.
-- **Pro Organizations Database**: Comprehensive 50-state lead prospecting tool with 145 seeded professional organizations across 9 categories (General Contractors, Remodelers, Roofers, Public Adjusters, Insurance Attorneys, Licensing Boards, Regulators, Disaster Recovery, FEMA Regional Offices). Features hierarchical structure with parent-child chapter relationships, regional coverage mapping, and smart ZIP-to-state filtering. All organizations include website links, member directory URLs (directoryUrl), and state-specific licensing verification portals.
-- **Disaster Risk Prioritization**: 4-tier priority system for sales agent lead targeting aligned with disaster frequency:
-  - Priority 1 (Critical/Red): TX, FL, CA, OK, MS, IL, LA - highest disaster volume states (39 orgs)
-  - Priority 2 (High/Amber): GA, NC, MO, AL, CO, KS, TN, SC, VA, AR, KY, NY, PA, WA - significant disaster exposure (42 orgs)
-  - Priority 3 (Moderate/Yellow): IN, OH, MI, MN, WI, OR, NV, NM, MT, ID, WY, UT, AZ, IA, NE, ND, SD, AK, HI - occasional disasters (42 orgs)
-  - Priority 4 (Low/Green): ME, NH, VT, MA, CT, RI, NJ, DE, MD, WV, DC - minimal disaster activity (22 orgs)
-  Includes primaryHazards array with normalized taxonomy (tornado, hurricane, flood, wildfire, earthquake, hail, severe_storm). Admin Dashboard shows color-coded P1/P2/P3/P4 badges and hazard indicators per organization.
-- **Email Templates System**: 4 vendor outreach email templates (Property Management, Public Adjuster, Roofing Contractor, Insurance Attorney) with placeholder support for personalization. Admin dashboard tab with view/copy functionality for easy agent use. Placeholders include [YOUR_NAME], [COMPANY_NAME], [ADJUSTER_NAME], etc.
-- **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates:
-  - **Primary Source**: RSMeans/NRCA industry-standard baseline pricing with labor/material breakdowns
-  - **Secondary Source**: Regional cost adjustments via HUD CBSA indices and BLS CPI data (50+ metro areas)
-  - **Tertiary Source**: Historical user claim data for continuous improvement
-  - **State Cost Multipliers**: All 50 states with BLS CPI-based regional cost factors (0.82x - 1.42x)
-  - **Waste Factor Calculations**: Material-specific waste factors (roofing: 10-25%, general: 5-15%)
-  - **Citation Framework**: Full data source attribution in all estimates with confidence levels (HIGH/MEDIUM/LOW)
-  - **Category Normalization**: Maps frontend damage types (e.g., "Roofing & Exterior") to pricing categories
-  - **API Endpoints**: `/api/pricing/categories`, `/api/pricing/categories/:category/items`, `/api/pricing/disclaimer`
-  - **Frontend Display**: ResultsStep.tsx displays server FMV results with tooltips showing data sources, methodology, and regional adjustments
-  - **PDF Reports**: Enhanced with data sources section, methodology explanation, and comprehensive legal disclaimer
-  - **Utility Modules**: `baselinePricing.ts` (1500+ lines, 16 categories), `hudZipCrosswalk.ts`, `pricingCitation.ts`, `zipToState.ts`
+- **Privacy Architecture**: Collects only anonymous data; no PII stored.
+- **Monetization Infrastructure**: Partnership system for contractors/adjusters with pricing models, ZIP targeting, and lead tracking.
+- **Credential-Based Auth System**: Role-based authentication for Contacts/Advocates and Partners with dashboards.
+- **Auto-Approval System**: Partners are automatically approved after verifying their email.
+- **User Claims Dashboard**: Authenticated users can view their claim history and reports.
+- **Monetization System**: Complete partner monetization with advocate reference codes, commission management, and Stripe integration.
+- **Pro Organizations Database**: A 50-state lead prospecting tool with 183+ professional organizations across 17 trade categories, supporting hierarchical structures and regional coverage with disaster risk prioritization.
+- **Local Pros API**: Enhanced organization search with smart prioritization (local > state > regional > national), ZIP-to-state mapping, trade filtering, and dynamic display.
+- **Disaster Risk Prioritization**: A 4-tier priority system for advocate lead targeting based on disaster frequency and primary hazards.
+- **Email Templates System**: Four vendor outreach email templates with placeholder support.
+- **Performance & Caching Infrastructure**: Enterprise-grade caching and async processing for audit results and batch operations.
+- **Regional Pricing Infrastructure**: A demand-weighted pricing system for partner advertising with state-to-region mapping, demand multipliers, and disaster awareness.
+- **Competitive Rotation Algorithm**: A budget-weighted ad placement priority system with tier multipliers, budget factors, and demand bonuses. Features include:
+  - Weight cap protection (max 10x) to prevent partner monopolies
+  - `applyWeights()` helper for auto-calculating weights from budget/baseBid ratio
+  - `testDistribution()` for QA validation of weighted selection
+  - Self-test suite with 7 automated tests
+- **Plan Selector UI**: A three-tier advertising plan selection with regional pricing and a region picker modal.
+- **Baseline Pricing Intelligence**: Multi-source pricing validation system for defensible claim estimates, using industry standards, regional cost adjustments, and historical data.
+- **Partner Reviews System**: Customer feedback collection with ratings and review statistics per partner.
+- **Available Grants Database**: 15+ federal/state/nonprofit disaster recovery programs with eligibility matching.
+- **1099-NEC Tax Form Generation**: IRS-compliant tax form generation for partners with $600+ annual compensation.
+- **Claims Analysis Agent**: LangGraph-style multi-step claim analysis with pricing validation, missing item detection, and carrier pattern analysis.
+- **n8n Workflow Automation**: Pre-built workflows for lead routing and partner onboarding.
+- **Docker Deployment Stack**: Production-ready containerized deployment with Redis, PostgreSQL, n8n, and PaddleOCR services.
+
+### Service Redundancy Architecture
+The application implements a comprehensive failover system with cascading fallbacks for critical services:
+- **OCR Service Cascade**: PaddleOCR (GPU) → OCR.space → Tesseract.js → Manual Entry.
+- **LLM Router Service**: OpenAI → LocalAI → Rule-based extraction with circuit breaker pattern and automatic failover.
+- **Health Check Endpoints**: For monitoring service status, with centralized `runAllServiceTests()` for QA validation.
+- **Performance Monitoring**: Timing wrappers (`withTiming`, `withTimingAsync`) with configurable thresholds (FAST: 50ms, NORMAL: 200ms, SLOW: 500ms).
+- **Lead Status Lifecycle**: Constants and helpers for lead tracking (PENDING → IN_PROGRESS → CLOSED → PAID) with status transition validation.
+- **Carrier Intelligence Service**: Enhanced carrier pattern analysis with sample sizes, confidence calculations, and aggregated statistics, utilizing a database of historical underpayment patterns by major carriers. Features include:
+  - Fuzzy matching with Dice coefficient and roofing abbreviation expansion (sq, arch, comp, etc.)
+  - Trend classification labels (PROBLEMATIC, UNDERPAYS, FAIR, GENEROUS)
+  - Severity levels (CRITICAL, HIGH, MEDIUM, LOW, NONE) with visual flags and colors
+  - Real-time trend learning via `updateTrendsFromAudit()` with weighted averages
+  - Aggregate risk assessment with priority item detection and action summaries
+- **Feature Toggle System**: Environment-based toggles for premium features.
+- **Unified Cache Service**: Redis (distributed) with node-cache (local) fallback for audit results, partner weights, and pricing data.
+- **Pricing Scraper Service**: Crawl4AI-style scraping with synthetic pricing fallback.
+- **Scheduler Service**: Background job scheduler with daily pricing updates.
+- **Lead Lifecycle Management**: Full lead status tracking with commission calculation and batch payout processing.
+- **ClaimValidator Service**: Trade-specific validation for claim line items with unit normalization, quantity range checking, price warnings, and 12 trade rule sets.
+- **PartnerRouter Service**: Routes claims to partners based on trade matching, geographic coverage, tier-based scoring, and a weighted selection algorithm.
+- **Grant Scraper Service**: Curated database of disaster recovery grants from FEMA, SBA, USDA, HUD, state programs, and nonprofits with eligibility matching.
+- **Tax Form Generator Service**: 1099-NEC generation with IRS compliance checking ($600 threshold), batch processing, and partner compensation tracking.
+- **PaddleOCR Service**: GPU-accelerated OCR integration with health checking and fallback support for high-volume document processing.
+- **Claims Analysis Agent**: 5-step agent pipeline (extraction, validation, missing item detection, carrier analysis, recommendations) with LLM integration.
+- **Versioned Claim Audit Service**: Resilient multi-version architecture with automatic fallback chain:
+  - v3-llm-openai (primary): LLM-powered analysis for highest quality results
+  - v2-rules-advanced (fallback): Database-backed deterministic rules engine
+  - v1-rules-basic (archived-but-viable): Offline-capable basic rules for disaster recovery
+  - Selection behavior: prefer-primary-else-fallback-else-archived with automatic degradation
+  - Includes fallback history logging and service health monitoring
 
 ### System Design Choices
 - **Frontend Stack**: React 18, TypeScript, Vite, Wouter, TanStack Query, Shadcn/ui, Tailwind CSS, React Hook Form, Zod.
 - **Backend Stack**: Node.js, Express, TypeScript, PostgreSQL, Drizzle ORM.
 - **Database Schema**: Normalized PostgreSQL for sessions, claims, line items, pricing data, sources, and session usage.
-- **OCR Service**: Utilizes both cloud-based and local engines for robustness.
-- **Pricing Engine**: PostgreSQL-backed with regional multipliers and data collection for future refinement.
+- **OCR Service**: Cascading fallback.
+- **Pricing Engine**: PostgreSQL-backed with regional multipliers.
 - **Data Flow**: Document upload triggers OCR and text parsing; user input and external data drive FMV calculation; results are displayed, and pricing data points stored.
 - **Supported Categories**: Roofing, Flooring, Drywall, Painting, Plumbing, Electrical, HVAC, Windows & Doors, Appliances, Cabinets, and 'Other'.
 
 ## External Dependencies
-- **OCR.space API**: Primary OCR service.
-- **Tesseract.js**: Local OCR library fallback.
+- **PaddleOCR API**: GPU-accelerated OCR.
+- **OCR.space API**: Cloud OCR service.
+- **Tesseract.js**: Local OCR library.
+- **OpenAI API**: Primary LLM for claim analysis.
+- **LocalAI**: Self-hosted LLM fallback.
 - **FEMA NFIP Claims API**: Historical flood insurance claims data.
 - **BLS Construction PPI**: Construction cost inflation adjustments.
 - **Texas DOI Complaints**: Public complaint data for insurance companies.
 - **jsPDF**: Client-side PDF generation.
-- **SendGrid**: Email sending (requires API key).
-- **Stripe**: Payment processing and agent payouts (requires STRIPE_SECRET_KEY).
+- **SendGrid**: Email sending.
+- **Stripe**: Payment processing, agent payouts, and partner Connect payouts.
+- **Redis**: Distributed caching layer.
+- **n8n**: Workflow automation for lead routing and partner onboarding.
+- **Docker**: Containerized deployment infrastructure.

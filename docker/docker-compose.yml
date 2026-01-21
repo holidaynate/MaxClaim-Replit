@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Main MaxClaim Application
+  maxclaim-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: maxclaim-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379
+      - PADDLEOCR_API_URL=http://paddleocr:8000
+    depends_on:
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - maxclaim-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: maxclaim-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=maxclaim
+      - POSTGRES_USER=${POSTGRES_USER:-maxclaim}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maxclaim}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maxclaim-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: maxclaim-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maxclaim-network
+
+  # PaddleOCR Service (GPU-accelerated OCR)
+  paddleocr:
+    image: paddlepaddle/paddle:2.5.1-gpu-cuda11.7-cudnn8.4-trt8.4
+    container_name: maxclaim-paddleocr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./paddleocr:/app
+    command: python -m paddle_serving_server.serve --model /app/models --port 8000
+    networks:
+      - maxclaim-network
+    profiles:
+      - gpu
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: maxclaim-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://${N8N_HOST:-localhost}:5678/
+      - MAXCLAIM_API_URL=http://maxclaim-app:5000
+      - MAXCLAIM_APP_URL=${MAXCLAIM_APP_URL:-http://localhost:5000}
+      - SENDGRID_FROM_EMAIL=${SENDGRID_FROM_EMAIL}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/home/node/.n8n/workflows
+    depends_on:
+      - maxclaim-app
+    networks:
+      - maxclaim-network
+    profiles:
+      - automation
+
+  # Nginx Reverse Proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: maxclaim-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - maxclaim-app
+    networks:
+      - maxclaim-network
+    profiles:
+      - production
+
+networks:
+  maxclaim-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:

@@ -1,3 +1,13 @@
+/**
+ * MaxClaim – Frontend UI
+ * https://github.com/holidaynate/MaxClaim-Replit
+ *
+ * © 2023–2025 Nate Chacon (InfiN8 / HolidayNate). All rights reserved.
+ *
+ * Original design and UX by Nate Chacon.
+ * External CSS/JS frameworks used only as utilities; see THIRD_PARTY_NOTICES.md.
+ */
+
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -9,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { DocumentUpload } from "./DocumentUpload";
+import { ValidationFeedback } from "./ValidationFeedback";
 import { auditClaimItem, auditClaimItemLegacy } from "@shared/priceAudit";
 import type { ClaimItem } from "./ItemsStep";
 
@@ -263,6 +274,26 @@ export default function SingleScreenClaim({ onCalculate, onAnalysisComplete, onZ
           <CardContent className="pt-6 space-y-6">
             <div className="space-y-4">
               <DocumentUpload onItemsExtracted={handleExtractedItems} />
+              
+              {items.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      {items.length} item(s) extracted
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setItems([])}
+                      data-testid="button-clear-items"
+                    >
+                      Clear items
+                    </Button>
+                  </div>
+                  <ValidationFeedback items={items} />
+                </div>
+              )}
               
               <Button 
                 type="submit" 

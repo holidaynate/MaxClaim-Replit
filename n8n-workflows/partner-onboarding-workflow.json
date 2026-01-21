@@ -1,0 +1,235 @@
+{
+  "name": "MaxClaim Partner Onboarding Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/partner-signup",
+        "options": {}
+      },
+      "id": "webhook-partner-signup",
+      "name": "Partner Signup Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MAXCLAIM_API_URL }}/api/auth/send-verification-email",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "name": "partnerId",
+              "value": "={{ $json.partnerId }}"
+            },
+            {
+              "name": "type",
+              "value": "partner"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-verification",
+      "name": "Send Verification Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "unit": "minutes",
+        "value": 30
+      },
+      "id": "wait-for-verification",
+      "name": "Wait 30 Minutes",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MAXCLAIM_API_URL }}/api/partners/{{ $json.partnerId }}",
+        "options": {}
+      },
+      "id": "check-verification-status",
+      "name": "Check Verification Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.emailVerified }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "is-verified",
+      "name": "Is Email Verified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SENDGRID_FROM_EMAIL }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Welcome to MaxClaim Partner Network!",
+        "text": "Hi {{ $json.contactPerson }},\n\nWelcome to MaxClaim! Your partner account has been verified.\n\nNext Steps:\n1. Complete your company profile\n2. Set up your service areas\n3. Choose your advertising tier\n4. Start receiving qualified leads!\n\nLogin at: {{ $env.MAXCLAIM_APP_URL }}/partner/dashboard\n\nBest regards,\nThe MaxClaim Team"
+      },
+      "id": "send-welcome-email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1100, 150],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-credentials",
+          "name": "SendGrid API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.MAXCLAIM_API_URL }}/api/partners/{{ $json.partnerId }}/auto-approve",
+        "method": "POST",
+        "options": {}
+      },
+      "id": "auto-approve-partner",
+      "name": "Auto Approve Partner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1300, 150]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.SENDGRID_FROM_EMAIL }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Reminder: Verify your MaxClaim Partner Account",
+        "text": "Hi {{ $json.contactPerson }},\n\nWe noticed you haven't verified your email yet.\n\nPlease check your inbox for the verification link we sent earlier.\n\nIf you need a new verification email, visit:\n{{ $env.MAXCLAIM_APP_URL }}/partner/resend-verification\n\nBest regards,\nThe MaxClaim Team"
+      },
+      "id": "send-reminder",
+      "name": "Send Reminder Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1100, 300],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-credentials",
+          "name": "SendGrid API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const partner = $input.first().json;\nreturn {\n  json: {\n    success: true,\n    partnerId: partner.partnerId,\n    status: 'onboarding_complete',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "log-completion",
+      "name": "Log Completion",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1500, 150]
+    }
+  ],
+  "connections": {
+    "Partner Signup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send Verification Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Verification Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 30 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Check Verification Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Verification Status": {
+      "main": [
+        [
+          {
+            "node": "Is Email Verified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Email Verified?": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reminder Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Auto Approve Partner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Approve Partner": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["maxclaim", "partners", "onboarding"]
+}

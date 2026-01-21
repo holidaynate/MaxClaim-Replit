@@ -5,7 +5,7 @@ export default function HowItWorks() {
     {
       icon: Upload,
       title: "Upload your documents",
-      body: "Loss sheet, contractor estimate, or insurer scope. PDF or clear photos.",
+      body: "Insurance estimate, contractor scope, or settlement documents. PDF or clear photos.",
     },
     {
       icon: Brain,
